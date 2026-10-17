@@ -1,0 +1,38 @@
+{
+  "expo": {
+    "name": "Health Compass",
+    "slug": "health-compass",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "scheme": "healthcompass",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.healthcompass.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "用于拍摄餐食照片，帮助你记录饮食。",
+        "NSPhotoLibraryUsageDescription": "用于选择餐食照片或训练视频。"
+      }
+    },
+    "android": {
+      "package": "com.healthcompass.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#0D1412"
+      },
+      "permissions": [
+        "CAMERA",
+        "READ_MEDIA_IMAGES",
+        "READ_MEDIA_VIDEO"
+      ]
+    },
+    "plugins": [
+      "expo-image-picker",
+      "expo-document-picker",
+      "expo-sharing",
+      "expo-status-bar",
+      "expo-video",
+      "expo-secure-store"
+    ]
+  }
+}

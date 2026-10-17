@@ -1,0 +1,2230 @@
+{
+  "version": 1,
+  "provider": "usda-fdc",
+  "dataset": "SR Legacy 2018-04",
+  "sourceUrl": "https://fdc.nal.usda.gov/fdc-datasets/FoodData_Central_sr_legacy_food_json_2018-04.zip",
+  "archiveSha256": "0FE8AE486A2C8EB42CB96413F058DEB51863A46C8FB8EEB4B1FB45006DD338EF",
+  "license": "CC0-1.0",
+  "foods": [
+    {
+      "id": "rice_white_long_grain_cooked",
+      "label": "熟白米饭",
+      "description": "Rice, white, long-grain, regular, enriched, cooked",
+      "fdcId": "168878",
+      "preparation": "熟制（煮，长粒，强化）",
+      "per100g": {
+        "calories": 130,
+        "protein": 2.69,
+        "carbs": 28.2,
+        "fat": 0.28
+      }
+    },
+    {
+      "id": "potato_boiled_without_salt",
+      "label": "煮土豆（无盐）",
+      "description": "Potatoes, boiled, cooked without skin, flesh, without salt",
+      "fdcId": "170440",
+      "preparation": "熟制（煮去皮，无盐）",
+      "per100g": {
+        "calories": 86,
+        "protein": 1.71,
+        "carbs": 20,
+        "fat": 0.1
+      }
+    },
+    {
+      "id": "lotus_root_raw",
+      "label": "藕（生）",
+      "description": "Lotus root, raw",
+      "fdcId": "169250",
+      "preparation": "生食",
+      "per100g": {
+        "calories": 74,
+        "protein": 2.6,
+        "carbs": 17.2,
+        "fat": 0.1
+      }
+    },
+    {
+      "id": "lotus_root_boiled",
+      "label": "藕（煮熟）",
+      "description": "Lotus root, cooked, boiled, drained, without salt",
+      "fdcId": "168430",
+      "preparation": "熟制（煮，沥干，无盐）",
+      "per100g": {
+        "calories": 66,
+        "protein": 1.58,
+        "carbs": 16,
+        "fat": 0.07
+      }
+    },
+    {
+      "id": "mushroom_white_cooked",
+      "label": "白蘑菇（煮熟）",
+      "description": "Mushrooms, white, cooked, boiled, drained, with salt",
+      "fdcId": "168537",
+      "preparation": "熟制（煮，沥干，加盐）",
+      "per100g": {
+        "calories": 28,
+        "protein": 2.17,
+        "carbs": 5.29,
+        "fat": 0.47
+      }
+    },
+    {
+      "id": "mushroom_enoki_raw",
+      "label": "金针菇（生）",
+      "description": "Mushrooms, enoki, raw",
+      "fdcId": "169382",
+      "preparation": "生食",
+      "per100g": {
+        "calories": 37,
+        "protein": 2.66,
+        "carbs": 7.81,
+        "fat": 0.29
+      }
+    },
+    {
+      "id": "mushroom_shiitake_raw",
+      "label": "香菇（生）",
+      "description": "Mushrooms, shiitake, raw",
+      "fdcId": "169242",
+      "preparation": "生食",
+      "per100g": {
+        "calories": 34,
+        "protein": 2.24,
+        "carbs": 6.79,
+        "fat": 0.49
+      }
+    },
+    {
+      "id": "tofu_firm",
+      "label": "豆腐（硬，钙盐制）",
+      "description": "Tofu, firm, prepared with calcium sulfate and magnesium chloride (nigari)",
+      "fdcId": "172448",
+      "preparation": "即食/制备食品",
+      "per100g": {
+        "calories": 78,
+        "protein": 9.04,
+        "carbs": 2.85,
+        "fat": 4.17
+      }
+    },
+    {
+      "id": "tofu_soft",
+      "label": "豆腐（软，钙盐制）",
+      "description": "Tofu, soft, prepared with calcium sulfate and magnesium chloride (nigari)",
+      "fdcId": "172449",
+      "preparation": "即食/制备食品",
+      "per100g": {
+        "calories": 61,
+        "protein": 7.17,
+        "carbs": 1.18,
+        "fat": 3.69
+      }
+    },
+    {
+      "id": "tofu_fried",
+      "label": "炸豆腐",
+      "description": "Tofu, fried",
+      "fdcId": "172451",
+      "preparation": "熟制（油炸）",
+      "per100g": {
+        "calories": 270,
+        "protein": 18.8,
+        "carbs": 8.86,
+        "fat": 20.2
+      }
+    },
+    {
+      "id": "tofu_raw_firm",
+      "label": "豆腐（生，硬）",
+      "description": "Tofu, raw, firm, prepared with calcium sulfate",
+      "fdcId": "172475",
+      "preparation": "生/未进一步烹调",
+      "per100g": {
+        "calories": 144,
+        "protein": 17.3,
+        "carbs": 2.78,
+        "fat": 8.72
+      }
+    },
+    {
+      "id": "soybean_oil",
+      "label": "大豆油",
+      "description": "Oil, soybean, salad or cooking",
+      "fdcId": "171411",
+      "preparation": "食用油（沙拉或烹调）",
+      "per100g": {
+        "calories": 884,
+        "protein": 0,
+        "carbs": 0,
+        "fat": 100
+      }
+    },
+    {
+      "id": "soy_sauce",
+      "label": "酱油（黄豆和小麦制）",
+      "description": "Soy sauce made from soy and wheat (shoyu)",
+      "fdcId": "174277",
+      "preparation": "调味品",
+      "per100g": {
+        "calories": 53,
+        "protein": 8.14,
+        "carbs": 4.93,
+        "fat": 0.57
+      }
+    },
+    {
+      "id": "egg_raw",
+      "label": "鸡蛋（生）",
+      "description": "Egg, whole, raw, fresh",
+      "fdcId": "171287",
+      "preparation": "生食",
+      "per100g": {
+        "calories": 143,
+        "protein": 12.6,
+        "carbs": 0.72,
+        "fat": 9.51
+      }
+    },
+    {
+      "id": "egg_hard_boiled",
+      "label": "鸡蛋（煮熟）",
+      "description": "Egg, whole, cooked, hard-boiled",
+      "fdcId": "173424",
+      "preparation": "熟制（煮，全熟）",
+      "per100g": {
+        "calories": 155,
+        "protein": 12.6,
+        "carbs": 1.12,
+        "fat": 10.6
+      }
+    },
+    {
+      "id": "chicken_breast_raw",
+      "label": "鸡肉（生，去皮去骨肉）",
+      "description": "Chicken, broilers or fryers, meat only, raw",
+      "fdcId": "171052",
+      "preparation": "生食",
+      "per100g": {
+        "calories": 119,
+        "protein": 21.4,
+        "carbs": 0,
+        "fat": 3.08
+      }
+    },
+    {
+      "id": "chicken_roasted",
+      "label": "鸡肉（烤熟，去皮去骨肉）",
+      "description": "Chicken, broilers or fryers, meat only, cooked, roasted",
+      "fdcId": "171054",
+      "preparation": "熟制（烤）",
+      "per100g": {
+        "calories": 190,
+        "protein": 28.9,
+        "carbs": 0,
+        "fat": 7.41
+      }
+    },
+    {
+      "id": "carrot_raw",
+      "label": "胡萝卜（生）",
+      "description": "Carrots, raw",
+      "fdcId": "170393",
+      "preparation": "生食",
+      "per100g": {
+        "calories": 41,
+        "protein": 0.93,
+        "carbs": 9.58,
+        "fat": 0.24
+      }
+    },
+    {
+      "id": "carrot_boiled",
+      "label": "胡萝卜（煮熟）",
+      "description": "Carrots, cooked, boiled, drained, with salt",
+      "fdcId": "169339",
+      "preparation": "熟制（煮，沥干，加盐）",
+      "per100g": {
+        "calories": 35,
+        "protein": 0.76,
+        "carbs": 8.22,
+        "fat": 0.18
+      }
+    },
+    {
+      "id": "onion_raw",
+      "label": "洋葱（生）",
+      "description": "Onions, raw",
+      "fdcId": "170000",
+      "preparation": "生食",
+      "per100g": {
+        "calories": 40,
+        "protein": 1.1,
+        "carbs": 9.34,
+        "fat": 0.1
+      }
+    },
+    {
+      "id": "onion_boiled",
+      "label": "洋葱（煮熟）",
+      "description": "Onions, cooked, boiled, drained, without salt",
+      "fdcId": "170001",
+      "preparation": "熟制（煮，沥干，无盐）",
+      "per100g": {
+        "calories": 44,
+        "protein": 1.36,
+        "carbs": 10.2,
+        "fat": 0.19
+      }
+    },
+    {
+      "id": "broccoli_raw",
+      "label": "西兰花（生）",
+      "description": "Broccoli, raw",
+      "fdcId": "170379",
+      "preparation": "生食",
+      "per100g": {
+        "calories": 34,
+        "protein": 2.82,
+        "carbs": 6.64,
+        "fat": 0.37
+      }
+    },
+    {
+      "id": "broccoli_boiled",
+      "label": "西兰花（煮熟）",
+      "description": "Broccoli, cooked, boiled, drained, without salt",
+      "fdcId": "169967",
+      "preparation": "熟制（煮，沥干，无盐）",
+      "per100g": {
+        "calories": 35,
+        "protein": 2.38,
+        "carbs": 7.18,
+        "fat": 0.41
+      }
+    },
+    {
+      "id": "spinach_cooked",
+      "label": "菠菜（煮熟）",
+      "description": "Spinach, cooked, boiled, drained, without salt",
+      "fdcId": "168463",
+      "preparation": "熟制（煮，沥干，无盐）",
+      "per100g": {
+        "calories": 23,
+        "protein": 2.97,
+        "carbs": 3.75,
+        "fat": 0.26
+      }
+    },
+    {
+      "id": "cabbage_raw",
+      "label": "卷心菜（生）",
+      "description": "Cabbage, raw",
+      "fdcId": "169975",
+      "preparation": "生食",
+      "per100g": {
+        "calories": 25,
+        "protein": 1.28,
+        "carbs": 5.8,
+        "fat": 0.1
+      }
+    },
+    {
+      "id": "cabbage_boiled",
+      "label": "卷心菜（煮熟）",
+      "description": "Cabbage, cooked, boiled, drained, without salt",
+      "fdcId": "169976",
+      "preparation": "熟制（煮，沥干，无盐）",
+      "per100g": {
+        "calories": 23,
+        "protein": 1.27,
+        "carbs": 5.51,
+        "fat": 0.06
+      }
+    },
+    {
+      "id": "soba_cooked",
+      "label": "荞麦面（熟）",
+      "description": "Noodles, japanese, soba, cooked",
+      "fdcId": "168907",
+      "preparation": "熟制",
+      "per100g": {
+        "calories": 99,
+        "protein": 5.06,
+        "carbs": 21.4,
+        "fat": 0.1
+      }
+    },
+    {
+      "id": "rice_noodles_cooked",
+      "label": "米粉（熟）",
+      "description": "Rice noodles, cooked",
+      "fdcId": "168914",
+      "preparation": "熟制",
+      "per100g": {
+        "calories": 108,
+        "protein": 1.79,
+        "carbs": 24,
+        "fat": 0.2
+      }
+    },
+    {
+      "id": "egg_noodles_cooked",
+      "label": "鸡蛋面（熟）",
+      "description": "Noodles, egg, cooked, enriched, with added salt",
+      "fdcId": "168919",
+      "preparation": "熟制（加盐，强化）",
+      "per100g": {
+        "calories": 138,
+        "protein": 4.54,
+        "carbs": 25.2,
+        "fat": 2.07
+      }
+    },
+    {
+      "id": "rice_white_long_grain_raw",
+      "label": "生白米（长粒）",
+      "description": "Rice, white, long-grain, regular, raw, enriched",
+      "fdcId": "168877",
+      "preparation": "生/未烹调（长粒，强化）",
+      "aliases": [
+        "生米",
+        "长粒白米"
+      ],
+      "per100g": {
+        "calories": 365,
+        "protein": 7.13,
+        "carbs": 80,
+        "fat": 0.66
+      }
+    },
+    {
+      "id": "rice_white_medium_grain_raw",
+      "label": "生白米（中粒）",
+      "description": "Rice, white, medium-grain, raw, enriched",
+      "fdcId": "168879",
+      "preparation": "生/未烹调（中粒，强化）",
+      "aliases": [
+        "中粒生米",
+        "中粒白米"
+      ],
+      "per100g": {
+        "calories": 360,
+        "protein": 6.61,
+        "carbs": 79.3,
+        "fat": 0.58
+      }
+    },
+    {
+      "id": "rice_white_medium_grain_cooked",
+      "label": "熟白米饭（中粒）",
+      "description": "Rice, white, medium-grain, enriched, cooked",
+      "fdcId": "168880",
+      "preparation": "熟制（煮，中粒，强化）",
+      "aliases": [
+        "中粒米饭",
+        "熟中粒白米"
+      ],
+      "per100g": {
+        "calories": 130,
+        "protein": 2.38,
+        "carbs": 28.6,
+        "fat": 0.21
+      }
+    },
+    {
+      "id": "rice_white_short_grain_raw",
+      "label": "生白米（短粒）",
+      "description": "Rice, white, short-grain, enriched, uncooked",
+      "fdcId": "168881",
+      "preparation": "生/未烹调（短粒，强化）",
+      "aliases": [
+        "短粒生米",
+        "短粒白米"
+      ],
+      "per100g": {
+        "calories": 358,
+        "protein": 6.5,
+        "carbs": 79.2,
+        "fat": 0.52
+      }
+    },
+    {
+      "id": "rice_white_short_grain_cooked",
+      "label": "熟白米饭（短粒）",
+      "description": "Rice, white, short-grain, enriched, cooked",
+      "fdcId": "168882",
+      "preparation": "熟制（煮，短粒，强化）",
+      "aliases": [
+        "短粒米饭",
+        "熟短粒白米"
+      ],
+      "per100g": {
+        "calories": 130,
+        "protein": 2.36,
+        "carbs": 28.7,
+        "fat": 0.19
+      }
+    },
+    {
+      "id": "rice_brown_long_grain_raw",
+      "label": "糙米（长粒，生）",
+      "description": "Rice, brown, long-grain, raw (Includes foods for USDA's Food Distribution Program)",
+      "fdcId": "169703",
+      "preparation": "生/未烹调（长粒）",
+      "aliases": [
+        "生糙米",
+        "长粒糙米"
+      ],
+      "per100g": {
+        "calories": 367,
+        "protein": 7.54,
+        "carbs": 76.2,
+        "fat": 3.2
+      }
+    },
+    {
+      "id": "rice_brown_long_grain_cooked",
+      "label": "糙米饭（长粒，熟）",
+      "description": "Rice, brown, long-grain, cooked (Includes foods for USDA's Food Distribution Program)",
+      "fdcId": "169704",
+      "preparation": "熟制（煮，长粒）",
+      "aliases": [
+        "熟糙米",
+        "糙米饭"
+      ],
+      "per100g": {
+        "calories": 123,
+        "protein": 2.74,
+        "carbs": 25.6,
+        "fat": 0.97
+      }
+    },
+    {
+      "id": "quinoa_raw",
+      "label": "藜麦（生）",
+      "description": "Quinoa, uncooked",
+      "fdcId": "168874",
+      "preparation": "生/未烹调",
+      "aliases": [
+        "生藜麦"
+      ],
+      "per100g": {
+        "calories": 368,
+        "protein": 14.1,
+        "carbs": 64.2,
+        "fat": 6.07
+      }
+    },
+    {
+      "id": "quinoa_cooked",
+      "label": "藜麦（熟）",
+      "description": "Quinoa, cooked",
+      "fdcId": "168917",
+      "preparation": "熟制（煮）",
+      "aliases": [
+        "熟藜麦",
+        "藜麦饭"
+      ],
+      "per100g": {
+        "calories": 120,
+        "protein": 4.4,
+        "carbs": 21.3,
+        "fat": 1.92
+      }
+    },
+    {
+      "id": "oats_dry",
+      "label": "燕麦片（干）",
+      "description": "Cereals, oats, regular and quick, not fortified, dry",
+      "fdcId": "173904",
+      "preparation": "生/干燥（未强化）",
+      "aliases": [
+        "干燕麦",
+        "燕麦"
+      ],
+      "per100g": {
+        "calories": 379,
+        "protein": 13.2,
+        "carbs": 67.7,
+        "fat": 6.52
+      }
+    },
+    {
+      "id": "oats_cooked",
+      "label": "燕麦粥（熟）",
+      "description": "Cereals, oats, regular and quick, unenriched, cooked with water (includes boiling and microwaving), without salt",
+      "fdcId": "173905",
+      "preparation": "熟制（水煮，无盐）",
+      "aliases": [
+        "熟燕麦",
+        "燕麦粥"
+      ],
+      "per100g": {
+        "calories": 71,
+        "protein": 2.54,
+        "carbs": 12,
+        "fat": 1.52
+      }
+    },
+    {
+      "id": "barley_cooked",
+      "label": "大麦（熟）",
+      "description": "Barley, pearled, cooked",
+      "fdcId": "170285",
+      "preparation": "熟制（煮）",
+      "aliases": [
+        "熟大麦"
+      ],
+      "per100g": {
+        "calories": 123,
+        "protein": 2.26,
+        "carbs": 28.2,
+        "fat": 0.44
+      }
+    },
+    {
+      "id": "bulgur_cooked",
+      "label": "碎麦（熟）",
+      "description": "Bulgur, cooked",
+      "fdcId": "170287",
+      "preparation": "熟制（煮）",
+      "aliases": [
+        "熟碎麦",
+        "布格麦"
+      ],
+      "per100g": {
+        "calories": 83,
+        "protein": 3.08,
+        "carbs": 18.6,
+        "fat": 0.24
+      }
+    },
+    {
+      "id": "pasta_cooked",
+      "label": "意大利面（熟）",
+      "description": "Pasta, cooked, enriched, without added salt",
+      "fdcId": "169737",
+      "preparation": "熟制（强化，无盐）",
+      "aliases": [
+        "熟面条",
+        "通心粉"
+      ],
+      "per100g": {
+        "calories": 158,
+        "protein": 5.8,
+        "carbs": 30.9,
+        "fat": 0.93
+      }
+    },
+    {
+      "id": "pasta_whole_wheat_cooked",
+      "label": "全麦意大利面（熟）",
+      "description": "Pasta, whole-wheat, cooked (Includes foods for USDA's Food Distribution Program)",
+      "fdcId": "168910",
+      "preparation": "熟制（全麦）",
+      "aliases": [
+        "全麦面条",
+        "熟全麦意面"
+      ],
+      "per100g": {
+        "calories": 149,
+        "protein": 5.99,
+        "carbs": 30.1,
+        "fat": 1.71
+      }
+    },
+    {
+      "id": "somen_cooked",
+      "label": "素面（熟）",
+      "description": "Noodles, japanese, somen, cooked",
+      "fdcId": "168909",
+      "preparation": "熟制",
+      "aliases": [
+        "日式细面",
+        "熟素面"
+      ],
+      "per100g": {
+        "calories": 131,
+        "protein": 4,
+        "carbs": 27.5,
+        "fat": 0.18
+      }
+    },
+    {
+      "id": "bread_whole_wheat",
+      "label": "全麦面包",
+      "description": "Bread, whole-wheat, commercially prepared",
+      "fdcId": "172688",
+      "preparation": "即食/制备食品",
+      "aliases": [
+        "全麦吐司",
+        "全麦面包片"
+      ],
+      "per100g": {
+        "calories": 252,
+        "protein": 12.4,
+        "carbs": 42.7,
+        "fat": 3.5
+      }
+    },
+    {
+      "id": "bread_pita_whole_wheat",
+      "label": "全麦皮塔饼",
+      "description": "Bread, pita, whole-wheat",
+      "fdcId": "174916",
+      "preparation": "即食/制备食品",
+      "aliases": [
+        "全麦口袋饼",
+        "皮塔饼"
+      ],
+      "per100g": {
+        "calories": 262,
+        "protein": 9.8,
+        "carbs": 55.9,
+        "fat": 1.71
+      }
+    },
+    {
+      "id": "potato_raw_with_skin",
+      "label": "土豆（生，带皮）",
+      "description": "Potatoes, raw, skin",
+      "fdcId": "170032",
+      "preparation": "生食（带皮）",
+      "aliases": [
+        "生土豆",
+        "马铃薯"
+      ],
+      "per100g": {
+        "calories": 58,
+        "protein": 2.57,
+        "carbs": 12.4,
+        "fat": 0.1
+      }
+    },
+    {
+      "id": "potato_baked",
+      "label": "土豆（烤熟，带皮带肉）",
+      "description": "Potatoes, baked, flesh and skin, without salt",
+      "fdcId": "170093",
+      "preparation": "熟制（烘烤，无盐）",
+      "aliases": [
+        "烤土豆",
+        "烤马铃薯"
+      ],
+      "per100g": {
+        "calories": 93,
+        "protein": 2.5,
+        "carbs": 21.2,
+        "fat": 0.13
+      }
+    },
+    {
+      "id": "sweet_potato_raw",
+      "label": "红薯（生）",
+      "description": "Sweet potato, raw, unprepared (Includes foods for USDA's Food Distribution Program)",
+      "fdcId": "168482",
+      "preparation": "生食",
+      "aliases": [
+        "生红薯",
+        "生地瓜"
+      ],
+      "per100g": {
+        "calories": 86,
+        "protein": 1.57,
+        "carbs": 20.1,
+        "fat": 0.05
+      }
+    },
+    {
+      "id": "sweet_potato_baked",
+      "label": "红薯（烤熟）",
+      "description": "Sweet potato, cooked, baked in skin, flesh, without salt",
+      "fdcId": "168483",
+      "preparation": "熟制（带皮烘烤，无盐）",
+      "aliases": [
+        "烤红薯",
+        "烤地瓜"
+      ],
+      "per100g": {
+        "calories": 90,
+        "protein": 2.01,
+        "carbs": 20.7,
+        "fat": 0.15
+      }
+    },
+    {
+      "id": "sweet_potato_boiled",
+      "label": "红薯（煮熟）",
+      "description": "Sweet potato, cooked, boiled, without skin",
+      "fdcId": "168484",
+      "preparation": "熟制（去皮水煮）",
+      "aliases": [
+        "煮红薯",
+        "煮地瓜"
+      ],
+      "per100g": {
+        "calories": 76,
+        "protein": 1.37,
+        "carbs": 17.7,
+        "fat": 0.14
+      }
+    },
+    {
+      "id": "taro_raw",
+      "label": "芋头（生）",
+      "description": "Taro, raw",
+      "fdcId": "169308",
+      "preparation": "生食",
+      "aliases": [
+        "生芋头"
+      ],
+      "per100g": {
+        "calories": 112,
+        "protein": 1.5,
+        "carbs": 26.5,
+        "fat": 0.2
+      }
+    },
+    {
+      "id": "taro_cooked",
+      "label": "芋头（熟）",
+      "description": "Taro, cooked, without salt",
+      "fdcId": "168486",
+      "preparation": "熟制（无盐）",
+      "aliases": [
+        "熟芋头",
+        "煮芋头"
+      ],
+      "per100g": {
+        "calories": 142,
+        "protein": 0.52,
+        "carbs": 34.6,
+        "fat": 0.11
+      }
+    },
+    {
+      "id": "yam_raw",
+      "label": "山药（生）",
+      "description": "Yam, raw",
+      "fdcId": "170071",
+      "preparation": "生食",
+      "aliases": [
+        "生山药"
+      ],
+      "per100g": {
+        "calories": 118,
+        "protein": 1.53,
+        "carbs": 27.9,
+        "fat": 0.17
+      }
+    },
+    {
+      "id": "yam_cooked",
+      "label": "山药（熟）",
+      "description": "Yam, cooked, boiled, drained, or baked, without salt",
+      "fdcId": "170072",
+      "preparation": "熟制（煮、蒸或烘烤，无盐）",
+      "aliases": [
+        "熟山药",
+        "蒸山药"
+      ],
+      "per100g": {
+        "calories": 116,
+        "protein": 1.49,
+        "carbs": 27.5,
+        "fat": 0.14
+      }
+    },
+    {
+      "id": "cassava_raw",
+      "label": "木薯（生）",
+      "description": "Cassava, raw",
+      "fdcId": "169985",
+      "preparation": "生食",
+      "aliases": [
+        "生木薯"
+      ],
+      "per100g": {
+        "calories": 160,
+        "protein": 1.36,
+        "carbs": 38.1,
+        "fat": 0.28
+      }
+    },
+    {
+      "id": "asparagus_raw",
+      "label": "芦笋（生）",
+      "description": "Asparagus, raw",
+      "fdcId": "168389",
+      "preparation": "生食",
+      "aliases": [
+        "生芦笋"
+      ],
+      "per100g": {
+        "calories": 20,
+        "protein": 2.2,
+        "carbs": 3.88,
+        "fat": 0.12
+      }
+    },
+    {
+      "id": "kale_raw",
+      "label": "羽衣甘蓝（生）",
+      "description": "Kale, raw",
+      "fdcId": "168421",
+      "preparation": "生食",
+      "aliases": [
+        "羽衣甘蓝",
+        "生羽衣甘蓝"
+      ],
+      "per100g": {
+        "calories": 35,
+        "protein": 2.92,
+        "carbs": 4.42,
+        "fat": 1.49
+      }
+    },
+    {
+      "id": "spinach_raw",
+      "label": "菠菜（生）",
+      "description": "Spinach, raw",
+      "fdcId": "168462",
+      "preparation": "生食",
+      "aliases": [
+        "生菠菜"
+      ],
+      "per100g": {
+        "calories": 23,
+        "protein": 2.86,
+        "carbs": 3.63,
+        "fat": 0.39
+      }
+    },
+    {
+      "id": "cauliflower_raw",
+      "label": "菜花（生）",
+      "description": "Cauliflower, raw",
+      "fdcId": "169986",
+      "preparation": "生食",
+      "aliases": [
+        "生花菜",
+        "生菜花"
+      ],
+      "per100g": {
+        "calories": 25,
+        "protein": 1.92,
+        "carbs": 4.97,
+        "fat": 0.28
+      }
+    },
+    {
+      "id": "cauliflower_boiled",
+      "label": "菜花（煮熟）",
+      "description": "Cauliflower, cooked, boiled, drained, without salt",
+      "fdcId": "170397",
+      "preparation": "熟制（水煮，沥干，无盐）",
+      "aliases": [
+        "煮菜花",
+        "熟花菜"
+      ],
+      "per100g": {
+        "calories": 23,
+        "protein": 1.84,
+        "carbs": 4.11,
+        "fat": 0.45
+      }
+    },
+    {
+      "id": "tomato_raw",
+      "label": "番茄（生）",
+      "description": "Tomatoes, red, ripe, raw, year round average",
+      "fdcId": "170457",
+      "preparation": "生食",
+      "aliases": [
+        "西红柿",
+        "生番茄"
+      ],
+      "per100g": {
+        "calories": 18,
+        "protein": 0.88,
+        "carbs": 3.89,
+        "fat": 0.2
+      }
+    },
+    {
+      "id": "cucumber_raw",
+      "label": "黄瓜（生，带皮）",
+      "description": "Cucumber, with peel, raw",
+      "fdcId": "168409",
+      "preparation": "生食（带皮）",
+      "aliases": [
+        "生黄瓜",
+        "带皮黄瓜"
+      ],
+      "per100g": {
+        "calories": 15,
+        "protein": 0.65,
+        "carbs": 3.63,
+        "fat": 0.11
+      }
+    },
+    {
+      "id": "cucumber_peeled_raw",
+      "label": "黄瓜（生，去皮）",
+      "description": "Cucumber, peeled, raw",
+      "fdcId": "169225",
+      "preparation": "生食（去皮）",
+      "aliases": [
+        "去皮黄瓜"
+      ],
+      "per100g": {
+        "calories": 10,
+        "protein": 0.59,
+        "carbs": 2.16,
+        "fat": 0.16
+      }
+    },
+    {
+      "id": "lettuce_green_leaf_raw",
+      "label": "生菜（绿叶）",
+      "description": "Lettuce, green leaf, raw",
+      "fdcId": "169249",
+      "preparation": "生食",
+      "aliases": [
+        "绿叶生菜",
+        "生菜"
+      ],
+      "per100g": {
+        "calories": 15,
+        "protein": 1.36,
+        "carbs": 2.87,
+        "fat": 0.15
+      }
+    },
+    {
+      "id": "lettuce_iceberg_raw",
+      "label": "球生菜（生）",
+      "description": "Lettuce, iceberg (includes crisphead types), raw",
+      "fdcId": "169248",
+      "preparation": "生食",
+      "aliases": [
+        "冰山生菜",
+        "结球莴苣"
+      ],
+      "per100g": {
+        "calories": 14,
+        "protein": 0.9,
+        "carbs": 2.97,
+        "fat": 0.14
+      }
+    },
+    {
+      "id": "pepper_red_raw",
+      "label": "红甜椒（生）",
+      "description": "Peppers, sweet, red, raw",
+      "fdcId": "170108",
+      "preparation": "生食",
+      "aliases": [
+        "红彩椒",
+        "红椒"
+      ],
+      "per100g": {
+        "calories": 26,
+        "protein": 0.99,
+        "carbs": 6.03,
+        "fat": 0.3
+      }
+    },
+    {
+      "id": "pepper_green_raw",
+      "label": "青甜椒（生）",
+      "description": "Peppers, sweet, green, raw",
+      "fdcId": "170427",
+      "preparation": "生食",
+      "aliases": [
+        "青椒",
+        "青彩椒"
+      ],
+      "per100g": {
+        "calories": 20,
+        "protein": 0.86,
+        "carbs": 4.64,
+        "fat": 0.17
+      }
+    },
+    {
+      "id": "zucchini_raw",
+      "label": "西葫芦（生）",
+      "description": "Squash, summer, zucchini, includes skin, raw",
+      "fdcId": "169291",
+      "preparation": "生食",
+      "aliases": [
+        "角瓜",
+        "生西葫芦"
+      ],
+      "per100g": {
+        "calories": 17,
+        "protein": 1.21,
+        "carbs": 3.11,
+        "fat": 0.32
+      }
+    },
+    {
+      "id": "green_beans_raw",
+      "label": "四季豆（生）",
+      "description": "Beans, snap, green, raw",
+      "fdcId": "169961",
+      "preparation": "生食",
+      "aliases": [
+        "豆角",
+        "菜豆"
+      ],
+      "per100g": {
+        "calories": 31,
+        "protein": 1.83,
+        "carbs": 6.97,
+        "fat": 0.22
+      }
+    },
+    {
+      "id": "green_beans_boiled",
+      "label": "四季豆（煮熟）",
+      "description": "Beans, snap, green, cooked, boiled, drained, without salt",
+      "fdcId": "169141",
+      "preparation": "熟制（水煮，沥干，无盐）",
+      "aliases": [
+        "煮豆角",
+        "熟四季豆"
+      ],
+      "per100g": {
+        "calories": 35,
+        "protein": 1.89,
+        "carbs": 7.88,
+        "fat": 0.28
+      }
+    },
+    {
+      "id": "peas_green_boiled",
+      "label": "青豌豆（煮熟）",
+      "description": "Peas, green, cooked, boiled, drained, without salt",
+      "fdcId": "170420",
+      "preparation": "熟制（水煮，沥干，无盐）",
+      "aliases": [
+        "豌豆",
+        "煮豌豆"
+      ],
+      "per100g": {
+        "calories": 84,
+        "protein": 5.36,
+        "carbs": 15.6,
+        "fat": 0.22
+      }
+    },
+    {
+      "id": "corn_yellow_boiled",
+      "label": "玉米粒（煮熟）",
+      "description": "Corn, sweet, yellow, cooked, boiled, drained, without salt",
+      "fdcId": "169999",
+      "preparation": "熟制（水煮，沥干，无盐）",
+      "aliases": [
+        "熟玉米",
+        "玉米粒"
+      ],
+      "per100g": {
+        "calories": 96,
+        "protein": 3.41,
+        "carbs": 21,
+        "fat": 1.5
+      }
+    },
+    {
+      "id": "eggplant_raw",
+      "label": "茄子（生）",
+      "description": "Eggplant, raw",
+      "fdcId": "169228",
+      "preparation": "生食",
+      "aliases": [
+        "生茄子"
+      ],
+      "per100g": {
+        "calories": 25,
+        "protein": 0.98,
+        "carbs": 5.88,
+        "fat": 0.18
+      }
+    },
+    {
+      "id": "celery_raw",
+      "label": "芹菜（生）",
+      "description": "Celery, raw",
+      "fdcId": "169988",
+      "preparation": "生食",
+      "aliases": [
+        "生芹菜"
+      ],
+      "per100g": {
+        "calories": 14,
+        "protein": 0.69,
+        "carbs": 2.97,
+        "fat": 0.17
+      }
+    },
+    {
+      "id": "garlic_raw",
+      "label": "大蒜（生）",
+      "description": "Garlic, raw",
+      "fdcId": "169230",
+      "preparation": "生食",
+      "aliases": [
+        "蒜",
+        "生蒜"
+      ],
+      "per100g": {
+        "calories": 149,
+        "protein": 6.36,
+        "carbs": 33.1,
+        "fat": 0.5
+      }
+    },
+    {
+      "id": "ginger_raw",
+      "label": "姜（生）",
+      "description": "Ginger root, raw",
+      "fdcId": "169231",
+      "preparation": "生食",
+      "aliases": [
+        "生姜",
+        "姜"
+      ],
+      "per100g": {
+        "calories": 80,
+        "protein": 1.82,
+        "carbs": 17.8,
+        "fat": 0.75
+      }
+    },
+    {
+      "id": "mushroom_white_raw",
+      "label": "白蘑菇（生）",
+      "description": "Mushrooms, white, raw",
+      "fdcId": "169251",
+      "preparation": "生食",
+      "aliases": [
+        "口蘑",
+        "生白蘑菇"
+      ],
+      "per100g": {
+        "calories": 22,
+        "protein": 3.09,
+        "carbs": 3.26,
+        "fat": 0.34
+      }
+    },
+    {
+      "id": "apple_raw_skin",
+      "label": "苹果（生，带皮）",
+      "description": "Apples, raw, with skin (Includes foods for USDA's Food Distribution Program)",
+      "fdcId": "171688",
+      "preparation": "生食（带皮）",
+      "aliases": [
+        "生苹果",
+        "带皮苹果"
+      ],
+      "per100g": {
+        "calories": 52,
+        "protein": 0.26,
+        "carbs": 13.8,
+        "fat": 0.17
+      }
+    },
+    {
+      "id": "apple_raw_no_skin",
+      "label": "苹果（生，去皮）",
+      "description": "Apples, raw, without skin",
+      "fdcId": "171689",
+      "preparation": "生食（去皮）",
+      "aliases": [
+        "去皮苹果"
+      ],
+      "per100g": {
+        "calories": 48,
+        "protein": 0.27,
+        "carbs": 12.8,
+        "fat": 0.13
+      }
+    },
+    {
+      "id": "banana_raw",
+      "label": "香蕉（生）",
+      "description": "Bananas, raw",
+      "fdcId": "173944",
+      "preparation": "生食",
+      "aliases": [
+        "生香蕉"
+      ],
+      "per100g": {
+        "calories": 89,
+        "protein": 1.09,
+        "carbs": 22.8,
+        "fat": 0.33
+      }
+    },
+    {
+      "id": "orange_raw",
+      "label": "橙子（生）",
+      "description": "Oranges, raw, all commercial varieties",
+      "fdcId": "169097",
+      "preparation": "生食",
+      "aliases": [
+        "橙",
+        "鲜橙"
+      ],
+      "per100g": {
+        "calories": 47,
+        "protein": 0.94,
+        "carbs": 11.8,
+        "fat": 0.12
+      }
+    },
+    {
+      "id": "strawberry_raw",
+      "label": "草莓（生）",
+      "description": "Strawberries, raw",
+      "fdcId": "167762",
+      "preparation": "生食",
+      "aliases": [
+        "生草莓"
+      ],
+      "per100g": {
+        "calories": 32,
+        "protein": 0.67,
+        "carbs": 7.68,
+        "fat": 0.3
+      }
+    },
+    {
+      "id": "blueberry_raw",
+      "label": "蓝莓（生）",
+      "description": "Blueberries, raw",
+      "fdcId": "171711",
+      "preparation": "生食",
+      "aliases": [
+        "生蓝莓"
+      ],
+      "per100g": {
+        "calories": 57,
+        "protein": 0.74,
+        "carbs": 14.5,
+        "fat": 0.33
+      }
+    },
+    {
+      "id": "grape_raw",
+      "label": "葡萄（生）",
+      "description": "Grapes, red or green (European type, such as Thompson seedless), raw",
+      "fdcId": "174683",
+      "preparation": "生食",
+      "aliases": [
+        "生葡萄"
+      ],
+      "per100g": {
+        "calories": 69,
+        "protein": 0.72,
+        "carbs": 18.1,
+        "fat": 0.16
+      }
+    },
+    {
+      "id": "pear_raw",
+      "label": "梨（生）",
+      "description": "Pears, raw",
+      "fdcId": "169118",
+      "preparation": "生食",
+      "aliases": [
+        "生梨"
+      ],
+      "per100g": {
+        "calories": 57,
+        "protein": 0.36,
+        "carbs": 15.2,
+        "fat": 0.14
+      }
+    },
+    {
+      "id": "avocado_raw",
+      "label": "牛油果（生）",
+      "description": "Avocados, raw, all commercial varieties",
+      "fdcId": "171705",
+      "preparation": "生食",
+      "aliases": [
+        "鳄梨",
+        "生鳄梨"
+      ],
+      "per100g": {
+        "calories": 160,
+        "protein": 2,
+        "carbs": 8.53,
+        "fat": 14.7
+      }
+    },
+    {
+      "id": "kiwi_raw",
+      "label": "猕猴桃（生）",
+      "description": "Kiwifruit, green, raw",
+      "fdcId": "168153",
+      "preparation": "生食",
+      "aliases": [
+        "奇异果",
+        "生猕猴桃"
+      ],
+      "per100g": {
+        "calories": 61,
+        "protein": 1.14,
+        "carbs": 14.7,
+        "fat": 0.52
+      }
+    },
+    {
+      "id": "mango_raw",
+      "label": "芒果（生）",
+      "description": "Mangos, raw",
+      "fdcId": "169910",
+      "preparation": "生食",
+      "aliases": [
+        "生芒果"
+      ],
+      "per100g": {
+        "calories": 60,
+        "protein": 0.82,
+        "carbs": 15,
+        "fat": 0.38
+      }
+    },
+    {
+      "id": "peach_raw",
+      "label": "桃（生）",
+      "description": "Peaches, yellow, raw",
+      "fdcId": "169928",
+      "preparation": "生食",
+      "aliases": [
+        "生桃"
+      ],
+      "per100g": {
+        "calories": 39,
+        "protein": 0.91,
+        "carbs": 9.54,
+        "fat": 0.25
+      }
+    },
+    {
+      "id": "pineapple_raw",
+      "label": "菠萝（生）",
+      "description": "Pineapple, raw, all varieties",
+      "fdcId": "169124",
+      "preparation": "生食",
+      "aliases": [
+        "凤梨",
+        "生菠萝"
+      ],
+      "per100g": {
+        "calories": 50,
+        "protein": 0.54,
+        "carbs": 13.1,
+        "fat": 0.12
+      }
+    },
+    {
+      "id": "watermelon_raw",
+      "label": "西瓜（生）",
+      "description": "Watermelon, raw",
+      "fdcId": "167765",
+      "preparation": "生食",
+      "aliases": [
+        "生西瓜"
+      ],
+      "per100g": {
+        "calories": 30,
+        "protein": 0.61,
+        "carbs": 7.55,
+        "fat": 0.15
+      }
+    },
+    {
+      "id": "cherry_raw",
+      "label": "樱桃（生）",
+      "description": "Cherries, sweet, raw",
+      "fdcId": "171719",
+      "preparation": "生食",
+      "aliases": [
+        "车厘子",
+        "生樱桃"
+      ],
+      "per100g": {
+        "calories": 63,
+        "protein": 1.06,
+        "carbs": 16,
+        "fat": 0.2
+      }
+    },
+    {
+      "id": "lemon_raw",
+      "label": "柠檬（生，去皮）",
+      "description": "Lemons, raw, without peel",
+      "fdcId": "167746",
+      "preparation": "生食（去皮）",
+      "aliases": [
+        "生柠檬"
+      ],
+      "per100g": {
+        "calories": 29,
+        "protein": 1.1,
+        "carbs": 9.32,
+        "fat": 0.3
+      }
+    },
+    {
+      "id": "lime_raw",
+      "label": "青柠（生）",
+      "description": "Limes, raw",
+      "fdcId": "168155",
+      "preparation": "生食",
+      "aliases": [
+        "酸橙",
+        "青柠檬"
+      ],
+      "per100g": {
+        "calories": 30,
+        "protein": 0.7,
+        "carbs": 10.5,
+        "fat": 0.2
+      }
+    },
+    {
+      "id": "chicken_thigh_raw",
+      "label": "鸡腿肉（生，带皮）",
+      "description": "Chicken, broilers or fryers, thigh, meat and skin, raw",
+      "fdcId": "172385",
+      "preparation": "生食（带皮）",
+      "aliases": [
+        "生鸡腿",
+        "鸡腿"
+      ],
+      "per100g": {
+        "calories": 221,
+        "protein": 16.5,
+        "carbs": 0.25,
+        "fat": 16.6
+      }
+    },
+    {
+      "id": "chicken_thigh_roasted",
+      "label": "鸡腿肉（烤熟，带皮）",
+      "description": "Chicken, broilers or fryers, thigh, meat and skin, cooked, roasted",
+      "fdcId": "173625",
+      "preparation": "熟制（烘烤，带皮）",
+      "aliases": [
+        "烤鸡腿",
+        "熟鸡腿"
+      ],
+      "per100g": {
+        "calories": 232,
+        "protein": 23.3,
+        "carbs": 0,
+        "fat": 14.7
+      }
+    },
+    {
+      "id": "turkey_breast_raw",
+      "label": "火鸡胸肉（生）",
+      "description": "Turkey, whole, breast, meat only, raw",
+      "fdcId": "171098",
+      "preparation": "生食",
+      "aliases": [
+        "生火鸡胸"
+      ],
+      "per100g": {
+        "calories": 114,
+        "protein": 23.7,
+        "carbs": 0.14,
+        "fat": 1.48
+      }
+    },
+    {
+      "id": "turkey_breast_roasted",
+      "label": "火鸡胸肉（烤熟）",
+      "description": "Turkey, whole, breast, meat only, cooked, roasted",
+      "fdcId": "171496",
+      "preparation": "熟制（烘烤）",
+      "aliases": [
+        "烤火鸡胸",
+        "熟火鸡胸"
+      ],
+      "per100g": {
+        "calories": 147,
+        "protein": 30.1,
+        "carbs": 0,
+        "fat": 2.08
+      }
+    },
+    {
+      "id": "pork_tenderloin_raw",
+      "label": "猪里脊（生）",
+      "description": "Pork, fresh, loin, tenderloin, separable lean and fat, raw",
+      "fdcId": "168312",
+      "preparation": "生食",
+      "aliases": [
+        "生猪里脊",
+        "猪里脊肉"
+      ],
+      "per100g": {
+        "calories": 120,
+        "protein": 20.6,
+        "carbs": 0,
+        "fat": 3.53
+      }
+    },
+    {
+      "id": "pork_tenderloin_roasted",
+      "label": "猪里脊（烤熟）",
+      "description": "Pork, fresh, loin, tenderloin, separable lean and fat, cooked, roasted",
+      "fdcId": "167905",
+      "preparation": "熟制（烘烤）",
+      "aliases": [
+        "烤猪里脊",
+        "熟猪里脊"
+      ],
+      "per100g": {
+        "calories": 147,
+        "protein": 26,
+        "carbs": 0,
+        "fat": 3.96
+      }
+    },
+    {
+      "id": "bacon_raw",
+      "label": "培根（生）",
+      "description": "Pork, cured, bacon, unprepared",
+      "fdcId": "168277",
+      "preparation": "生/未进一步烹调",
+      "aliases": [
+        "生培根"
+      ],
+      "per100g": {
+        "calories": 393,
+        "protein": 13.7,
+        "carbs": 0,
+        "fat": 37.1
+      }
+    },
+    {
+      "id": "bacon_baked",
+      "label": "培根（烤熟）",
+      "description": "Pork, cured, bacon, cooked, baked",
+      "fdcId": "167914",
+      "preparation": "熟制（烘烤）",
+      "aliases": [
+        "熟培根",
+        "烤培根"
+      ],
+      "per100g": {
+        "calories": 548,
+        "protein": 35.7,
+        "carbs": 1.35,
+        "fat": 43.3
+      }
+    },
+    {
+      "id": "beef_ground_85_raw",
+      "label": "牛绞肉（85%瘦肉，生）",
+      "description": "Beef, ground, 85% lean meat / 15% fat, raw (Includes foods for USDA's Food Distribution Program)",
+      "fdcId": "171796",
+      "preparation": "生食",
+      "aliases": [
+        "生牛肉馅",
+        "85%瘦牛绞肉"
+      ],
+      "per100g": {
+        "calories": 215,
+        "protein": 18.6,
+        "carbs": 0,
+        "fat": 15
+      }
+    },
+    {
+      "id": "beef_ground_85_cooked",
+      "label": "牛绞肉（85%瘦肉，煎熟）",
+      "description": "Beef, ground, 85% lean meat / 15% fat, patty, cooked, broiled",
+      "fdcId": "174032",
+      "preparation": "熟制（煎烤）",
+      "aliases": [
+        "熟牛肉馅",
+        "煎牛肉末"
+      ],
+      "per100g": {
+        "calories": 250,
+        "protein": 25.9,
+        "carbs": 0,
+        "fat": 15.4
+      }
+    },
+    {
+      "id": "salmon_farmed_raw",
+      "label": "养殖大西洋三文鱼（生）",
+      "description": "Fish, salmon, Atlantic, farmed, raw",
+      "fdcId": "175167",
+      "preparation": "生食",
+      "aliases": [
+        "生三文鱼",
+        "生鲑鱼"
+      ],
+      "per100g": {
+        "calories": 208,
+        "protein": 20.4,
+        "carbs": 0,
+        "fat": 13.4
+      }
+    },
+    {
+      "id": "salmon_farmed_cooked",
+      "label": "养殖大西洋三文鱼（熟）",
+      "description": "Fish, salmon, Atlantic, farmed, cooked, dry heat",
+      "fdcId": "175168",
+      "preparation": "熟制（干热烹调）",
+      "aliases": [
+        "熟三文鱼",
+        "烤三文鱼"
+      ],
+      "per100g": {
+        "calories": 206,
+        "protein": 22.1,
+        "carbs": 0,
+        "fat": 12.4
+      }
+    },
+    {
+      "id": "cod_atlantic_raw",
+      "label": "大西洋鳕鱼（生）",
+      "description": "Fish, cod, Atlantic, raw",
+      "fdcId": "171955",
+      "preparation": "生食",
+      "aliases": [
+        "生鳕鱼"
+      ],
+      "per100g": {
+        "calories": 82,
+        "protein": 17.8,
+        "carbs": 0,
+        "fat": 0.67
+      }
+    },
+    {
+      "id": "cod_atlantic_cooked",
+      "label": "大西洋鳕鱼（熟）",
+      "description": "Fish, cod, Atlantic, cooked, dry heat",
+      "fdcId": "171956",
+      "preparation": "熟制（干热烹调）",
+      "aliases": [
+        "熟鳕鱼",
+        "烤鳕鱼"
+      ],
+      "per100g": {
+        "calories": 105,
+        "protein": 22.8,
+        "carbs": 0,
+        "fat": 0.86
+      }
+    },
+    {
+      "id": "tilapia_raw",
+      "label": "罗非鱼（生）",
+      "description": "Fish, tilapia, raw",
+      "fdcId": "175176",
+      "preparation": "生食",
+      "aliases": [
+        "生罗非鱼"
+      ],
+      "per100g": {
+        "calories": 96,
+        "protein": 20.1,
+        "carbs": 0,
+        "fat": 1.7
+      }
+    },
+    {
+      "id": "tilapia_cooked",
+      "label": "罗非鱼（熟）",
+      "description": "Fish, tilapia, cooked, dry heat",
+      "fdcId": "175177",
+      "preparation": "熟制（干热烹调）",
+      "aliases": [
+        "熟罗非鱼"
+      ],
+      "per100g": {
+        "calories": 128,
+        "protein": 26.2,
+        "carbs": 0,
+        "fat": 2.65
+      }
+    },
+    {
+      "id": "tuna_yellowfin_raw",
+      "label": "黄鳍金枪鱼（生）",
+      "description": "Fish, tuna, fresh, yellowfin, raw",
+      "fdcId": "175159",
+      "preparation": "生食",
+      "aliases": [
+        "生金枪鱼",
+        "黄鳍鱼"
+      ],
+      "per100g": {
+        "calories": 109,
+        "protein": 24.4,
+        "carbs": 0,
+        "fat": 0.49
+      }
+    },
+    {
+      "id": "shrimp_raw",
+      "label": "虾（生）",
+      "description": "Crustaceans, shrimp, mixed species, raw (may contain additives to retain moisture)",
+      "fdcId": "174210",
+      "preparation": "生食",
+      "aliases": [
+        "生虾",
+        "鲜虾"
+      ],
+      "per100g": {
+        "calories": 71,
+        "protein": 13.6,
+        "carbs": 0.91,
+        "fat": 1.01
+      }
+    },
+    {
+      "id": "shrimp_cooked",
+      "label": "虾（熟，湿热）",
+      "description": "Crustaceans, shrimp, mixed species, cooked, moist heat (may contain additives to retain moisture)",
+      "fdcId": "171971",
+      "preparation": "熟制（湿热）",
+      "aliases": [
+        "熟虾",
+        "水煮虾"
+      ],
+      "per100g": {
+        "calories": 119,
+        "protein": 22.8,
+        "carbs": 1.52,
+        "fat": 1.7
+      }
+    },
+    {
+      "id": "edamame_frozen_raw",
+      "label": "毛豆（冷冻，未烹调）",
+      "description": "Edamame, frozen, unprepared",
+      "fdcId": "168410",
+      "preparation": "冷冻未烹调",
+      "aliases": [
+        "冷冻毛豆",
+        "枝豆"
+      ],
+      "per100g": {
+        "calories": 109,
+        "protein": 11.2,
+        "carbs": 7.61,
+        "fat": 4.73
+      }
+    },
+    {
+      "id": "edamame_frozen_cooked",
+      "label": "毛豆（冷冻，熟）",
+      "description": "Edamame, frozen, prepared",
+      "fdcId": "168411",
+      "preparation": "熟制（冷冻后烹调）",
+      "aliases": [
+        "熟毛豆",
+        "熟枝豆"
+      ],
+      "per100g": {
+        "calories": 121,
+        "protein": 11.9,
+        "carbs": 8.91,
+        "fat": 5.2
+      }
+    },
+    {
+      "id": "lentils_raw",
+      "label": "扁豆（生）",
+      "description": "Lentils, raw",
+      "fdcId": "172420",
+      "preparation": "生/干燥",
+      "aliases": [
+        "干扁豆",
+        "生扁豆"
+      ],
+      "per100g": {
+        "calories": 352,
+        "protein": 24.6,
+        "carbs": 63.4,
+        "fat": 1.06
+      }
+    },
+    {
+      "id": "lentils_cooked",
+      "label": "扁豆（煮熟）",
+      "description": "Lentils, mature seeds, cooked, boiled, without salt",
+      "fdcId": "172421",
+      "preparation": "熟制（水煮，无盐）",
+      "aliases": [
+        "煮扁豆",
+        "熟扁豆"
+      ],
+      "per100g": {
+        "calories": 116,
+        "protein": 9.02,
+        "carbs": 20.1,
+        "fat": 0.38
+      }
+    },
+    {
+      "id": "black_beans_raw",
+      "label": "黑豆（生）",
+      "description": "Beans, black, mature seeds, raw",
+      "fdcId": "173734",
+      "preparation": "生/干燥",
+      "aliases": [
+        "生黑豆",
+        "干黑豆"
+      ],
+      "per100g": {
+        "calories": 341,
+        "protein": 21.6,
+        "carbs": 62.4,
+        "fat": 1.42
+      }
+    },
+    {
+      "id": "black_beans_cooked",
+      "label": "黑豆（煮熟）",
+      "description": "Beans, black, mature seeds, cooked, boiled, without salt",
+      "fdcId": "173735",
+      "preparation": "熟制（水煮，无盐）",
+      "aliases": [
+        "煮黑豆",
+        "熟黑豆"
+      ],
+      "per100g": {
+        "calories": 132,
+        "protein": 8.86,
+        "carbs": 23.7,
+        "fat": 0.54
+      }
+    },
+    {
+      "id": "chickpeas_raw",
+      "label": "鹰嘴豆（生）",
+      "description": "Chickpeas (garbanzo beans, bengal gram), mature seeds, raw",
+      "fdcId": "173756",
+      "preparation": "生/干燥",
+      "aliases": [
+        "生鹰嘴豆",
+        "干鹰嘴豆"
+      ],
+      "per100g": {
+        "calories": 378,
+        "protein": 20.5,
+        "carbs": 63,
+        "fat": 6.04
+      }
+    },
+    {
+      "id": "chickpeas_cooked",
+      "label": "鹰嘴豆（煮熟）",
+      "description": "Chickpeas (garbanzo beans, bengal gram), mature seeds, cooked, boiled, without salt",
+      "fdcId": "173757",
+      "preparation": "熟制（水煮，无盐）",
+      "aliases": [
+        "煮鹰嘴豆",
+        "熟鹰嘴豆"
+      ],
+      "per100g": {
+        "calories": 164,
+        "protein": 8.86,
+        "carbs": 27.4,
+        "fat": 2.59
+      }
+    },
+    {
+      "id": "kidney_beans_raw",
+      "label": "芸豆（生）",
+      "description": "Beans, kidney, all types, mature seeds, raw",
+      "fdcId": "175193",
+      "preparation": "生/干燥",
+      "aliases": [
+        "生芸豆",
+        "干芸豆"
+      ],
+      "per100g": {
+        "calories": 333,
+        "protein": 23.6,
+        "carbs": 60,
+        "fat": 0.83
+      }
+    },
+    {
+      "id": "kidney_beans_cooked",
+      "label": "芸豆（煮熟）",
+      "description": "Beans, kidney, all types, mature seeds, cooked, boiled, without salt",
+      "fdcId": "173740",
+      "preparation": "熟制（水煮，无盐）",
+      "aliases": [
+        "煮芸豆",
+        "熟芸豆"
+      ],
+      "per100g": {
+        "calories": 127,
+        "protein": 8.67,
+        "carbs": 22.8,
+        "fat": 0.5
+      }
+    },
+    {
+      "id": "split_peas_cooked",
+      "label": "豌豆（干，煮熟）",
+      "description": "Peas, split, mature seeds, cooked, boiled, without salt",
+      "fdcId": "172429",
+      "preparation": "熟制（水煮，无盐）",
+      "aliases": [
+        "煮干豌豆",
+        "熟豌豆"
+      ],
+      "per100g": {
+        "calories": 118,
+        "protein": 8.34,
+        "carbs": 21.1,
+        "fat": 0.39
+      }
+    },
+    {
+      "id": "tofu_dried",
+      "label": "高野豆腐（干）",
+      "description": "Tofu, dried-frozen (koyadofu), prepared with calcium sulfate",
+      "fdcId": "174303",
+      "preparation": "制备食品（干燥冻豆腐）",
+      "aliases": [
+        "高野豆腐",
+        "干高野豆腐"
+      ],
+      "per100g": {
+        "calories": 470,
+        "protein": 52.4,
+        "carbs": 8.3,
+        "fat": 30.3
+      }
+    },
+    {
+      "id": "milk_whole",
+      "label": "全脂牛奶",
+      "description": "Milk, whole, 3.25% milkfat, without added vitamin A and vitamin D",
+      "fdcId": "172217",
+      "preparation": "即食/制备食品（3.25%乳脂）",
+      "aliases": [
+        "全脂奶",
+        "牛奶"
+      ],
+      "per100g": {
+        "calories": 61,
+        "protein": 3.15,
+        "carbs": 4.78,
+        "fat": 3.27
+      }
+    },
+    {
+      "id": "milk_lowfat",
+      "label": "低脂牛奶（1%）",
+      "description": "Milk, lowfat, fluid, 1% milkfat, with added vitamin A and vitamin D",
+      "fdcId": "170872",
+      "preparation": "即食/制备食品（1%乳脂，强化）",
+      "aliases": [
+        "低脂奶",
+        "1%牛奶"
+      ],
+      "per100g": {
+        "calories": 42,
+        "protein": 3.37,
+        "carbs": 4.99,
+        "fat": 0.97
+      }
+    },
+    {
+      "id": "milk_skim",
+      "label": "脱脂牛奶",
+      "description": "Milk, nonfat, fluid, without added vitamin A and vitamin D (fat free or skim)",
+      "fdcId": "173432",
+      "preparation": "即食/制备食品（脱脂）",
+      "aliases": [
+        "脱脂奶",
+        "无脂牛奶"
+      ],
+      "per100g": {
+        "calories": 35,
+        "protein": 3.37,
+        "carbs": 4.86,
+        "fat": 0.18
+      }
+    },
+    {
+      "id": "yogurt_plain_whole",
+      "label": "原味全脂酸奶",
+      "description": "Yogurt, plain, whole milk",
+      "fdcId": "171284",
+      "preparation": "即食/制备食品",
+      "aliases": [
+        "全脂酸奶",
+        "原味酸奶"
+      ],
+      "per100g": {
+        "calories": 61,
+        "protein": 3.47,
+        "carbs": 4.66,
+        "fat": 3.25
+      }
+    },
+    {
+      "id": "yogurt_plain_lowfat",
+      "label": "原味低脂酸奶",
+      "description": "Yogurt, plain, low fat",
+      "fdcId": "170886",
+      "preparation": "即食/制备食品",
+      "aliases": [
+        "低脂酸奶",
+        "原味低脂酸奶"
+      ],
+      "per100g": {
+        "calories": 63,
+        "protein": 5.25,
+        "carbs": 7.04,
+        "fat": 1.55
+      }
+    },
+    {
+      "id": "yogurt_greek_nonfat",
+      "label": "原味脱脂希腊酸奶",
+      "description": "Yogurt, Greek, plain, nonfat (Includes foods for USDA's Food Distribution Program)",
+      "fdcId": "170894",
+      "preparation": "即食/制备食品",
+      "aliases": [
+        "希腊酸奶",
+        "脱脂希腊酸奶"
+      ],
+      "per100g": {
+        "calories": 59,
+        "protein": 10.2,
+        "carbs": 3.6,
+        "fat": 0.39
+      }
+    },
+    {
+      "id": "cottage_cheese_lowfat",
+      "label": "低脂茅屋奶酪",
+      "description": "Cheese, cottage, lowfat, 1% milkfat",
+      "fdcId": "173417",
+      "preparation": "即食/制备食品（1%乳脂）",
+      "aliases": [
+        "低脂乡村奶酪",
+        "茅屋奶酪"
+      ],
+      "per100g": {
+        "calories": 72,
+        "protein": 12.4,
+        "carbs": 2.72,
+        "fat": 1.02
+      }
+    },
+    {
+      "id": "cheddar_cheese",
+      "label": "切达奶酪",
+      "description": "Cheese, cheddar (Includes foods for USDA's Food Distribution Program)",
+      "fdcId": "173414",
+      "preparation": "即食/制备食品",
+      "aliases": [
+        "切达芝士",
+        "切达奶酪"
+      ],
+      "per100g": {
+        "calories": 403,
+        "protein": 22.9,
+        "carbs": 3.37,
+        "fat": 33.3
+      }
+    },
+    {
+      "id": "olive_oil",
+      "label": "橄榄油",
+      "description": "Oil, olive, salad or cooking",
+      "fdcId": "171413",
+      "preparation": "食用油（沙拉或烹调）",
+      "aliases": [
+        "橄榄油",
+        "食用橄榄油"
+      ],
+      "per100g": {
+        "calories": 884,
+        "protein": 0,
+        "carbs": 0,
+        "fat": 100
+      }
+    },
+    {
+      "id": "almonds_raw",
+      "label": "杏仁（生）",
+      "description": "Nuts, almonds",
+      "fdcId": "170567",
+      "preparation": "生食",
+      "aliases": [
+        "生杏仁"
+      ],
+      "per100g": {
+        "calories": 579,
+        "protein": 21.2,
+        "carbs": 21.6,
+        "fat": 49.9
+      }
+    },
+    {
+      "id": "chia_seeds_dried",
+      "label": "奇亚籽（干）",
+      "description": "Seeds, chia seeds, dried",
+      "fdcId": "170554",
+      "preparation": "生/干燥",
+      "aliases": [
+        "奇亚籽",
+        "干奇亚籽"
+      ],
+      "per100g": {
+        "calories": 486,
+        "protein": 16.5,
+        "carbs": 42.1,
+        "fat": 30.7
+      }
+    },
+    {
+      "id": "peanut_butter",
+      "label": "花生酱",
+      "description": "Peanut Butter, smooth (Includes foods for USDA's Food Distribution Program)",
+      "fdcId": "174294",
+      "preparation": "即食/制备食品",
+      "aliases": [
+        "花生酱（顺滑）"
+      ],
+      "per100g": {
+        "calories": 588,
+        "protein": 21.9,
+        "carbs": 24,
+        "fat": 49.5
+      }
+    }
+  ]
+}
