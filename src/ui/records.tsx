@@ -3,7 +3,7 @@ import { Image, Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, t
 import { Ionicons } from "@expo/vector-icons";
 import type { AppData } from "../types";
 import { mealCalories } from "../domain";
-import { SummaryVersions, s as base } from "./components";
+import { RecordThumb, SummaryVersions, s as base } from "./components";
 import { rangeLabel, recordDate, sleepHours, timeLabel } from "./format";
 import { color, moduleTone, radius, space, type } from "./theme";
 import type { Kind } from "./app-types";
@@ -98,13 +98,7 @@ export function Records({
                   onPress={() => onEdit(r.kind, r.id)}
                 >
                   <View style={[st.spine, { backgroundColor: tone.hue }]} />
-                  {r.imageUri ? (
-                    <Image source={{ uri: r.imageUri }} style={st.thumb} />
-                  ) : (
-                    <View style={[st.icon, { backgroundColor: tone.tint }]}>
-                      <Ionicons name={tone.icon} size={18} color={tone.text} />
-                    </View>
-                  )}
+                  <RecordThumb uri={r.imageUri} kind={r.kind} size={38} />
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <Text style={type.label} numberOfLines={1}>{r.title}</Text>
                     <Text style={type.small} numberOfLines={1}>{r.detail}</Text>

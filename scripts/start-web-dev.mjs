@@ -1,9 +1,12 @@
 import { spawn } from 'node:child_process';
+import fs from 'node:fs';
 import http from 'node:http';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const PORT = 3000;
 const projectRoot = fileURLToPath(new URL('../', import.meta.url));
+const expoCli = path.join(projectRoot, 'node_modules/expo/bin/cli');
 
 function isPortServing(port) {
   return new Promise((resolve) => {
@@ -19,11 +22,18 @@ function isPortServing(port) {
   });
 }
 
-function startExpo() {
+async function waitForExpoCli() {
+  while (!fs.existsSync(expoCli)) {
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+}
+
+async function startExpo() {
+  await waitForExpoCli();
   console.log(`Starting Expo web server on http://localhost:${PORT} ...`);
   const child = spawn(
     process.execPath,
-    ['node_modules/expo/bin/cli', 'start', '--web', '--port', String(PORT), '--max-workers', '2'],
+    [expoCli, 'start', '--web', '--port', String(PORT), '--max-workers', '2', '--clear'],
     {
       cwd: projectRoot,
       stdio: 'inherit',

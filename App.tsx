@@ -8,6 +8,7 @@ import React, {
 import {
   AppState,
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -67,6 +68,31 @@ const blankData = (): AppData => ({
 });
 
 export default function App() {
+  useEffect(() => {
+    if (Platform.OS !== "web" || typeof document === "undefined") return;
+    if (!document.getElementById("hc-web-fonts")) {
+      const link = document.createElement("link");
+      link.id = "hc-web-fonts";
+      link.rel = "stylesheet";
+      link.href =
+        "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@600;700;800&family=Noto+Sans+SC:wght@400;500;600;700;800&display=swap";
+      document.head.appendChild(link);
+    }
+    if (!document.getElementById("hc-web-font-fallback")) {
+      const style = document.createElement("style");
+      style.id = "hc-web-font-fallback";
+      style.textContent = `
+        html, body, #root, input, textarea, button,
+        [class*="css-text-"]:not([style*="font-family"]),
+        div[dir="auto"]:not([style*="font-family"]),
+        span[dir="auto"]:not([style*="font-family"]) {
+          font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", system-ui, sans-serif !important;
+          -webkit-font-smoothing: antialiased;
+        }
+      `;
+      document.head.appendChild(style);
+    }
+  }, []);
   return (
     <SafeAreaProvider>
       <AppShell />
@@ -526,7 +552,7 @@ function AppShell() {
     setAiBusy(true);
     setMessage("正在分析这餐；原始记录不会被覆盖。");
     const slow = setTimeout(
-      () => setMessage("分析已等待 30 秒，你可以取消；记录不会受影响。"),
+      () => setMessage("分析已等待 30 秒，你可以取消；记录不会���影响。"),
       30000,
     );
     const timeout = setTimeout(() => controller.abort(), AI_REQUEST_TIMEOUT_MS * MAX_MEAL_ANALYSIS_STAGES + 5000);

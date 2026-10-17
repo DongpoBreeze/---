@@ -3,10 +3,10 @@ import { Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type Vie
 import { Ionicons } from "@expo/vector-icons";
 import type { AppData, MealRecord, NutrientRange } from "../types";
 import { mealCalories, summaryMarkdown } from "../domain";
-import { MarkdownText, SummaryVersions, s as base } from "./components";
+import { MarkdownText, RecordThumb, SummaryVersions, s as base } from "./components";
 import { Tape, type TapeMark as Mark } from "./tape";
 import { dateLabel, minutesInto, nutritionRangeLabel, rangeLabel, recordDate, sleepHours, timeLabel, today } from "./format";
-import { color, mono, moduleTone, radius, space, type } from "./theme";
+import { color, mono, moduleTone, radius, sans, space, type } from "./theme";
 import type { Kind } from "./app-types";
 
 function mealMacro(meal: MealRecord, key: "protein" | "carbs" | "fat"): NutrientRange | null {
@@ -90,13 +90,14 @@ export function Today({
   const sleepHrs = latestSleep ? sleepHours(latestSleep) : null;
   const sleepValue = sleepHrs !== null ? `${sleepHrs.toFixed(1)}` : "未记录";
 
-  const recent = [
+  const recent: Array<{ kind: Kind; id: string; title: string; detail: string; at: string; imageUri?: string }> = [
     ...meals.map((r) => ({
       kind: "meal" as Kind,
       id: r.id,
-      title: r.foodName,
-      detail: `${r.mealType} · ${timeLabel(r.occurredAt)}${mealCalories(r) ? ` · ${rangeLabel(mealCalories(r), " kcal")}` : ""}`,
+      title: `${r.mealType} · ${r.foodName}`,
+      detail: `${timeLabel(r.occurredAt)} · ${mealCalories(r) ? `约 ${rangeLabel(mealCalories(r), " kcal")}` : "摄入未知"}`,
       at: r.occurredAt,
+      imageUri: r.imageUri,
     })),
     ...trainings.map((r) => ({
       kind: "training" as Kind,
@@ -240,7 +241,7 @@ export function Today({
           <View style={{ flex: 1 }}>
             <Text style={st.metricLabel}>总热量范围</Text>
             <View style={st.kcalRow}>
-              <Text style={[st.kcalValue, !totalCalories && { color: color.inkFaint }]}>
+              <Text style={[st.kcalValue, !totalCalories && st.emptyMetricText]}>
                 {kcalValue}
               </Text>
               {totalCalories && <Text style={st.kcalUnit}>kcal</Text>}
@@ -285,7 +286,7 @@ export function Today({
             <Text style={type.caption}>02 / 今日训练</Text>
           </View>
           <View style={st.halfReadingRow}>
-            <Text style={[st.halfValue, !trainings.length && { color: color.inkFaint, fontSize: 22 }]}>
+            <Text style={[st.halfValue, !trainings.length && st.emptyMetricText]}>
               {trainings.length ? `${trainings.length}` : "未记录"}
             </Text>
             {trainings.length > 0 && <Text style={st.halfUnit}>个动作</Text>}
@@ -303,7 +304,7 @@ export function Today({
             <Text style={type.caption}>03 / 今日睡眠</Text>
           </View>
           <View style={st.halfReadingRow}>
-            <Text style={[st.halfValue, !sleeps.length && { color: color.inkFaint, fontSize: 22 }]}>
+            <Text style={[st.halfValue, !sleeps.length && st.emptyMetricText]}>
               {sleeps.length ? sleepValue : "未记录"}
             </Text>
             {sleeps.length > 0 && sleepHrs !== null && <Text style={st.halfUnit}>小时</Text>}
@@ -390,9 +391,7 @@ export function Today({
                 ]}
               >
                 <View style={[st.rowBar, { backgroundColor: tone.hue }]} />
-                <View style={[st.rowIcon, { backgroundColor: tone.tint }]}>
-                  <Ionicons name={tone.icon} size={17} color={tone.text} />
-                </View>
+                <RecordThumb uri={r.imageUri} kind={r.kind} size={36} />
                 <View style={st.rowBody}>
                   <Text style={type.label} numberOfLines={1}>{r.title}</Text>
                   <Text style={st.rowDetail} numberOfLines={1}>{r.detail}</Text>
@@ -532,6 +531,7 @@ const st = StyleSheet.create({
   metricLabel: { fontSize: 12, color: color.inkSoft },
   kcalRow: { flexDirection: "row", alignItems: "baseline", gap: 6, marginTop: 2 },
   kcalValue: { fontSize: 28, lineHeight: 34, fontWeight: "800", color: color.ink, ...type.numeric },
+  emptyMetricText: { fontSize: 20, lineHeight: 26, fontWeight: "700", color: color.inkFaint, fontFamily: sans },
   kcalUnit: { fontSize: 13, fontWeight: "700", color: color.inkSoft, fontFamily: mono },
   targetHint: { fontSize: 11, color: color.inkFaint, marginTop: 2, fontFamily: mono },
   coverageBox: {

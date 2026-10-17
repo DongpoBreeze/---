@@ -42,22 +42,30 @@ export const color = {
 export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32, xxxl: 48 };
 export const radius = { input: 6, block: 10, pill: 999 };
 
+export const sans = Platform.select({
+  ios: "System",
+  android: "sans-serif",
+  default:
+    '-apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", system-ui, sans-serif',
+});
+
 export const mono = Platform.select({
   ios: "Menlo",
   android: "monospace",
-  default: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+  default:
+    '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", monospace',
 });
 
 const numeric: TextStyle = { fontVariant: ["tabular-nums"], fontFamily: mono };
 
 export const type = {
-  display: { fontSize: 30, lineHeight: 36, fontWeight: "800", color: color.ink, letterSpacing: -0.6 } as TextStyle,
-  title: { fontSize: 19, lineHeight: 25, fontWeight: "800", color: color.ink, letterSpacing: -0.2 } as TextStyle,
-  heading: { fontSize: 15, lineHeight: 21, fontWeight: "700", color: color.ink } as TextStyle,
-  body: { fontSize: 15, lineHeight: 22, color: color.ink } as TextStyle,
-  bodySoft: { fontSize: 14, lineHeight: 21, color: color.inkSoft } as TextStyle,
-  small: { fontSize: 12, lineHeight: 18, color: color.inkSoft } as TextStyle,
-  label: { fontSize: 14, lineHeight: 20, fontWeight: "700", color: color.ink } as TextStyle,
+  display: { fontSize: 30, lineHeight: 36, fontWeight: "800", color: color.ink, letterSpacing: -0.6, fontFamily: sans } as TextStyle,
+  title: { fontSize: 19, lineHeight: 25, fontWeight: "800", color: color.ink, letterSpacing: -0.2, fontFamily: sans } as TextStyle,
+  heading: { fontSize: 15, lineHeight: 21, fontWeight: "700", color: color.ink, fontFamily: sans } as TextStyle,
+  body: { fontSize: 15, lineHeight: 22, color: color.ink, fontFamily: sans } as TextStyle,
+  bodySoft: { fontSize: 14, lineHeight: 21, color: color.inkSoft, fontFamily: sans } as TextStyle,
+  small: { fontSize: 12, lineHeight: 18, color: color.inkSoft, fontFamily: sans } as TextStyle,
+  label: { fontSize: 14, lineHeight: 20, fontWeight: "700", color: color.ink, fontFamily: sans } as TextStyle,
   caption: { fontSize: 11, lineHeight: 14, fontWeight: "700", letterSpacing: 1.2, color: color.inkFaint, fontFamily: mono } as TextStyle,
   reading: { fontSize: 30, lineHeight: 34, fontWeight: "800", color: color.ink, ...numeric } as TextStyle,
   numeric,
