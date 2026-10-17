@@ -478,7 +478,7 @@ export const s = StyleSheet.create({
   trackItemOn: {
     backgroundColor: color.raised,
     ...Platform.select({
-      web: { boxShadow: "0 1px 3px rgba(0,0,0,0.45)" } as object,
+      web: { boxShadow: "0 1px 2px rgba(23,32,43,0.14)" } as object,
       default: { elevation: 1, shadowColor: color.ink, shadowOpacity: 0.12, shadowRadius: 2, shadowOffset: { width: 0, height: 1 } },
     }),
   },

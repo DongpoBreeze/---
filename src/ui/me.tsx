@@ -122,7 +122,7 @@ export function Me({
 const st = StyleSheet.create({
   title: { ...type.display },
   intro: { ...type.bodySoft, marginTop: space.xs, marginBottom: space.lg },
-  profile: { backgroundColor: color.pineTint, borderRadius: radius.block, padding: space.lg, borderWidth: 1, borderColor: "#24594A" },
+  profile: { backgroundColor: color.pineTint, borderRadius: radius.block, padding: space.lg, borderWidth: 1, borderColor: color.lineStrong },
   profileLabel: { color: color.pine, fontSize: 13, fontWeight: "700" },
   profileGoal: { color: color.ink, fontSize: 26, lineHeight: 32, fontWeight: "800", marginTop: 2 },
   stats: { flexDirection: "row", gap: space.sm, marginTop: space.lg },

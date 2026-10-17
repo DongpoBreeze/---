@@ -1,10 +1,10 @@
 import React, { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { AppData } from "../types";
 import { mealCalories, summaryMarkdown } from "../domain";
 import { MarkdownText, SummaryVersions, s as base } from "./components";
-import { Dial, type DialMark as Mark } from "./dial";
+import { Tape, type TapeMark as Mark } from "./tape";
 import { dateLabel, minutesInto, rangeLabel, recordDate, sleepHours, timeLabel, today } from "./format";
 import { color, moduleTone, radius, space, type } from "./theme";
 import type { Kind } from "./app-types";
@@ -14,7 +14,7 @@ function Gauge({ kind, label, value, unit, note }: { kind: Kind; label: string; 
   const tone = moduleTone[kind];
   const unknown = value === "未知" || value === "—";
   return (
-    <View style={[st.gauge, { borderColor: unknown ? color.line : tone.hue }]}>
+    <View style={[st.gauge, { borderTopColor: unknown ? color.lineStrong : tone.hue }]}>
       <View style={st.gaugeHead}>
         <View style={[st.gaugeDot, { backgroundColor: unknown ? color.inkFaint : tone.hue }]} />
         <Text style={st.gaugeLabel} numberOfLines={1}>{label}</Text>
@@ -42,8 +42,6 @@ export function Today({
   onAi: () => void;
   onProfile: () => void;
 }) {
-  const { width } = useWindowDimensions();
-  const dialSize = Math.min(300, Math.max(240, Math.min(width, 760) - 80));
   const [showLocal, setShowLocal] = useState(false);
   const date = today();
   const meals = data.meals.filter((r) => recordDate(r) === date);
@@ -133,22 +131,18 @@ export function Today({
         </Pressable>
       </View>
       <View
-        style={st.dialWrap}
+        style={st.chart}
         accessible
-        accessibilityLabel={`今日表盘：已记下 ${count} 条，饮食 ${meals.length} 餐，训练 ${trainings.length} 次，睡眠 ${sleeps.length} 段`}
+        accessibilityLabel={`今日记录纸带：已记下 ${count} 条，饮食 ${meals.length} 餐，训练 ${trainings.length} 次，睡眠 ${sleeps.length} 段`}
       >
-        <Dial size={dialSize} marks={marks} now={now}>
+        <View style={st.chartHead}>
+          <Text style={type.caption}>24H 记录纸带</Text>
+          <Text style={st.chartNow}>NOW {timeLabel(nowDate.toISOString())}</Text>
+        </View>
+        <Tape marks={marks} now={now} />
+        <View style={st.chartFoot}>
           <Text style={st.dialCount}>{count}</Text>
-          <Text style={st.dialLabel}>{count ? "今天已记下" : days ? "今天还没有记录" : "从第一条记录开始"}</Text>
-          <Text style={st.dialTime}>现在 {timeLabel(nowDate.toISOString())}</Text>
-        </Dial>
-        <View style={st.legend}>
-          {(["sleep", "meal", "training"] as const).map((k) => (
-            <View key={k} style={st.legendItem}>
-              <View style={[st.legendDot, { backgroundColor: moduleTone[k].hue }]} />
-              <Text style={st.legendText}>{moduleTone[k].name}</Text>
-            </View>
-          ))}
+          <Text style={st.dialLabel}>{count ? "条今天已记下" : days ? "今天还没有记录" : "从第一条记录开始"}</Text>
         </View>
       </View>
       <View style={st.gauges}>
@@ -186,7 +180,7 @@ export function Today({
         <Text style={st.summary}>{preview}</Text>
         <Pressable style={st.link} accessibilityRole="button" onPress={() => setShowLocal(!showLocal)}>
           <Ionicons name={showLocal ? "chevron-up" : "document-text-outline"} size={16} color={color.pine} />
-          <Text style={st.linkText}>{showLocal ? "收起摘要" : "查看完整摘要"}</Text>
+          <Text style={st.linkText}>{showLocal ? "收起摘要" : "���看完整摘要"}</Text>
         </Pressable>
         {showLocal && <MarkdownText value={summary} />}
         <SummaryVersions summaries={data.summaries.filter((r) => r.date === date && r.source === "ai")} />
@@ -234,24 +228,28 @@ export function Today({
 
 const st = StyleSheet.create({
   head: { flexDirection: "row", alignItems: "flex-start", gap: space.md },
-  weekday: { ...type.small, color: color.pine, fontWeight: "700" },
+  weekday: { ...type.caption, color: color.inkSoft },
   date: { ...type.display, marginTop: 2 },
   avatar: {
     width: 44, height: 44, borderRadius: 22, backgroundColor: color.surface,
     alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: color.lineStrong,
   },
-  dialWrap: { alignItems: "center", marginTop: space.lg },
-  dialCount: { fontSize: 56, lineHeight: 60, fontWeight: "800", color: color.ink, ...type.numeric },
+  chart: {
+    marginTop: space.lg, backgroundColor: color.surface, borderRadius: radius.block,
+    borderWidth: 1, borderColor: color.line, padding: space.md, gap: space.md,
+  },
+  chartHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  chartNow: { ...type.caption, color: color.ink },
+  chartFoot: {
+    flexDirection: "row", alignItems: "baseline", gap: space.sm,
+    borderTopWidth: StyleSheet.hairlineWidth, borderColor: color.lineStrong, paddingTop: space.sm,
+  },
+  dialCount: { fontSize: 34, lineHeight: 38, fontWeight: "700", color: color.ink, ...type.numeric },
   dialLabel: { ...type.small, color: color.inkSoft },
-  dialTime: { fontSize: 12, color: color.pine, marginTop: space.xs, fontWeight: "700", ...type.numeric },
-  legend: { flexDirection: "row", gap: space.lg, marginTop: space.md },
-  legendItem: { flexDirection: "row", alignItems: "center", gap: 6 },
-  legendDot: { width: 8, height: 8, borderRadius: 4 },
-  legendText: { ...type.small },
-  gauges: { flexDirection: "row", gap: space.sm, marginTop: space.xl },
+  gauges: { flexDirection: "row", gap: space.sm, marginTop: space.md },
   gauge: {
     flex: 1, minWidth: 0, backgroundColor: color.surface, borderRadius: radius.block, padding: space.md,
-    borderTopWidth: 3,
+    borderWidth: 1, borderColor: color.line, borderTopWidth: 3,
   },
   gaugeHead: { flexDirection: "row", alignItems: "center", gap: 6 },
   gaugeDot: { width: 6, height: 6, borderRadius: 3 },

@@ -491,7 +491,7 @@ export function MealForm({
 
 const st = StyleSheet.create({
   capture: {
-    backgroundColor: color.mealTint, borderRadius: radius.block, padding: space.xl, borderWidth: 1, borderColor: "#5A4517",
+    backgroundColor: color.mealTint, borderRadius: radius.block, padding: space.xl, borderWidth: 1, borderColor: color.mealLine,
     alignItems: "center", marginBottom: space.xl,
   },
   captureIcon: {

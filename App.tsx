@@ -685,7 +685,7 @@ function AppShell() {
     );
   return (
     <SafeAreaView style={styles.root} edges={["top"]}>
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
       {Boolean(error) && (
         <Banner text={error} danger onClose={() => setError("")} />
       )}
