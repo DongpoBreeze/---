@@ -67,19 +67,23 @@ const blankData = (): AppData => ({
   sourceVersion: 0,
 });
 
+// The Metro asset URL (/assets/?unstable_path=...) is not reachable through the preview proxy, so serve the icon font from /public.
+// expo-font only recognizes fonts declared in its own "expo-generated-fonts" sheet; registering it there before any icon mounts
+// stops expo-font from injecting (and fetching) the unreachable Metro URL.
+if (Platform.OS === "web" && typeof document !== "undefined" && !document.getElementById("expo-generated-fonts")) {
+  const iconFontStyle = document.createElement("style");
+  iconFontStyle.id = "expo-generated-fonts";
+  iconFontStyle.textContent = '@font-face{font-family:"ionicons";src:url("/fonts/Ionicons.ttf") format("truetype");font-display:block}';
+  document.head.appendChild(iconFontStyle);
+}
+
 export default function App() {
   useEffect(() => {
     if (Platform.OS !== "web" || typeof document === "undefined") return;
     if (!document.getElementById("hc-web-font-fallback")) {
       const style = document.createElement("style");
       style.id = "hc-web-font-fallback";
-      // The Metro asset URL (/assets/?unstable_path=...) is not reachable through the preview proxy, so serve the icon font from /public.
       style.textContent = `
-        @font-face {
-          font-family: ionicons;
-          src: url("/fonts/Ionicons.ttf") format("truetype");
-          font-display: block;
-        }
         html, body, #root, input, textarea, button,
         [class*="css-text-"]:not([style*="font-family"]),
         div[dir="auto"]:not([style*="font-family"]),
