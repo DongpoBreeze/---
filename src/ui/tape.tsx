@@ -5,105 +5,186 @@ import type { Kind } from "./app-types";
 
 export type TapeMark = { kind: Kind; start: number; end?: number };
 
-const DAY = 1440;
-const CHANNELS: Kind[] = ["sleep", "meal", "training"];
-const HOURS = Array.from({ length: 25 }, (_, h) => h);
+const HOURS = Array.from({ length: 24 }, (_, h) => h);
+const ORDER: Kind[] = ["sleep", "meal", "training"];
 
-const pct = (minute: number) => `${(Math.min(DAY, Math.max(0, minute)) / DAY) * 100}%` as const;
+function hourHits(marks: TapeMark[], hour: number): Kind[] {
+  const hStart = hour * 60;
+  const hEnd = hStart + 60;
+  const active = new Set<Kind>();
+  for (const m of marks) {
+    if (m.end !== undefined && m.end > m.start) {
+      if (m.start < hEnd && m.end > hStart) active.add(m.kind);
+    } else if (m.start >= hStart && m.start < hEnd) {
+      active.add(m.kind);
+    }
+  }
+  return ORDER.filter((k) => active.has(k));
+}
 
 /**
- * A 24-hour strip-chart: one luminous channel per module on the dark deck.
- * Spans (sleep, cardio) draw as glowing bars; point events (meals, strength
- * sessions) draw as a tick with a bright dot. The amber needle marks now.
+ * v0.8 Signature Element: 24-Slot Hourly Barcode Matrix.
+ * Quantizes the 24-hour day into 24 crisp vertical protocol columns (00..23).
+ * Active hours light up in module signal colors; multi-module hours stack vertically.
  */
 export function Tape({ marks, now }: { marks: TapeMark[]; now: number }) {
+  const nowHour = Math.min(23, Math.max(0, Math.floor(now / 60)));
+  const activeHours = HOURS.filter((h) => hourHits(marks, h).length > 0).length;
+
   return (
     <View style={st.wrap}>
-      {CHANNELS.map((kind) => {
-        const tone = moduleTone[kind];
-        const own = marks.filter((m) => m.kind === kind && (m.end ?? m.start) > 0 && m.start < DAY);
-        return (
-          <View key={kind} style={st.channel}>
-            <View style={st.label}>
-              <View style={[st.pen, { backgroundColor: tone.hue }]} />
-              <Text style={[st.labelText, { color: tone.text }]}>{tone.name}</Text>
-            </View>
-            <View style={st.track}>
-              <Grid />
-              <View style={[st.baseline, { backgroundColor: tone.line }]} />
-              {own.map((m, i) =>
-                m.end !== undefined && m.end > m.start ? (
-                  <View
-                    key={i}
-                    style={[st.span, {
-                      left: pct(m.start),
-                      width: `${((Math.min(DAY, m.end) - Math.max(0, m.start)) / DAY) * 100}%`,
-                      backgroundColor: tone.hue,
-                    }]}
-                  />
+      <View style={st.matrix}>
+        {HOURS.map((h) => {
+          const hits = hourHits(marks, h);
+          const isNow = h === nowHour;
+          const isPast = h < nowHour;
+          return (
+            <View key={h} style={st.col}>
+              <View style={[st.nowCap, isNow && st.nowCapActive]} />
+              <View
+                style={[
+                  st.slot,
+                  isPast && st.slotPast,
+                  isNow && st.slotNow,
+                ]}
+              >
+                {hits.length > 0 ? (
+                  hits.map((k) => (
+                    <View
+                      key={k}
+                      style={[
+                        st.segment,
+                        { backgroundColor: moduleTone[k].hue },
+                      ]}
+                    />
+                  ))
                 ) : (
-                  <View key={i} style={[st.tick, { left: pct(m.start) }]}>
-                    <View style={[st.tickLine, { backgroundColor: tone.hue }]} />
-                    <View style={[st.tickDot, { backgroundColor: tone.hue, borderColor: tone.hue }]} />
-                  </View>
-                ),
-              )}
-              <View style={[st.now, { left: pct(now) }]}>
-                <View style={st.nowTip} />
+                  <View style={[st.emptyTick, isPast && st.emptyTickPast]} />
+                )}
               </View>
             </View>
-          </View>
-        );
-      })}
+          );
+        })}
+      </View>
+
       <View style={st.axis}>
-        <View style={st.label} />
-        <View style={st.axisTrack}>
-          {[0, 6, 12, 18, 24].map((h) => (
-            <Text
-              key={h}
-              style={[st.hour, { left: pct(h * 60) }, h === 24 && { transform: [{ translateX: -18 }] }, h > 0 && h < 24 && { transform: [{ translateX: -9 }] }]}
-            >
-              {String(h).padStart(2, "0")}
-            </Text>
+        {[0, 6, 12, 18, 23].map((h) => (
+          <Text key={h} style={st.hour}>
+            {String(h).padStart(2, "0")}:00
+          </Text>
+        ))}
+      </View>
+
+      <View style={st.legendRow}>
+        <View style={st.legendGroup}>
+          {ORDER.map((k) => (
+            <View key={k} style={st.legendItem}>
+              <View style={[st.legendSwatch, { backgroundColor: moduleTone[k].hue }]} />
+              <Text style={st.legendText}>{moduleTone[k].name}</Text>
+            </View>
           ))}
         </View>
+        <Text style={st.coverageText}>活跃时段 {activeHours}/24H</Text>
       </View>
     </View>
   );
 }
 
-function Grid() {
-  return (
-    <>
-      {HOURS.map((h) => (
-        <View
-          key={h}
-          style={[st.gridLine, { left: pct(h * 60), backgroundColor: h % 6 === 0 ? color.lineStrong : color.grid }]}
-        />
-      ))}
-    </>
-  );
-}
-
 const st = StyleSheet.create({
-  wrap: { gap: 8 },
-  channel: { flexDirection: "row", alignItems: "center", gap: space.sm },
-  label: { width: 44, flexDirection: "row", alignItems: "center", gap: 5 },
-  pen: { width: 6, height: 6, borderRadius: 3 },
-  labelText: { fontSize: 12, fontWeight: "700" },
-  track: {
-    flex: 1, height: 32, position: "relative", overflow: "hidden",
-    backgroundColor: color.sunken, borderRadius: 6,
+  wrap: { gap: space.xs },
+  matrix: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 3,
+    height: 60,
+    paddingTop: 2,
   },
-  gridLine: { position: "absolute", top: 0, bottom: 0, width: StyleSheet.hairlineWidth },
-  baseline: { position: "absolute", left: 0, right: 0, top: 15.5, height: 1 },
-  span: { position: "absolute", top: 10, height: 12, borderRadius: 6 },
-  tick: { position: "absolute", top: 4, bottom: 4, width: 10, marginLeft: -5, alignItems: "center", justifyContent: "center" },
-  tickLine: { position: "absolute", top: 0, bottom: 0, width: 2, opacity: 0.55 },
-  tickDot: { width: 9, height: 9, borderRadius: 5, borderWidth: 2 },
-  now: { position: "absolute", top: 0, bottom: 0, width: 2, marginLeft: -1, backgroundColor: color.accent },
-  nowTip: { position: "absolute", top: 0, left: -3, width: 8, height: 4, borderRadius: 2, backgroundColor: color.accent },
-  axis: { flexDirection: "row", gap: space.sm },
-  axisTrack: { flex: 1, height: 16, position: "relative" },
-  hour: { position: "absolute", top: 0, fontSize: 10, color: color.inkFaint, fontFamily: mono, ...type.numeric },
+  col: {
+    flex: 1,
+    alignItems: "center",
+    gap: 3,
+  },
+  nowCap: {
+    width: "100%",
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: "transparent",
+  },
+  nowCapActive: {
+    backgroundColor: color.ink,
+  },
+  slot: {
+    flex: 1,
+    width: "100%",
+    borderRadius: 3,
+    backgroundColor: color.grid,
+    overflow: "hidden",
+    justifyContent: "center",
+    gap: 1.5,
+  },
+  slotPast: {
+    backgroundColor: color.sunken,
+  },
+  slotNow: {
+    borderWidth: 1,
+    borderColor: color.ink,
+  },
+  segment: {
+    flex: 1,
+    width: "100%",
+  },
+  emptyTick: {
+    width: 2,
+    height: "100%",
+    alignSelf: "center",
+    backgroundColor: color.line,
+    opacity: 0.5,
+  },
+  emptyTickPast: {
+    backgroundColor: color.lineStrong,
+    opacity: 0.65,
+  },
+  axis: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingTop: 2,
+  },
+  hour: {
+    fontSize: 10,
+    color: color.inkFaint,
+    fontFamily: mono,
+    ...type.numeric,
+  },
+  legendRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingTop: space.xs,
+  },
+  legendGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+  },
+  legendItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  legendSwatch: {
+    width: 8,
+    height: 8,
+    borderRadius: 2,
+  },
+  legendText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: color.inkSoft,
+  },
+  coverageText: {
+    fontSize: 11,
+    color: color.inkFaint,
+    fontFamily: mono,
+    ...type.numeric,
+  },
 });

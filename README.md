@@ -55,6 +55,6 @@ npm run test:ui
 
 产品规格见 [docs/product-spec-v0.1.md](docs/product-spec-v0.1.md)，当前用户 AI 设置约定见 [docs/user-ai-settings.md](docs/user-ai-settings.md)，开发验证见 [docs/development.md](docs/development.md)。
 
-App 前端当前为 v0.7「多通道记录仪」（日间版）：浅色坐标纸底，今天页用三通道纸带（饮食、训练、睡眠）沿 24 小时时间轴展开。页面与表单在 `src/ui/`，设计 token 在 `src/ui/theme.ts`，纸带组件在 `src/ui/tape.tsx`。设计说明见 [v0.7 视觉方向](docs/redesign-vision-v0.7.md)。
+App 前端当前为 v0.8「瑞士体征协议与 24 格节律矩阵」：矿石白画布配纯白档案卡与碳黑主色，今天页通过 24 格垂直节律矩阵、三大营养素范围账本与训练/睡眠双栏卡呈现全天健康数据。页面与表单在 `src/ui/`，设计 token 在 `src/ui/theme.ts`，节律矩阵组件在 `src/ui/tape.tsx`。设计说明见 [v0.8 视觉方向](docs/redesign-vision-v0.8.md)。
 
 本地数据和导出备份可能包含敏感健康信息。不要把真实数据、Key 或备份提交到 Git。

@@ -61,12 +61,14 @@ export function Records({
   const filters: Array<[Filter, string]> = [["all", "全部"], ["meal", "饮食"], ["training", "训练"], ["sleep", "睡眠"]];
   return (
     <ScrollView contentContainerStyle={contentStyle} showsVerticalScrollIndicator={false}>
+      <Text style={type.caption}>ARCHIVE LEDGER</Text>
       <Text style={st.title}>记录</Text>
       <Text style={st.intro}>每条记录都可以打开、修改或删除。估算和 AI 结果与原始输入分开保存。</Text>
       <View style={st.filters} accessibilityRole="tablist">
         {filters.map(([key, label]) => {
           const on = filter === key;
           const hue = key === "all" ? color.pine : moduleTone[key].hue;
+          const activeBg = key === "all" ? color.sunken : moduleTone[key].tint;
           return (
             <Pressable
               key={key}
@@ -74,7 +76,7 @@ export function Records({
               accessibilityState={{ selected: on }}
               accessibilityLabel={`筛选${label}`}
               onPress={() => setFilter(key)}
-              style={[st.filter, on && { backgroundColor: color.raised, borderColor: key === "all" ? color.pine : moduleTone[key].hue }]}
+              style={[st.filter, on && { backgroundColor: activeBg, borderColor: hue, borderWidth: 1.5 }]}
             >
               {key !== "all" && <View style={[st.filterDot, { backgroundColor: hue }]} />}
               <Text style={[st.filterText, on && { color: color.ink }]}>{label}</Text>
@@ -161,7 +163,7 @@ const st = StyleSheet.create({
   groupTitle: { ...type.small, fontWeight: "700", color: color.inkSoft, marginBottom: space.sm },
   row: {
     flexDirection: "row", alignItems: "center", backgroundColor: color.surface, borderRadius: radius.block,
-    marginBottom: space.sm, paddingRight: 4, overflow: "hidden",
+    borderWidth: 1, borderColor: color.line, marginBottom: space.sm, paddingRight: 4, overflow: "hidden",
   },
   rowMain: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: space.md, minHeight: 64, paddingRight: space.sm },
   spine: { width: 4, alignSelf: "stretch" },
