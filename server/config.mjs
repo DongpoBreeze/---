@@ -41,7 +41,7 @@ export function normalizeConfig(input) {
     maxPhotoBytes: integer(input.maxPhotoBytes ?? 3 * 1024 * 1024, 'MAX_PHOTO_BYTES', 64, 16 * 1024 * 1024),
     maxPhotos: integer(input.maxPhotos ?? 2, 'MAX_PHOTOS', 0, 10),
     maxPayloadTextBytes: integer(input.maxPayloadTextBytes ?? 32 * 1024, 'MAX_PAYLOAD_TEXT_BYTES', 128, 256 * 1024),
-    maxOutputTokens: integer(input.maxOutputTokens ?? 1200, 'MODEL_MAX_OUTPUT_TOKENS', 32, 8192),
+    maxOutputTokens: integer(input.maxOutputTokens ?? 8192, 'MODEL_MAX_OUTPUT_TOKENS', 32, 8192),
     upstreamTimeoutMs: integer(input.upstreamTimeoutMs ?? 180_000, 'UPSTREAM_TIMEOUT_MS', 50, 180_000),
     bodyTimeoutMs: integer(input.bodyTimeoutMs ?? 10_000, 'BODY_TIMEOUT_MS', 50, 30_000),
     maxConcurrent: integer(input.maxConcurrent ?? 4, 'MAX_CONCURRENT_REQUESTS', 1, 1000),

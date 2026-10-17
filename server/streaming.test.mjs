@@ -6,7 +6,10 @@ import { normalizeConfig, parseConfig } from './config.mjs';
 
 const recognition = { foodName: '米饭与未知配料', components: [
   { foodId: 'rice_white_long_grain_cooked', label: '熟米饭', uncertainty: ['份量未知'], confidence: 0.8,
-    category: 'grain', candidates: [], evidence: [], region: null },
+    category: 'grain', candidates: [], evidence: [], region: null,
+    nutritionEstimate: { basisGrams: 100, method: 'typical_recipe', per100g: {
+      calories: { min: 120, max: 150 }, protein: { min: 2, max: 4 }, carbs: { min: 24, max: 32 }, fat: { min: 0, max: 1 },
+    }, recipeBasis: '按通常熟米饭配方估计。', assumptions: [], confidence: 0.8 } },
 ], unresolved: ['份量未知'], assumptions: [], advice: '请补充实际记录。', confidence: 0.8 };
 const completed = (content = recognition) => ({ status: 'completed', output: [
   { type: 'reasoning', summary: [] },

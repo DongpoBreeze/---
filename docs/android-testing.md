@@ -1,5 +1,14 @@
 # Android phone test build
 
+## Latest verified build (2026-10-18 00:27)
+
+- APK: `artifacts/health-compass-arm64-v8a-release-20261018-002719.apk`, 35,931,692 bytes.
+- SHA-256: `ef13b136768462233fc3cadfbc8088ed35803274a890030360850322eae98a52`.
+- Package: `com.healthcompass.app`, version `0.1.0`, minimum API 24, arm64-v8a only. APK Signature Scheme v2 verification passed.
+- The package scanner checked 1,511 entries. SecureStore, model discovery, AI per-100 g nutrition references and the ingredient catalog are present; developer tokens, provider keys, local gateway endpoints and compiled AI environment variables are absent.
+- Build log: `artifacts/android-release-20261018-002719.log`; verification JSON was produced by `artifacts/verify-android-build.mjs`.
+- No Android phone is connected in this environment, so installation, upgrade data retention, camera permissions and on-device analysis remain unverified.
+
 This project produces a standalone, signed arm64 APK for Android 7.0/API 24 and newer. The package name is `com.healthcompass.app`; the release test build uses the existing `android/app/debug.keystore` so an earlier test install can be upgraded without clearing app data. It is not a store-release signing key.
 
 Build from the ASCII junction so Windows native tools do not receive the Unicode workspace path:

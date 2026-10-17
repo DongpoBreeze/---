@@ -2,14 +2,14 @@ import React, { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
-import type { MealComponent, MealRecord, NutrientRange } from "../types";
+import type { MealRecord } from "../types";
 import { persistMedia } from "../storage";
 import { getAiSettingsVersion, isAiConfigured } from "../ai";
-import { mealPhotoAutofill, mealPhotoConfidenceLabel, mealPhotoEstimateText } from "../meal-photo-autofill";
+import { mealPhotoAutofill, mealPhotoEstimateText } from "../meal-photo-autofill";
 import { type FormSession, useFormDraft, useFormSession } from "./useFormDraft";
 import { Banner, Choice, DraftStatus, Field, Legend, MediaPreview, Note, Sheet, SmallButton, s as base } from "./components";
-import { MealAnalysisList } from "./meal-analysis";
-import { confirmAction, errorText, localDateTime, notify, parseDateTime, rangeLabel } from "./format";
+import { MealAnalysisList, MealNutritionBasis, MealNutritionReference } from "./meal-analysis";
+import { confirmAction, errorText, localDateTime, notify, parseDateTime } from "./format";
 import { color, radius, space, type } from "./theme";
 import type { DraftKey, MealDraft, PhotoAnalysisResult, SaveNutritionCorrection } from "./app-types";
 
@@ -44,11 +44,6 @@ const mealState = (initial?: MealRecord): MealState => ({
   fat: initial?.estimate ? String(initial.estimate.fat) : "",
 });
 
-function referenceRange(value: number | NutrientRange | null | undefined): NutrientRange | null {
-  if (typeof value === "number") return { min: value, max: value };
-  return value ?? null;
-}
-
 export function MealForm({
   initial,
   draftKey,
@@ -70,6 +65,8 @@ export function MealForm({
 }) {
   const draft = useFormDraft(draftKey, mealState(initial), session);
   const { form, setForm } = draft;
+  const latestAnalysis = initial?.analyses?.filter((version) => version.sourceVersion === (initial.revision ?? 1)).at(-1);
+  const hasDishCorrections = latestAnalysis?.analysis.components?.some((component) => component.nutritionReferenceStale);
   const formRef = useRef(form);
   formRef.current = form;
   const [error, setError] = useState("");
@@ -163,7 +160,19 @@ export function MealForm({
       }
     }
   };
+  const analyzeSavedMeal = () => {
+    if (!initial || !onAnalyze || !lifecycle.isIdle()) return;
+    if (JSON.stringify(formRef.current) !== JSON.stringify(mealState(initial))) {
+      setError("请先保存当前修改，再分析。");
+      return;
+    }
+    onAnalyze();
+  };
   const confirmPhotoAnalysis = () => {
+    if (initial && onAnalyze) {
+      analyzeSavedMeal();
+      return;
+    }
     if (!lifecycle.isIdle() || photoController.current || !formRef.current.imageUri) return;
     if (!isAiConfigured()) {
       void requestPhotoAnalysis();
@@ -173,7 +182,7 @@ export function MealForm({
     const settingsVersion = getAiSettingsVersion();
     confirmAction(
       "分析餐前照片？",
-      "本次照片和必要餐食信息将发送到你选择的 AI 服务，用于识别菜品。AI 不估算重量；营养参考由本地数据计算。服务可能收费，数据按供应商政策处理。",
+      "本次照片和必要餐食信息将发送到你选择的 AI 服务，用于识别菜品并估算每 100 g 可食用成品的营养范围。实际食用量由你填写。服务可能收费，数据按供应商政策处理。",
       "同意并分析",
       () => {
         if (generation === photoGeneration.current && settingsVersion === getAiSettingsVersion())
@@ -377,25 +386,16 @@ export function MealForm({
                   ? `识别到：${[...new Set(photoAnalysis.analysis.components.map((component) => component.label.trim()).filter(Boolean))].join("、")}`
                   : "尚未可靠识别出具体食材"}
               </Text>
-              <Text style={st.photoText}>{mealPhotoConfidenceLabel(photoAnalysis.analysis.confidence)} · 仅识别菜品，不估算照片重量</Text>
+              <Text style={st.photoText}>识别置信度：{photoAnalysis.analysis.confidence === undefined ? "未知" : `${Math.round(photoAnalysis.analysis.confidence * 100)}%`} · 实际食用量待填写</Text>
               <Text style={st.photoText}>{mealPhotoEstimateText(photoAnalysis.analysis)}</Text>
               {photoAnalysis.analysis.status === "approximate" && photoAnalysis.analysis.nutritionSource?.coverage === "incomplete" &&
                 <Text style={st.photoWarn}>仅含可计算成分，未匹配或份量未知的成分未计入。</Text>}
               <Text style={st.photoText}>{photoAnalysis.analysis.advice}</Text>
+              {photoAnalysis.analysis.components?.map((component, index) => <MealNutritionReference key={index} component={component} />)}
               <SmallButton icon={photoBasisOpen ? "chevron-up" : "information-circle-outline"}
                 label={photoBasisOpen ? "收起估算依据" : "查看估算依据"} onPress={() => setPhotoBasisOpen(!photoBasisOpen)} />
               {photoBasisOpen && <View style={st.photoBasis}>
-                {photoAnalysis.analysis.components?.map((component: MealComponent, index) => {
-                  const per100 = component.source?.provider === "usda-fdc" ? component.source.per100g : component.source?.per100gRange;
-                  const measure = component.householdMeasure ?? component.source?.householdMeasure;
-                  return <View key={index} style={st.photoReference}>
-                    <Text style={st.photoWarn}>{component.label} · {component.source?.provider === "local-category" ? "本地类别近似值" : component.source?.provider === "usda-fdc" ? "USDA 参考" : "营养参考未知"}</Text>
-                    {per100 && <Text style={st.photoWarn}>每 100 g：热量 {rangeLabel(referenceRange(per100.calories), " kcal")} · 蛋白质 {rangeLabel(referenceRange(per100.protein), " g")} · 碳水 {rangeLabel(referenceRange(per100.carbs), " g")} · 脂肪 {rangeLabel(referenceRange(per100.fat), " g")}</Text>}
-                    {measure && <Text style={st.photoWarn}>参考份量：{measure.label} ≈ {measure.grams} g</Text>}
-                    {component.candidates?.length ? <Text style={st.photoWarn}>候选：{component.candidates.map((candidate) => candidate.label).join("、")}</Text> : null}
-                    {(component.uncertainty ?? []).map((issue, issueIndex) => <Text key={issueIndex} style={st.photoWarn}>待确认：{issue}</Text>)}
-                  </View>;
-                })}
+                {photoAnalysis.analysis.components?.map((component, index) => <MealNutritionBasis key={index} component={component} />)}
                 {photoAnalysis.analysis.unresolved?.map((issue, index) => <Text key={`unresolved-${index}`} style={st.photoWarn}>待确认：{issue}</Text>)}
                 {photoAnalysis.analysis.assumptions.map((line, index) => <Text key={`assumption-${index}`} style={st.photoWarn}>估算假设：{line}</Text>)}
               </View>}
@@ -479,15 +479,8 @@ export function MealForm({
         {initial && onAnalyze && (
           <SmallButton
             icon="sparkles-outline"
-            label="分析已保存的这餐"
-            onPress={() => {
-              if (!lifecycle.isIdle()) return;
-              if (JSON.stringify(form) !== JSON.stringify(mealState(initial))) {
-                setError("请先保存当前修改，再分析。");
-                return;
-              }
-              onAnalyze();
-            }}
+            label={hasDishCorrections ? "重新分析已修正菜品" : "分析已保存的这餐"}
+            onPress={analyzeSavedMeal}
           />
         )}
         {!initial && <Note icon="lock-closed-outline" text="无法估算时保留“未知”，不会补写数值。AI 结果与原始输入分开保存。" tone={color.inkSoft} tint={color.sunken} />}

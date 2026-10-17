@@ -103,21 +103,21 @@ Responses 使用 `instructions`、`input_text/input_image`、`reasoning.effort`�
 
 `scripts/test-real-food-image.mjs --app-copy --stream --live --timeout-ms=180000` 使用指定真实照片的 App Web 压缩副本进行一次诊断。`--live` 是显式调用开关，`--stream` 是受控流式对照，延长等待只影响诊断进程；本机 App 的默认超时和 Codex 全局配置不会改变。报告只保存图片大小、哈希、上游状态/时间与最终分析，不记录图片 base64 或凭据。
 
-成功响应的 `analysis` 严格按类型区分：
+成功响应的 `analysis` 严格按类型区分。新餐食协议使用 `ai-per100g-v3`，以下简略示例省略组件与来源明细：
 
 饮食：
 
 ```json
 {
   "analysis": {
-    "status": "estimated",
+    "status": "unknown",
     "foodName": "熟白米饭",
-    "calories": { "min": 130, "max": 130 },
-    "protein": { "min": 2.6, "max": 2.7 },
-    "carbs": { "min": 28.1, "max": 28.2 },
-    "fat": { "min": 0.2, "max": 0.3 },
-    "assumptions": ["用户确认 100 g，全部吃完，无其他食物或油酱"],
-    "advice": "保留实际份量记录。",
+    "calories": null,
+    "protein": null,
+    "carbs": null,
+    "fat": null,
+    "assumptions": ["每 100 g 参考按 AI 典型配方估算；尚未填写实际食用量"],
+    "advice": "填写实际食用克数后计算摄入。",
     "unresolved": []
   },
   "model": "vision-model",
@@ -125,9 +125,9 @@ Responses 使用 `instructions`、`input_text/input_image`、`reasoning.effort`�
 }
 ```
 
-营养计算使用已打包的 139 条 USDA SR Legacy 食材目录，包括原有 29 条和 110 条常见食材扩展。模型只返回受控食材 ID、候选标签、克数/摄入比例区间、疑问与建议；四项营养由 `shared/nutrition.mjs` 按每 100 g 数据计算，并附带数据库来源。不能匹配的成分会保留但不计入营养；部分范围标记为 approximate，完全未知时为 null。上例仅展示主要结果字段，实际响应还包含食材明细和完整来源。
+模型在每道成品菜的 `nutritionEstimate` 中按典型配方或类别直接给出每 100 g 四项营养范围、配方依据、假设和营养置信度。程序验证后保存为组件 `source.provider: model` 的标准化参考，实际模型、强度和生成时间由请求配置注入。139 条 USDA SR Legacy 目录保留用于历史记录、手动匹配和可靠家用单位；新 AI 参考不因数据库匹配而被改写。模型仍不能输出照片重量、用户数量、整餐总量或数据库来源。
 
-无法可靠估算时使用 `status: "unknown"`，四个营养字段必须为 `null`，保留候选食材、未知重量/摄入比例及 `unresolved`；未知值不能写成 `0`。只有所有食材、重量、摄入比例、四项参考值和油酱覆盖均完整，且没有未解决疑问时，才返回 `estimated` 和四项范围。不把部分食材的小计显示为整餐摄入。数据契约见 [营养集成说明](../docs/nutrition-implementation.md)。
+未填写用户数量时使用 `status: "unknown"`、四个摄入总量为 `null`，组件仍可有完整每 100 g 参考。`coverage.referenceCount` 与 `counted` 分别表示有效参考和已计入菜品数。填写数量后按保存的参考换算，AI 新结果保持 `approximate`；部分填写展示已填小计与未计入项，全部填写仅表示覆盖完整。未知或过期参考不计入，未知不能写成零。数据契约与验收见 [营养集成说明](../docs/nutrition-implementation.md)。
 
 综合总结：
 

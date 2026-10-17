@@ -6,6 +6,9 @@ import { parseConfig, normalizeConfig } from './config.mjs';
 import { modelRequest } from './protocol.mjs';
 
 const unknown = { foodName: '无法识别', components: [], unresolved: ['非食物测试图'], assumptions: ['非食物测试图'], advice: '补充可靠记录。' };
+const modelNutritionEstimate = { basisGrams: 100, method: 'typical_recipe', per100g: {
+  calories: { min: 120, max: 150 }, protein: { min: 2, max: 4 }, carbs: { min: 24, max: 32 }, fat: { min: 0, max: 1 },
+}, recipeBasis: '按通常熟米饭配方与含水量估计。', assumptions: [], confidence: 0.8 };
 const output = (text) => ({ status: 'completed', output: [
   { type: 'reasoning', summary: [] },
   { type: 'message', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text }] },
@@ -91,7 +94,7 @@ test('Responses image input, max reasoning and structured output complete throug
     const sent = calls[0].body;
     assert.equal(sent.model, 'gpt-6.1-sol');
     assert.deepEqual(sent.reasoning, { effort: 'max' });
-    assert.equal(sent.max_output_tokens, 1200);
+    assert.equal(sent.max_output_tokens, 8192);
     assert.equal(sent.store, false);
     assert.equal(sent.stream, false);
     assert.deepEqual(sent.text, { format: { type: 'json_object' } });
@@ -109,7 +112,7 @@ test('Responses image input, max reasoning and structured output complete throug
 test('gateway reviews uncertain recognition sequentially, preserves original photo roles and caps calls at three', async () => {
   const cropRegion = { x: 0.2, y: 0.25, width: 0.25, height: 0.3 };
   const recognition = (label, foodId, confidence) => ({ foodName: '测试餐食', components: [{
-    foodId, label, uncertainty: [], confidence,
+    foodId, label, uncertainty: [], confidence, nutritionEstimate: modelNutritionEstimate,
     category: null, candidates: [], evidence: [], region: cropRegion,
   }], unresolved: [], assumptions: [], advice: '请按实际记录补充。', confidence });
   const responses = [
@@ -151,7 +154,7 @@ test('gateway reviews uncertain recognition sequentially, preserves original pho
 test('failed review returns the validated first analysis without retrying', async () => {
   const first = { foodName: '米饭', components: [{ foodId: 'rice_white_long_grain_cooked', label: '米饭',
     uncertainty: ['身份待确认'], confidence: 0.4, category: 'grain', candidates: [], evidence: [],
-    region: { x: 0.2, y: 0.2, width: 0.3, height: 0.3 } }],
+    region: { x: 0.2, y: 0.2, width: 0.3, height: 0.3 }, nutritionEstimate: modelNutritionEstimate }],
     unresolved: ['身份待确认'], assumptions: [], advice: '请补充记录。', confidence: 0.4 };
   const attempts = [];
   await fixture(async ({ api, calls, setRaw }) => {
@@ -179,7 +182,7 @@ test('each review stage has its own upstream timeout window', async () => {
     category: 'grain', candidates: confidence < 0.5 ? [
       { foodId: 'rice_white_long_grain_cooked', label: '米饭', confidence: 0.4 }, { foodId: null, label: '粥', confidence: 0.3 },
     ] : [{ foodId: 'rice_white_long_grain_cooked', label: '米饭', confidence }],
-    evidence: [], region,
+    evidence: [], region, nutritionEstimate: modelNutritionEstimate,
   }], unresolved: confidence < 0.5 ? ['局部复核'] : [], assumptions: [], advice: '补充记录。', confidence });
   const crop = 'data:image/jpeg;base64,/9j/AA==';
   await fixture(async ({ api, calls }) => {
@@ -202,7 +205,7 @@ test('low confidence remaining after targeted review does not trigger a final me
   const cropRegion = { x: 0.2, y: 0.25, width: 0.25, height: 0.3 };
   const recognition = (confidence) => ({ foodName: '测试餐食', components: [{
     foodId: 'rice_white_long_grain_cooked', label: '米饭',
-    uncertainty: ['份量待确认'], confidence, category: 'grain', candidates: [], evidence: [], region: cropRegion,
+    uncertainty: ['份量待确认'], confidence, category: 'grain', candidates: [], evidence: [], region: cropRegion, nutritionEstimate: modelNutritionEstimate,
   }], unresolved: ['份量不确定'], assumptions: [], advice: '请按实际记录补充。', confidence });
   const original = 'data:image/png;base64,iVBORw0KGgo=';
   const crop = 'data:image/jpeg;base64,/9j/AA==';
@@ -225,7 +228,7 @@ test('low confidence remaining after targeted review does not trigger a final me
 test('review is skipped when no crop generator is configured', async () => {
   const region = { x: 0.2, y: 0.25, width: 0.25, height: 0.3 };
   const recognition = { foodName: '测试餐食', components: [{ foodId: null, label: '不确定食材', uncertainty: ['身份待确认'], confidence: 0.4,
-    category: null, candidates: [], evidence: [], region }], unresolved: ['身份不确定'],
+    category: null, candidates: [], evidence: [], region, nutritionEstimate: null }], unresolved: ['身份不确定'],
     assumptions: [], advice: '请按实际记录补充。', confidence: 0.4 };
   await fixture(async ({ api, calls, setRaw }) => {
     setRaw(output(JSON.stringify(recognition)));
@@ -249,6 +252,7 @@ test('request reservation runs before fetch and attempt results include format a
     assert.equal(attempts[0].providerCompleted, true);
     assert.equal(attempts[0].resultAccepted, false);
     assert.equal(attempts[0].outcome, 'format_error');
+    assert.equal(attempts[0].resultVersion, 3);
 
     order.length = 0;
     setRaw({ error: { message: 'rate limited' } }, 429);

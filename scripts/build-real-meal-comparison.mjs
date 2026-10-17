@@ -18,7 +18,9 @@ function isObject(value) {
 }
 
 function isAcceptedStage(stage) {
-  return isObject(stage) && (stage.accepted === true || stage.resultAccepted === true || stage.status === 'accepted');
+  return isObject(stage) && stage.accepted !== false && stage.resultAccepted !== false && stage.providerCompleted !== false
+    && stage.completed !== false && stage.stageSucceeded !== false
+    && (stage.accepted === true || stage.resultAccepted === true || stage.status === 'accepted');
 }
 
 function stageAnalysis(stage) {
@@ -28,18 +30,52 @@ function stageAnalysis(stage) {
   return null;
 }
 
+function sameValue(left, right) {
+  if (left === right) return true;
+  if (typeof left !== typeof right || left === null || right === null) return false;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return Array.isArray(left) && Array.isArray(right) && left.length === right.length
+      && left.every((value, index) => sameValue(value, right[index]));
+  }
+  if (typeof left !== 'object') return false;
+  const leftKeys = Object.keys(left).sort();
+  const rightKeys = Object.keys(right).sort();
+  return leftKeys.length === rightKeys.length && leftKeys.every((key, index) => key === rightKeys[index]
+    && sameValue(left[key], right[key]));
+}
+
 function acceptedCurrent(report) {
   const stageResults = Array.isArray(report.stageResults) ? report.stageResults : [];
-  const accepted = stageResults.filter(isAcceptedStage).map(stageAnalysis).filter(Boolean);
-  if (accepted.length) return accepted.at(-1);
+  const acceptedStages = stageResults.filter(isAcceptedStage);
+  if (report.resultAccepted === false || report.finalAccepted === false || report.validation?.accepted === false) return null;
 
-  const attempts = Array.isArray(report.attempts) ? report.attempts : [];
+  // A successful call can return an earlier accepted stage when a later review
+  // or final merge fails. Preserve all stage history, but compare the returned
+  // analysis using the explicit stage identity captured by the single-meal run.
+  const returnedStage = isObject(report.returnedStageResult) && isAcceptedStage(report.returnedStageResult)
+    ? report.returnedStageResult : null;
+  const returnedAttemptId = report.returnedAttemptId ?? report.validation?.returnedAttemptId;
+  const returnedStageName = report.returnedStage ?? report.validation?.returnedStage;
+  const returnedAnalysis = report.returnedAnalysis ?? report.result?.analysis;
+  const selectedStage = returnedStage
+    ?? acceptedStages.find((stage) => returnedAttemptId !== undefined && stage.attemptId === returnedAttemptId)
+    ?? acceptedStages.find((stage) => typeof returnedStageName === 'string' && stage.stage === returnedStageName)
+    ?? acceptedStages.find((stage) => stageAnalysis(stage) === returnedAnalysis)
+    ?? acceptedStages.findLast((stage) => sameValue(stageAnalysis(stage), returnedAnalysis));
+  if (selectedStage) return stageAnalysis(selectedStage);
+
+  const accepted = acceptedStages.map(stageAnalysis).filter(Boolean);
+  if (accepted.length && returnedAnalysis === undefined) return accepted.at(-1);
+
+  const attempts = Array.isArray(report.attempts) ? report.attempts : Array.isArray(report.requestAttempts) ? report.requestAttempts : [];
   const acceptedAttempt = attempts.filter(isAcceptedStage).at(-1);
   if (acceptedAttempt) {
     if (isObject(acceptedAttempt.analysis)) return acceptedAttempt.analysis;
     if (isObject(acceptedAttempt.result?.analysis)) return acceptedAttempt.result.analysis;
     if (isObject(acceptedAttempt.result)) return acceptedAttempt.result;
   }
+
+  if ((stageResults.length || attempts.length) && !stageResults.some(isAcceptedStage) && !attempts.some(isAcceptedStage)) return null;
 
   if (report.resultAccepted === true || report.finalAccepted === true || report.status === 'accepted') {
     if (isObject(report.final)) return report.final;
@@ -89,7 +125,9 @@ function countAttempts(comparisons) {
   for (const attempt of attempts) statusCounts[attempt.status] = (statusCounts[attempt.status] ?? 0) + 1;
   return {
     totalRequests: attempts.length,
+    completedRequests: attempts.filter((attempt) => attempt.providerCompleted === true).length,
     acceptedRequests: attempts.filter((attempt) => attempt.resultAccepted).length,
+    successfulStages: attempts.filter((attempt) => attempt.stageSucceeded).length,
     failedRequests: attempts.filter((attempt) => !attempt.resultAccepted).length,
     statusCounts,
   };
@@ -100,7 +138,7 @@ async function ensureAbsent(path) {
   catch (error) { if (error.code !== 'ENOENT') throw error; }
 }
 
-/** Build a privacy-safe comparison from one isolated batch and its accepted local baseline. */
+/** Compare accepted snapshots without confusing per-100g references with meal intake. */
 export async function buildRealMealComparison({
   batchDir,
   baselinePath = DEFAULT_BASELINE,
@@ -120,7 +158,7 @@ export async function buildRealMealComparison({
     mealId: report.mealId,
     previous: baselineByMeal.get(report.mealId) ?? null,
     current: acceptedCurrent(report),
-    attempts: Array.isArray(report.attempts) ? report.attempts : [],
+    attempts: Array.isArray(report.attempts) ? report.attempts : Array.isArray(report.requestAttempts) ? report.requestAttempts : [],
     batchStatus: typeof report.status === 'string' ? report.status : null,
     stageRejections: stageRejections(report),
     batchError: isObject(report.error) ? report.error : null,
@@ -129,18 +167,32 @@ export async function buildRealMealComparison({
   const ledgerTotal = Number.isSafeInteger(summary.ledger?.totals?.totalRequests)
     ? summary.ledger.totals.totalRequests : null;
   const runId = typeof summary.runId === 'string' && summary.runId ? summary.runId : basename(resolvedBatchDir);
+  const nutritionMethods = [...new Set(comparisons.flatMap((row) => [row.previous?.nutritionSource?.method, row.current?.nutritionSource?.method]).filter(Boolean))];
+  const currentAiReferences = comparisons.filter((row) => row.current?.nutritionSource?.method === 'ai-per100g-v3');
+  const uniformMetadata = (values) => {
+    const present = [...new Set(values.filter((value) => value !== null && value !== undefined))];
+    return present.length === 1 ? present[0] : null;
+  };
   const comparison = {
-    schemaVersion: 'real-meal-comparison.v1',
+    schemaVersion: 'real-meal-comparison.v2',
     runId,
     testedAt: new Date().toISOString(),
     model,
     reasoningEffort,
-    timeoutMs: 120_000,
-    stream: true,
-    imageDetail: 'low',
+    timeoutMs: uniformMetadata([summary.timeoutMs, summary.upstreamTimeoutMs, ...reports.flatMap((report) => [report.timeoutMs, report.upstreamTimeoutMs])]),
+    stream: uniformMetadata([summary.stream, ...reports.map((report) => report.stream)]),
+    imageDetail: uniformMetadata([summary.imageDetail, ...reports.map((report) => report.diagnosticOverrides?.imageDetail ?? report.imageDetail)]),
     automaticRetries: 0,
-    scope: 'photo_serving',
+    scope: nutritionMethods.includes('ai-per100g-v3') ? 'per100g_reference_and_user_quantity'
+      : nutritionMethods.includes('user-quantity-v2') ? 'user_quantity' : nutritionMethods.includes('ingredient-weight-v1') ? 'photo_serving' : 'unknown',
+    nutritionMethods,
     groundTruthAvailable: false,
+    nutritionSummary: {
+      aiReferenceMeals: currentAiReferences.length,
+      usefulReferenceMeals: currentAiReferences.filter((row) => row.current.hasUsefulNutritionReference && row.current.referenceCoverageConsistent).length,
+      referenceOnlyMeals: currentAiReferences.filter((row) => row.current.hasUsefulNutritionReference && row.current.coverage?.counted === 0).length,
+      intakeCompleteMeals: currentAiReferences.filter((row) => row.current.intakeComplete).length,
+    },
     requestSummary: {
       ...requestSummary,
       ledgerTotalRequests: ledgerTotal,
@@ -159,7 +211,7 @@ export async function buildRealMealComparison({
       cumulativeRequests: ledgerTotal,
       remainingRequests: ledgerTotal === null ? null : Math.max(0, LIMITS.totalRequests - ledgerTotal),
     },
-  }) + '\n口径说明：单张图片按照片中的整份餐食估算。营养数值只来自本地食材目录与份量计算；缺乏可靠食材或重量依据时显示“未知”。这些照片没有称重营养真值，前后变化不能解释为准确率或营养误差。\n';
+  }) + '\n口径说明：ai-per100g-v3 的每 100 g 参考由 AI 按典型配方或品类范围生成；实际摄入仅按用户填写数量在本地换算，未填数量时摄入保持未知。历史结果保留各自方法与来源。照片没有称重营养真值，前后变化不能解释为准确率或营养误差。\n';
 
   await mkdir(resolvedOutputDir, { recursive: true });
   const jsonPath = resolve(resolvedOutputDir, 'comparison.json');

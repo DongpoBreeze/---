@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { localDate, mealCalories, parseSleepTimes, recordLocalDate, refreshSummaries, removeRecord, sleepStats, summaryInputSnapshot, summaryMarkdown, trainingAdvice } from '../src/domain';
 import { emptyData, MealRecord, TrainingRecord } from '../src/types';
+import { calculateMealNutrition } from '../shared/nutrition.mjs';
 
 test('sleep crosses midnight and preserves unknown waking duration', () => {
   const times = parseSleepTimes('2026-10-10', '23:30', '07:00');
@@ -61,6 +62,33 @@ test('daily summary counts entered-dish subtotals and names excluded dishes', ()
   assert.match(summary, /已填写菜品小计 130～130 kcal/);
   assert.match(summary, /数据不完整/);
   assert.match(summary, /未计入：烤鸡肉/);
+});
+
+test('v3 daily summary counts only entered quantities and discloses unknown references', () => {
+  const now = '2026-10-17T04:00:00.000Z';
+  const estimate = { basisGrams: 100 as const, method: 'typical_recipe' as const, per100g: {
+    calories: { min: 200, max: 240 }, protein: { min: 10, max: 20 }, carbs: { min: 10, max: 20 }, fat: { min: 10, max: 20 },
+  }, recipeBasis: '按典型成品菜配方。', assumptions: [], confidence: 0.8 };
+  const dish = { foodId: null, label: '鸡肉主菜', uncertainty: [], nutritionEstimate: estimate };
+  const recognition = { foodName: '鸡肉和配菜', components: [dish], unresolved: [], assumptions: [], advice: '填写实际数量。' };
+  const options = { mode: 'ai-per100g-v3' as const, provenance: { model: 'test/model', createdAt: now } };
+  const reference = calculateMealNutrition(recognition, undefined, options);
+  const partial = calculateMealNutrition({ ...recognition, components: [{ ...dish, userQuantity: { amount: 250, unit: 'g' } },
+    { foodId: null, label: '未知配菜', uncertainty: ['没有可用配方。'], nutritionEstimate: null, userQuantity: { amount: 80, unit: 'g' } },
+  ] }, undefined, options);
+  const record = (id: string, analysis: typeof reference): MealRecord => ({ id, type: 'meal', createdAt: now, occurredAt: now, timezone: 'UTC',
+    mealType: '午餐', foodName: analysis.foodName, portion: '', note: '', source: 'photo', estimateStatus: 'unknown',
+    analyses: [{ id: `${id}-analysis`, model: 'test/model', createdAt: now, sourceVersion: 1, analysis }] });
+  const referenceMeal = record('reference-only', reference);
+  const partialMeal = record('partial-ai', partial);
+  assert.equal(mealCalories(referenceMeal), null);
+  assert.deepEqual(mealCalories(partialMeal), { min: 500, max: 600 });
+  const summary = summaryMarkdown({ ...emptyData(), meals: [referenceMeal, partialMeal] }, '2026-10-17');
+  assert.match(summary, /已填写菜品小计 500～600 kcal/);
+  assert.match(summary, /1 餐没有可汇总数量/);
+  assert.match(summary, /未计入：未知配菜/);
+  assert.match(summary, /有效营养参考/);
+  assert.doesNotMatch(summary, /700～840 kcal/);
 });
 
 test('record dates stay in their recorded timezone and summaries retain input snapshots', () => {

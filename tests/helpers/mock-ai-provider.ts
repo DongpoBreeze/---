@@ -4,6 +4,28 @@ export const MOCK_AI_URL = 'https://provider.example/v1';
 export const MOCK_AI_KEY = 'mock-key';
 export const MOCK_AI_MODEL = 'mock-model';
 
+/** Explicit v3 model output. Live provider fixtures must supply this field or null. */
+export function mockNutritionEstimate(overrides: {
+  method?: 'typical_recipe' | 'category';
+  per100g?: { calories: { min: number; max: number }; protein: { min: number; max: number }; carbs: { min: number; max: number }; fat: { min: number; max: number } };
+  recipeBasis?: string;
+  assumptions?: string[];
+  confidence?: number;
+} = {}) {
+  return {
+    basisGrams: 100,
+    method: 'typical_recipe' as 'typical_recipe' | 'category',
+    per100g: {
+      calories: { min: 130, max: 130 }, protein: { min: 2.7, max: 2.7 },
+      carbs: { min: 28.2, max: 28.2 }, fat: { min: 0.3, max: 0.3 },
+    },
+    recipeBasis: '按熟白米饭的典型配方估算每 100 g 可食用成品。',
+    assumptions: ['按煮熟后的可食用部分，不含额外油和酱料。'],
+    confidence: 0.82,
+    ...overrides,
+  };
+}
+
 export type ProviderRequest = {
   url: string;
   method: string;

@@ -37,7 +37,15 @@ export async function analyzeMeal(meal: MealRecord, profile: Profile, signal?: A
       } catch (error) { throw error; }
     }
     request.assertCurrent();
-    const result = responseSchema.parse(await requestProvider(request.settings, 'meal', { foodName: meal.foodName, mealType: meal.mealType, portion: meal.portion, remaining: meal.remaining ?? '未知', note: meal.note, profile, photos, photoRoles }, request.signal, {
+    const latest = meal.analyses?.filter((version) => version.sourceVersion === (meal.revision ?? 1)).at(-1);
+    const dishCorrections = (latest?.analysis.components ?? [])
+      .filter((component) => component.nutritionReferenceStale)
+      .map((component) => ({
+        label: component.label,
+        ...(component.cookingMethod ? { cookingMethod: component.cookingMethod } : {}),
+        ...(component.region ? { region: component.region } : {}),
+      }));
+    const result = responseSchema.parse(await requestProvider(request.settings, 'meal', { foodName: meal.foodName, mealType: meal.mealType, portion: meal.portion, remaining: meal.remaining ?? '未知', note: meal.note, profile, photos, photoRoles, dishCorrections }, request.signal, {
       createCrops: async ({ componentIndices, regions, signal: cropSignal }) => {
         request.assertCurrent();
         if (cropSignal.aborted || !regions.length || !sourcePhotos.length) return undefined;

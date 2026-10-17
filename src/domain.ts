@@ -71,20 +71,22 @@ export function summaryMarkdown(data: AppData, date = localDate()): string {
   const sleep = data.sleeps.filter((r) => recordLocalDate(r) === date);
   const known = meals.map(mealCalories).filter((v) => v !== null);
   const partial = meals.filter((meal) => {
-    const analysis = meal.analyses?.at(-1)?.analysis;
-    return analysis?.nutritionSource?.method === 'user-quantity-v2'
-      && ((analysis.coverage?.missingQuantityLabels?.length ?? 0) > 0 || (analysis.coverage?.unknownNutritionLabels?.length ?? 0) > 0);
+    const version = meal.analyses?.at(-1);
+    const analysis = version?.sourceVersion === (meal.revision ?? 1) ? version.analysis : undefined;
+    return ['user-quantity-v2', 'ai-per100g-v3'].includes(analysis?.nutritionSource?.method ?? '')
+      && ((analysis?.coverage?.missingQuantityLabels?.length ?? 0) > 0 || (analysis?.coverage?.unknownNutritionLabels?.length ?? 0) > 0);
   });
   const min = known.reduce((sum, r) => sum + r.min, 0);
   const max = known.reduce((sum, r) => sum + r.max, 0);
   const feedback = { yes: '有', no: '无', unknown: '未填写' };
   const lines = [
     `# ${date} 健康摘要`, '', '## 饮食',
-    meals.length ? `${meals.length} 餐，${known.length ? `已填写菜品小计 ${Math.round(min)}～${Math.round(max)} kcal` : '摄入未知'}；${meals.length - known.length} 餐没有可汇总数量。${partial.length ? ` ${partial.length} 餐数据不完整，未计入菜品数量尚未填写。` : ''}` : '未记录',
+    meals.length ? `${meals.length} 餐，${known.length ? `已填写菜品小计 ${Math.floor(min)}～${Math.ceil(max)} kcal` : '摄入未知'}；${meals.length - known.length} 餐没有可汇总数量。${partial.length ? ` ${partial.length} 餐数据不完整，有菜品缺少实际食用数量或有效营养参考。` : ''}` : '未记录',
     ...meals.map((r) => {
-      const analysis = r.analyses?.at(-1)?.analysis;
-      const missing = analysis?.nutritionSource?.method === 'user-quantity-v2'
-        ? [...new Set([...(analysis.coverage?.missingQuantityLabels ?? []), ...(analysis.coverage?.unknownNutritionLabels ?? [])])] : [];
+      const version = r.analyses?.at(-1);
+      const analysis = version?.sourceVersion === (r.revision ?? 1) ? version.analysis : undefined;
+      const missing = ['user-quantity-v2', 'ai-per100g-v3'].includes(analysis?.nutritionSource?.method ?? '')
+        ? [...new Set([...(analysis?.coverage?.missingQuantityLabels ?? []), ...(analysis?.coverage?.unknownNutritionLabels ?? [])])] : [];
       return `- ${r.mealType}：${r.foodName} ${r.portion}；${missing.length ? `未计入：${missing.join('、')}` : '数量记录完整或无已识别菜品'}；剩余：${r.remaining || '未知'}${r.note ? `；备注：${r.note}` : ''}`;
     }),
     '', '## 训练',

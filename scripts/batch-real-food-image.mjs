@@ -167,6 +167,11 @@ export async function runLiveBatch(options = {}) {
         stageResults,
         stageRejections: Array.isArray(liveReport?.stageRejections) ? liveReport.stageRejections : [],
         final: liveReport?.result?.analysis ?? acceptedStage?.analysis ?? null,
+        returnedAnalysis: liveReport?.returnedAnalysis ?? liveReport?.result?.analysis ?? null,
+        returnedStage: liveReport?.validation?.returnedStage ?? liveReport?.result?.returnedStage ?? null,
+        returnedAttemptId: liveReport?.validation?.returnedAttemptId ?? liveReport?.result?.returnedAttemptId ?? null,
+        returnedStageResult: liveReport?.returnedStageResult ?? null,
+        validation: liveReport?.validation ?? null,
         upstreamError: liveReport?.upstreamError ?? null,
         error: liveReport?.result?.errorCode ? { kind: outcomeKind({ code: liveReport.result.errorCode, message: liveReport.result.errorCode }), code: liveReport.result.errorCode } : undefined,
       };

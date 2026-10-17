@@ -55,7 +55,8 @@ test('local correction computes known ingredients and keeps incomplete intake un
   const complete = await calculateMealNutrition(base);
   assert.equal(complete.status, 'estimated');
   assert.deepEqual(complete.calories, { min: 130, max: 130 });
-  assert.equal(complete.components?.[0].source?.fdcId, rice.fdcId);
+  const source = complete.components?.[0].source;
+  assert.equal(source?.provider === 'usda-fdc' ? source.fdcId : undefined, rice.fdcId);
   const incomplete = await calculateMealNutrition({ ...base, unresolved: ['酱料未核实'] });
   assert.equal(incomplete.status, 'unknown');
   for (const key of ['calories', 'protein', 'carbs', 'fat'] as const) assert.equal(incomplete[key], null);
@@ -76,7 +77,8 @@ test('local category ranges produce approximate nutrients and preserve component
   assert.deepEqual(result.protein, { min: 1, max: 3.6 });
   assert.deepEqual(result.coverage, { matched: 1, total: 1, unknownLabels: [] });
   assert.equal(result.nutritionSource?.provider, 'local-category');
-  assert.equal(result.components?.[0].source?.categoryId, 'grain');
+  const source = result.components?.[0].source;
+  assert.equal(source?.provider === 'local-category' ? source.categoryId : undefined, 'grain');
   assert.deepEqual(result.components?.[0].evidence, [{ kind: 'photo', text: '盘中可见米饭', confidence: 0.9 }]);
 });
 

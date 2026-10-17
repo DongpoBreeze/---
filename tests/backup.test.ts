@@ -20,6 +20,8 @@ import {
 import { DATA_KEY, LocalRepository, parseLocalSnapshot } from '../src/local-store';
 import { mealAnalysisSchema } from '../src/nutrition-schema';
 import { emptyData, type AppData, type MealRecord } from '../src/types';
+import { calculateMealNutrition as calculateShared } from '../shared/nutrition.mjs';
+import { calculateMealNutrition, nutritionDataset } from '../src/nutrition';
 
 const now = '2026-10-10T03:00:00.000Z';
 const imageA = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4, 5]);
@@ -131,6 +133,49 @@ test('legacy meal analyses gain stable defaults while retaining recorded values'
     estimateScope: 'consumed_intake',
     coverage: { matched: 0, total: 0, unknownLabels: [] },
   });
+});
+
+test('AI source recipe, model provenance, quantities and stale markers survive a complete backup roundtrip', async () => {
+  const reference = calculateShared({ foodName: '家常烩菜', components: [{ foodId: null, label: '家常烩菜', uncertainty: [],
+    nutritionEstimate: { basisGrams: 100, method: 'typical_recipe', per100g: {
+      calories: { min: 120, max: 180 }, protein: { min: 8, max: 12 }, carbs: { min: 10, max: 18 }, fat: { min: 5, max: 10 },
+    }, recipeBasis: '按肉、蔬菜与酱汁的通常成品配方估计，油和酱已包含。', assumptions: ['油量可能较多。'], confidence: 0.65 },
+  }], unresolved: [], assumptions: [], advice: '按实际食用量填写。' }, nutritionDataset, {
+    mode: 'ai-per100g-v3', provenance: { model: 'configured/vision-model', reasoningEffort: 'max', createdAt: now },
+  });
+  const counted = await calculateMealNutrition({ ...reference, components: [{ ...reference.components![0], userQuantity: { amount: 250, unit: 'g' } }] }, undefined, 'ai-per100g-v3');
+  const stale = await calculateMealNutrition({ ...counted, components: [{ ...counted.components![0], label: '油炸烩菜', cookingMethod: '油炸', nutritionReferenceStale: true }] }, undefined, 'ai-per100g-v3');
+  const data = fixture();
+  data.meals[0].analyses!.push(
+    { id: 'ai-reference', model: 'configured/vision-model', sourceVersion: 2, createdAt: now, stageCount: 1, analysis: reference },
+    { id: 'ai-quantity', model: 'local/ai-per100g-v3', sourceVersion: 2, createdAt: now, analysis: counted },
+    { id: 'ai-stale', model: 'local/ai-per100g-v3', sourceVersion: 2, createdAt: now, analysis: stale },
+  );
+  const bytes = await createBackupArchive(data, media, now);
+  const restored = await parseBackupArchive(bytes);
+  assert.deepEqual(restored.data.meals[0].analyses!.slice(1), data.meals[0].analyses!.slice(1));
+  const analysis = restored.data.meals[0].analyses!.at(-1)!.analysis;
+  assert.equal(analysis.components![0].nutritionReferenceStale, true);
+  assert.deepEqual(analysis.components![0].userQuantity, { amount: 250, unit: 'g' });
+  assert.equal(analysis.calories, null);
+  assert.equal(analysis.coverage!.referenceCount, 0);
+  assert.equal(analysis.estimateScope, undefined);
+  const zip = await JSZip.loadAsync(bytes);
+  assert.match(await zip.file('meals.csv')!.async('string'), /recipeBasis/);
+  assert.match(await zip.file('meals.csv')!.async('string'), /nutritionReferenceStale/);
+});
+
+test('legacy photo weights, user quantities and database snapshots are retained without conversion to v3', async () => {
+  const data = fixture();
+  const analysis = mealAnalysisSchema.parse({ status: 'unknown', foodName: '旧米饭', calories: null, protein: null, carbs: null, fat: null,
+    assumptions: ['旧照片范围'], advice: '保留原记录。', components: [{ foodId: 'rice_white_long_grain_cooked', label: '旧米饭',
+      grams: { min: 180, max: 220 }, quantitySource: 'visual', consumedFraction: null, userQuantity: { amount: 150, unit: 'g' },
+      source: { provider: 'usda-fdc', dataset: 'old saved USDA snapshot', fdcId: '168878', per100g: { calories: 131, protein: 2.7, carbs: 28.1, fat: 0.3 } }, uncertainty: ['食用比例未知'],
+    }] });
+  data.meals[0].analyses![0].analysis = analysis;
+  const restored = await parseBackupArchive(await createBackupArchive(data, media, now));
+  assert.deepEqual(restored.data.meals[0].analyses![0].analysis, analysis);
+  assert.equal(restored.data.meals[0].analyses![0].analysis.nutritionSource?.method, undefined);
 });
 
 test('shared original bytes are stored once while every record and revision is remapped', async () => {

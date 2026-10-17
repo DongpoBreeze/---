@@ -17,6 +17,15 @@ const analysis = (changes = {}) => calculateMealNutrition({
   ...changes,
 }, nutritionDataset, { mode: 'user-quantity-v2' });
 
+const aiAnalysis = () => calculateMealNutrition({
+  foodName: '番茄炒蛋', confidence: 0.8,
+  components: [{ foodId: null, label: '番茄炒蛋', uncertainty: [], nutritionEstimate: {
+    basisGrams: 100, method: 'typical_recipe', recipeBasis: '番茄与鸡蛋约 2:1，少量烹调油。',
+    assumptions: ['常见家常炒制，油量存在差异。'], confidence: 0.7,
+    per100g: { calories: { min: 100, max: 160 }, protein: { min: 5, max: 8 }, carbs: { min: 3, max: 7 }, fat: { min: 6, max: 11 } },
+  } }], unresolved: [], assumptions: [], advice: '填写实际数量后计算摄入。',
+}, nutritionDataset, { mode: 'ai-per100g-v3', provenance: { model: 'gpt-6.1-sol', reasoningEffort: 'max', createdAt: '2026-10-17T01:02:03.000Z' } });
+
 test('summaries preserve local nutrient intervals, components, scope and uncertainty', () => {
   const result = summarizeMealAnalysis(analysis());
   assert.deepEqual(result.nutrients.calories, { min: 130, max: 130 });
@@ -97,4 +106,44 @@ test('batch status and locally rejected stages remain distinct from completed mo
   assert.match(markdown, /本轮流程状态：请求额度拒绝（diagnostic_request_limit）/);
   assert.match(markdown, /阶段未发送：最终合并，请求额度拒绝（diagnostic_request_limit）/);
   assert.match(markdown, /整图：已接受，80\.0 秒，HTTP 200，结果已接受/);
+});
+
+test('unknown intake still exposes all four useful AI reference ranges and their provenance', () => {
+  const raw = aiAnalysis();
+  const result = summarizeMealAnalysis(raw);
+  assert.equal(raw.status, 'unknown');
+  assert.deepEqual(result.nutrients, { calories: null, protein: null, carbs: null, fat: null });
+  assert.equal(result.hasUsefulNutritionReference, true);
+  assert.equal(result.usefulReferenceCount, 1);
+  assert.equal(result.coverage.referenceCount, 1);
+  assert.equal(result.coverage.counted, 0);
+  assert.equal(result.intakeComplete, false);
+  assert.equal(result.referenceCoverageConsistent, true);
+  assert.equal(result.components[0].userQuantity, null);
+  assert.deepEqual(result.components[0].reference.nutrients, raw.components[0].source.per100gRange);
+  assert.equal(result.components[0].reference.method, 'typical_recipe');
+  assert.equal(result.components[0].reference.model, 'gpt-6.1-sol');
+  assert.equal(result.components[0].reference.reasoningEffort, 'max');
+  assert.equal(result.components[0].reference.generatedAt, '2026-10-17T01:02:03.000Z');
+  const markdown = renderMealComparisonMarkdown({ comparisons: [createMealComparison({ mealId: 'reference-only', current: raw })] });
+  assert.match(markdown, /数量未填写/);
+  assert.match(markdown, /方法：典型配方/);
+  assert.match(markdown, /配方依据：番茄与鸡蛋/);
+  assert.match(markdown, /参考假设：常见家常炒制/);
+  assert.match(markdown, /营养参考覆盖：1\/1 道菜；四项有效参考：1 道；有用营养参考：是/);
+  assert.match(markdown, /摄入完整：否/);
+});
+
+test('missing nutrients, stale sources and unknown sources cannot become useful AI references', () => {
+  for (const change of ['missing-fat', 'scalar-protein', 'stale', 'unknown']) {
+    const raw = aiAnalysis();
+    if (change === 'missing-fat') delete raw.components[0].source.per100gRange.fat;
+    if (change === 'scalar-protein') raw.components[0].source.per100gRange.protein = 6;
+    if (change === 'stale') raw.components[0].nutritionReferenceStale = true;
+    if (change === 'unknown') raw.components[0].source = { provider: 'unknown' };
+    const result = summarizeMealAnalysis(raw);
+    assert.equal(result.hasUsefulNutritionReference, false, change);
+    assert.equal(result.usefulReferenceCount, 0, change);
+    assert.equal(result.referenceCoverageConsistent, false, change);
+  }
 });
