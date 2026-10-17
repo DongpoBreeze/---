@@ -9,20 +9,21 @@ import { dateLabel, minutesInto, rangeLabel, recordDate, sleepHours, timeLabel, 
 import { color, moduleTone, radius, space, type } from "./theme";
 import type { Kind } from "./app-types";
 
-/** One lit gauge: module hue, reading and a one-line note. */
+/** One lit instrument: module hue, reading and a one-line note. */
 function Gauge({ kind, label, value, unit, note }: { kind: Kind; label: string; value: string; unit?: string; note: string }) {
   const tone = moduleTone[kind];
   const unknown = value === "未知" || value === "—";
   return (
-    <View style={[st.gauge, { borderTopColor: unknown ? color.lineStrong : tone.hue }]}>
-      <View style={st.gaugeHead}>
-        <View style={[st.gaugeDot, { backgroundColor: unknown ? color.inkFaint : tone.hue }]} />
-        <Text style={st.gaugeLabel} numberOfLines={1}>{label}</Text>
+    <View style={st.gauge}>
+      <View style={[st.gaugeLamp, { backgroundColor: unknown ? color.lineStrong : tone.hue }]} />
+      <Text style={st.gaugeLabel} numberOfLines={1}>{label}</Text>
+      <View style={st.gaugeReading}>
+        <Text style={[st.gaugeValue, { color: unknown ? color.inkFaint : tone.text }]} numberOfLines={1} adjustsFontSizeToFit>
+          {value}
+        </Text>
+        {!unknown && unit ? <Text style={[st.gaugeUnit, { color: tone.text }]}>{unit}</Text> : null}
       </View>
-      <Text style={[st.gaugeValue, { color: unknown ? color.inkFaint : tone.text }]} numberOfLines={1} adjustsFontSizeToFit>
-        {value}
-      </Text>
-      <Text style={st.gaugeNote} numberOfLines={2}>{unknown ? note : `${unit ?? ""}${unit ? " · " : ""}${note}`}</Text>
+      <Text style={st.gaugeNote} numberOfLines={2}>{note}</Text>
     </View>
   );
 }
@@ -118,8 +119,11 @@ export function Today({
     <ScrollView contentContainerStyle={contentStyle} showsVerticalScrollIndicator={false}>
       <View style={st.head}>
         <View style={{ flex: 1 }}>
-          <Text style={st.weekday}>{nowDate.toLocaleDateString("zh-CN", { weekday: "long" })}</Text>
-          <Text style={st.date}>{nowDate.toLocaleDateString("zh-CN", { month: "long", day: "numeric" })}</Text>
+          <View style={st.brandRow}>
+            <Ionicons name="compass" size={13} color={color.accent} />
+            <Text style={st.brand}>健康罗盘</Text>
+          </View>
+          <Text style={st.date}>{nowDate.toLocaleDateString("zh-CN", { month: "long", day: "numeric", weekday: "long" })}</Text>
         </View>
         <Pressable
           accessibilityRole="button"
@@ -133,11 +137,14 @@ export function Today({
       <View
         style={st.chart}
         accessible
-        accessibilityLabel={`今日记录纸带：已记下 ${count} 条，饮食 ${meals.length} 餐，训练 ${trainings.length} 次，睡眠 ${sleeps.length} 段`}
+        accessibilityLabel={`今日航迹：已记下 ${count} 条，饮食 ${meals.length} 餐，训练 ${trainings.length} 次，睡眠 ${sleeps.length} 段`}
       >
         <View style={st.chartHead}>
-          <Text style={type.caption}>24H 记录纸带</Text>
-          <Text style={st.chartNow}>NOW {timeLabel(nowDate.toISOString())}</Text>
+          <Text style={type.caption}>24H 航迹</Text>
+          <View style={st.nowBadge}>
+            <View style={st.nowDot} />
+            <Text style={st.chartNow}>{timeLabel(nowDate.toISOString())}</Text>
+          </View>
         </View>
         <Tape marks={marks} now={now} />
         <View style={st.chartFoot}>
@@ -164,7 +171,7 @@ export function Today({
             key={kind}
             accessibilityRole="button"
             onPress={() => onOpen(kind)}
-            style={({ pressed }) => [st.side, { borderColor: moduleTone[kind].hue }, pressed && base.pressed]}
+            style={({ pressed }) => [st.side, { backgroundColor: moduleTone[kind].tint, borderColor: moduleTone[kind].line }, pressed && base.pressed]}
           >
             <Ionicons name={moduleTone[kind].icon} size={20} color={moduleTone[kind].text} />
             <Text style={[st.sideText, { color: moduleTone[kind].text }]}>{kind === "training" ? "记训练" : "记睡眠"}</Text>
