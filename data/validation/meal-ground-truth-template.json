@@ -1,0 +1,2460 @@
+{
+  "schemaVersion": "meal-validation.v1",
+  "datasetId": "meal-validation-50-blank",
+  "datasetType": "real-evaluation-template",
+  "status": "blank-template",
+  "description": "50 条待填写的人工真值结构；此文件不包含照片、凭据、人工标签或模型结果。",
+  "syntheticFixtureExcluded": true,
+  "samples": [
+    {
+      "mealId": "meal-001",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-002",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-003",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-004",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-005",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-006",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-007",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-008",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-009",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-010",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-011",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-012",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-013",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-014",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-015",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-016",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-017",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-018",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-019",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-020",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-021",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-022",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-023",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-024",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-025",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-026",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-027",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-028",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-029",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-030",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-031",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-032",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-033",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-034",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-035",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-036",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-037",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-038",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-039",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-040",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-041",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-042",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-043",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-044",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-045",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-046",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-047",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-048",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-049",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    },
+    {
+      "mealId": "meal-050",
+      "sampleType": null,
+      "sourceLabels": [],
+      "capture": {
+        "beforePhotoRef": null,
+        "afterPhotoRef": null,
+        "containerType": null,
+        "lighting": null,
+        "tags": [],
+        "notes": null
+      },
+      "groundTruth": {
+        "ingredients": [],
+        "cookingMethods": [],
+        "weightsG": {
+          "mealBefore": null,
+          "mealAfter": null,
+          "leftovers": null,
+          "ediblePortion": null,
+          "measurementMethod": null
+        },
+        "intakeRatio": null,
+        "nutrition": {
+          "caloriesKcal": null,
+          "proteinG": null,
+          "carbohydrateG": null,
+          "fatG": null,
+          "sodiumMg": null,
+          "sourceLabel": null,
+          "sourceReference": null
+        },
+        "notes": null
+      },
+      "prediction": {
+        "modelVersion": null,
+        "ingredients": null,
+        "unableToEstimate": null,
+        "unableReason": null,
+        "calorieEstimateKcal": null,
+        "calorieIntervalKcal": null,
+        "notes": null
+      },
+      "requestLedger": {
+        "stages": [],
+        "totalRequests": null,
+        "totalLatencyMs": null
+      }
+    }
+  ]
+}
