@@ -303,6 +303,43 @@ export function Note({ icon = "information-circle-outline", text, tone = color.p
     </View>
   );
 }
+export function RecordThumb({
+  uri,
+  kind,
+  size = 38,
+}: {
+  uri?: string;
+  kind: ModuleKind;
+  size?: number;
+}) {
+  const [failed, setFailed] = useState(false);
+  const tone = moduleTone[kind];
+  if (uri && !failed) {
+    return (
+      <Image
+        source={{ uri }}
+        style={{ width: size, height: size, borderRadius: radius.input, backgroundColor: tone.tint }}
+        resizeMode="cover"
+        onError={() => setFailed(true)}
+      />
+    );
+  }
+  return (
+    <View
+      style={{
+        width: size,
+        height: size,
+        borderRadius: radius.input,
+        backgroundColor: tone.tint,
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <Ionicons name={tone.icon} size={18} color={tone.text} />
+    </View>
+  );
+}
+
 export function MediaPreview({
   uri,
   label,
@@ -312,14 +349,23 @@ export function MediaPreview({
   label: string;
   onRemove: () => void;
 }) {
+  const [failed, setFailed] = useState(false);
   return (
     <View style={s.media}>
-      <Image
-        source={{ uri }}
-        style={s.preview}
-        resizeMode="cover"
-        accessibilityLabel={label}
-      />
+      {!failed ? (
+        <Image
+          source={{ uri }}
+          style={s.preview}
+          resizeMode="cover"
+          accessibilityLabel={label}
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <View style={[s.preview, s.previewFallback]} accessibilityLabel={label}>
+          <Ionicons name="image-outline" size={32} color={color.mealText} />
+          <Text style={s.mediaDetail}>照片已保存（当前环境暂无法渲染该格式预览）</Text>
+        </View>
+      )}
       <View style={s.mediaCaption}>
         <View style={{ flex: 1 }}>
           <Text style={s.mediaTitle}>{label}</Text>
@@ -478,7 +524,7 @@ export const s = StyleSheet.create({
   trackItemOn: {
     backgroundColor: color.raised,
     ...Platform.select({
-      web: { boxShadow: "0 1px 3px rgba(0,0,0,0.45)" } as object,
+      web: { boxShadow: "0 1px 2px rgba(23,32,43,0.14)" } as object,
       default: { elevation: 1, shadowColor: color.ink, shadowOpacity: 0.12, shadowRadius: 2, shadowOffset: { width: 0, height: 1 } },
     }),
   },
@@ -510,8 +556,9 @@ export const s = StyleSheet.create({
   helper: { ...type.small, marginTop: 2, marginBottom: space.sm },
   note: { flexDirection: "row", gap: space.sm, padding: space.md, borderRadius: radius.input, marginBottom: space.lg },
   noteText: { flex: 1, fontSize: 13, lineHeight: 19 },
-  media: { marginBottom: space.md, borderRadius: radius.block, overflow: "hidden", backgroundColor: color.surface },
+  media: { marginBottom: space.md, borderRadius: radius.block, overflow: "hidden", backgroundColor: color.surface, borderWidth: 1, borderColor: color.line },
   preview: { width: "100%", aspectRatio: 4 / 3, maxHeight: 360 },
+  previewFallback: { backgroundColor: color.mealTint, alignItems: "center", justifyContent: "center", gap: space.xs, padding: space.lg },
   mediaCaption: {
     flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.md, paddingVertical: 10,
   },

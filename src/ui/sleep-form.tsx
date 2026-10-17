@@ -184,7 +184,7 @@ export function SleepForm({
 
 const st = StyleSheet.create({
   night: {
-    backgroundColor: color.sleepTint, borderRadius: radius.block, padding: space.lg, marginBottom: space.xl, borderWidth: 1, borderColor: "#333C80",
+    backgroundColor: color.sleepTint, borderRadius: radius.block, padding: space.lg, marginBottom: space.xl, borderWidth: 1, borderColor: color.sleepLine,
   },
   nightLabel: { color: color.sleepText, fontSize: 13 },
   nightValue: { color: color.ink, fontSize: 32, lineHeight: 38, fontWeight: "800", marginTop: 2, ...type.numeric },

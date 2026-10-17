@@ -65,6 +65,7 @@ export function Me({
   const total = data.meals.length + data.trainings.length + data.sleeps.length;
   return (
     <ScrollView contentContainerStyle={contentStyle} showsVerticalScrollIndicator={false}>
+      <Text style={type.caption}>PROFILE & SYSTEM</Text>
       <Text style={st.title}>我的</Text>
       <Text style={st.intro}>目标和资料只影响后续建议，不会改写已有记录。</Text>
       <Pressable
@@ -122,18 +123,18 @@ export function Me({
 const st = StyleSheet.create({
   title: { ...type.display },
   intro: { ...type.bodySoft, marginTop: space.xs, marginBottom: space.lg },
-  profile: { backgroundColor: color.pineTint, borderRadius: radius.block, padding: space.lg, borderWidth: 1, borderColor: "#24594A" },
-  profileLabel: { color: color.pine, fontSize: 13, fontWeight: "700" },
+  profile: { backgroundColor: color.surface, borderRadius: radius.block, padding: space.lg, borderWidth: 1, borderColor: color.line },
+  profileLabel: { color: color.inkSoft, fontSize: 12, fontWeight: "700" },
   profileGoal: { color: color.ink, fontSize: 26, lineHeight: 32, fontWeight: "800", marginTop: 2 },
   stats: { flexDirection: "row", gap: space.sm, marginTop: space.lg },
-  stat: { flex: 1, backgroundColor: color.paper, borderRadius: radius.input, padding: 10 },
+  stat: { flex: 1, backgroundColor: color.paper, borderRadius: radius.input, padding: 10, borderWidth: 1, borderColor: color.line },
   statLabel: { color: color.inkSoft, fontSize: 12 },
   statValue: { color: color.ink, fontSize: 20, fontWeight: "800", marginTop: 2, ...type.numeric },
   statUnit: { color: color.inkFaint, fontSize: 11 },
   profileEdit: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: space.md, minHeight: 28 },
   profileEditText: { color: color.pine, fontSize: 14, fontWeight: "700" },
   group: { ...type.small, fontWeight: "700", color: color.inkSoft, marginTop: space.xl, marginBottom: space.sm },
-  panel: { backgroundColor: color.surface, borderRadius: radius.block, paddingHorizontal: space.md, marginBottom: space.sm },
+  panel: { backgroundColor: color.surface, borderRadius: radius.block, paddingHorizontal: space.md, marginBottom: space.sm, borderWidth: 1, borderColor: color.line },
   setting: { flexDirection: "row", alignItems: "center", gap: space.md, minHeight: 64 },
   settingLine: { borderBottomWidth: StyleSheet.hairlineWidth, borderColor: color.lineStrong },
   settingIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: color.sunken, alignItems: "center", justifyContent: "center" },

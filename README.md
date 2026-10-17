@@ -55,6 +55,6 @@ npm run test:ui
 
 产品规格见 [docs/product-spec-v0.1.md](docs/product-spec-v0.1.md)，当前用户 AI 设置约定见 [docs/user-ai-settings.md](docs/user-ai-settings.md)，开发验证见 [docs/development.md](docs/development.md)。
 
-App 前端当前为 v0.6「深夜仪表·精炼版」（夜间版）：在 v0.4 基础上深化基底色（更深的黑），保持原始模块色和 24 小时表盘核心设计。页面与表单在 `src/ui/`，设计 token 在 `src/ui/theme.ts`，截图在 `artifacts/ui-v0.6/`。设计演进：v0.3（浅色时间线）→ v0.4（深色表盘）→ v0.5（日间地图）→ v0.6（精炼表盘，作为夜间版长期使用）。历史版本备份在 `artifacts/backup/`。设计说明见 [v0.6 视觉方向](docs/redesign-vision-v0.6.md)。
+App 前端当前为 v0.8「瑞士体征协议与 24 格节律矩阵」：矿石白画布配纯白档案卡与碳黑主色，今天页通过 24 格垂直节律矩阵、三大营养素范围账本与训练/睡眠双栏卡呈现全天健康数据。页面与表单在 `src/ui/`，设计 token 在 `src/ui/theme.ts`，节律矩阵组件在 `src/ui/tape.tsx`。设计说明见 [v0.8 视觉方向](docs/redesign-vision-v0.8.md)。
 
 本地数据和导出备份可能包含敏感健康信息。不要把真实数据、Key 或备份提交到 Git。
