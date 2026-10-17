@@ -73,7 +73,13 @@ export default function App() {
     if (!document.getElementById("hc-web-font-fallback")) {
       const style = document.createElement("style");
       style.id = "hc-web-font-fallback";
+      // The Metro asset URL (/assets/?unstable_path=...) is not reachable through the preview proxy, so serve the icon font from /public.
       style.textContent = `
+        @font-face {
+          font-family: ionicons;
+          src: url("/fonts/Ionicons.ttf") format("truetype");
+          font-display: block;
+        }
         html, body, #root, input, textarea, button,
         [class*="css-text-"]:not([style*="font-family"]),
         div[dir="auto"]:not([style*="font-family"]),
@@ -544,7 +550,7 @@ function AppShell() {
     setAiBusy(true);
     setMessage("正在分析这餐；原始记录不会被覆盖。");
     const slow = setTimeout(
-      () => setMessage("分析已等待 30 秒，你可以取消；记录不会���影响。"),
+      () => setMessage("分析已等待 30 秒，你可以取消；记录不会受影响。"),
       30000,
     );
     const timeout = setTimeout(() => controller.abort(), AI_REQUEST_TIMEOUT_MS * MAX_MEAL_ANALYSIS_STAGES + 5000);
