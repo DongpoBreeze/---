@@ -6,7 +6,7 @@ const categoryData = JSON.parse(readFileSync(new URL('../data/nutrition/category
 export const nutritionDataset = { ...usdaDataset, categories: categoryData.categories, aliases: categoryData.aliases, householdMeasures: categoryData.householdMeasures };
 export const nutritionCatalog = nutritionDataset.foods.map(({ id, label, aliases, description, preparation }) => ({ id, label, aliases, description, preparation }));
 
-export function analyseRecognition(value) {
+export function analyseRecognition(value, { provenance } = {}) {
   const recognition = validateMealRecognition(value);
   const allowed = new Set(nutritionCatalog.map((food) => food.id));
   if (recognition.components.some((component) => component.foodId !== null && !allowed.has(component.foodId)
@@ -17,5 +17,5 @@ export function analyseRecognition(value) {
     if (component.foodId === null || !hasMealIdentityConflict(component)) return component;
     return { ...component, foodId: null };
   });
-  return calculateMealNutrition({ ...recognition, components }, nutritionDataset, { mode: 'user-quantity-v2' });
+  return calculateMealNutrition({ ...recognition, components }, nutritionDataset, { mode: 'ai-per100g-v3', provenance });
 }

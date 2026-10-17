@@ -77,6 +77,21 @@ export function rangeLabel(
   return `${value.min === value.max ? format(value.min) : `${format(value.min)}～${format(value.max)}`}${unit}`;
 }
 
+/** Display nutrient bounds without narrowing the stored estimate. */
+export function nutritionRangeLabel(
+  value: { min: number; max: number } | null | undefined,
+  nutrient: "calories" | "protein" | "carbs" | "fat",
+  unit = "",
+) {
+  if (!value) return "未知";
+  const digits = nutrient === "calories" ? 0 : 1;
+  const factor = 10 ** digits;
+  const lower = Math.floor(value.min * factor + 1e-9) / factor;
+  const upper = Math.ceil(value.max * factor - 1e-9) / factor;
+  const format = (amount: number) => amount.toFixed(digits);
+  return `${lower === upper ? format(lower) : `${format(lower)}～${format(upper)}`}${unit}`;
+}
+
 export function sleepHours(record: SleepRecord) {
   try {
     const value = sleepStats(record);

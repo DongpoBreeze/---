@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, access } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { RealMealTestLedger, REAL_MEAL_LIMITS } from './real-meal-test-ledger.mjs';
+import { join, resolve } from 'node:path';
+import { Worker } from 'node:worker_threads';
+import { once } from 'node:events';
+import { RealMealTestLedger, REAL_MEAL_LIMITS, REAL_MEAL_LEDGER_PATHS, resolveRealMealLedgerPaths } from './real-meal-test-ledger.mjs';
 
 const base = (mealId, stage) => ({ mealId, stage, model: 'gpt-6.1-sol', reasoningEffort: 'max', resultVersion: 2 });
 const accepted = (ledger, attemptId) => assert.equal(ledger.finish(attemptId, {
@@ -177,4 +179,197 @@ test('the persistent total budget rejects request 76 after all 50 first passes a
   assert.throws(() => ledger.reserve({ ...base('budget-0', 'whole'), validationRunId: 'budget-round-two' }), /75-request/);
   assert.equal(ledger.totals().totalRequests, REAL_MEAL_LIMITS.totalRequests);
   ledger.close();
+});
+
+async function withTwoLedgers(run) {
+  await withLedger(async (path) => {
+    const peerPath = join(path, '..', 'peer.sqlite');
+    for (const candidate of [path, peerPath]) new RealMealTestLedger(candidate).close();
+    await run(path, peerPath);
+  });
+}
+
+function seedFirstPasses(path, count, prefix) {
+  const ledger = new RealMealTestLedger(path);
+  try {
+    for (let index = 0; index < count; index += 1) {
+      const first = ledger.reserve({ ...base(`${prefix}-${index}`, 'whole'), validationRunId: `${prefix}-${Math.floor(index / 50)}` });
+      if (index === 0) ledger.finish(first.attemptId, { elapsedMs: 180_000, httpStatus: 200, outcome: 'timeout' });
+      else accepted(ledger, first.attemptId);
+    }
+    return ledger.attempts();
+  } finally { ledger.close(); }
+}
+
+test('known live paths always include both historical ledgers, while memory and temporary paths stay isolated', async () => {
+  for (const path of REAL_MEAL_LEDGER_PATHS) {
+    assert.deepEqual(new Set(resolveRealMealLedgerPaths(path)), new Set(REAL_MEAL_LEDGER_PATHS));
+    assert.equal(resolveRealMealLedgerPaths(path, { relatedLedgerPaths: [path, resolve(path, '..', '.', path.split(/[\\/]/).at(-1))] }).length, 2);
+  }
+  assert.deepEqual(resolveRealMealLedgerPaths(':memory:'), [':memory:']);
+  await withLedger(async (path) => {
+    assert.deepEqual(resolveRealMealLedgerPaths(path), [resolve(path)]);
+    const ledger = new RealMealTestLedger(path);
+    try { assert.equal(ledger.totals().totalRequests, 0); assert.equal(ledger.totals().ledgerCount, 1); }
+    finally { ledger.close(); }
+  });
+});
+
+test('a shared 4+51 history leaves 20 requests across both active paths, including failed attempts, without copying rows', async () => {
+  await withTwoLedgers(async (path, peerPath) => {
+    const before = seedFirstPasses(path, 4, 'single-history');
+    const peerBefore = seedFirstPasses(peerPath, 51, 'batch-history');
+    const first = new RealMealTestLedger(path, { relatedLedgerPaths: [peerPath, path, resolve(peerPath, '..', '.', 'peer.sqlite')] });
+    const second = new RealMealTestLedger(peerPath, { relatedLedgerPaths: [path, peerPath] });
+    try {
+      assert.equal(first.totals().totalRequests, 55);
+      assert.equal(first.totals().localRequests, 4);
+      assert.equal(first.totals().relatedRequests, 51);
+      assert.equal(first.totals().remainingRequests, 20);
+      assert.equal(first.totals().ledgerCount, 2);
+      assert.equal(second.totals().totalRequests, 55);
+      for (let index = 0; index < 20; index += 1) {
+        const ledger = index % 2 ? second : first;
+        const attempt = ledger.reserve({ ...base(`new-meal-${index}`, 'whole'), resultVersion: 3, validationRunId: 'new-nutrition-round' });
+        if (index < 2) ledger.finish(attempt.attemptId, { elapsedMs: 180_000, httpStatus: 200, outcome: index === 0 ? 'timeout' : 'format_error' });
+        else accepted(ledger, attempt.attemptId);
+      }
+      for (const ledger of [first, second]) {
+        assert.equal(ledger.totals().totalRequests, 75);
+        assert.equal(ledger.totals().remainingRequests, 0);
+        assert.throws(() => ledger.reserve({ ...base('request-76', 'whole'), validationRunId: 'yet-another-round' }), /75-request/);
+      }
+      assert.equal(first.attempts().length, 14);
+      assert.equal(second.attempts().length, 61);
+      assert.deepEqual(first.attempts().slice(0, 4), before);
+      assert.deepEqual(second.attempts().slice(0, 51), peerBefore);
+      assert.equal(first.attemptsForRun('new-nutrition-round')[0].status, 'timeout');
+      assert.equal(second.attemptsForRun('new-nutrition-round')[0].status, 'format_error');
+    } finally { first.close(); second.close(); }
+  });
+});
+
+test('switching the active ledger cannot reset the same run meal limit or stage order', async () => {
+  await withTwoLedgers(async (path, peerPath) => {
+    const first = new RealMealTestLedger(path, { relatedLedgerPaths: [peerPath] });
+    const second = new RealMealTestLedger(peerPath, { relatedLedgerPaths: [path] });
+    try {
+      const whole = first.reserve({ ...base('shared-meal', 'whole'), validationRunId: 'same-round' });
+      accepted(first, whole.attemptId);
+      assert.throws(() => second.reserve({ ...base('shared-meal', 'whole'), validationRunId: 'same-round' }), /already been attempted/);
+      const review = second.reserve({ ...base('shared-meal', 'crop_review'), validationRunId: 'same-round' });
+      accepted(second, review.attemptId);
+      const merge = first.reserve({ ...base('shared-meal', 'final_merge'), validationRunId: 'same-round' });
+      accepted(first, merge.attemptId);
+      assert.throws(() => second.reserve({ ...base('shared-meal', 'whole'), validationRunId: 'same-round' }), /3-request per-meal/);
+      const newRound = second.reserve({ ...base('shared-meal', 'whole'), validationRunId: 'next-round' });
+      accepted(second, newRound.attemptId);
+      assert.equal(first.totals().totalRequests, 4);
+    } finally { first.close(); second.close(); }
+  });
+});
+
+test('the 25-meal review limit includes failed reviews in both ledgers and resets only for a new run', async () => {
+  await withTwoLedgers(async (path, peerPath) => {
+    const first = new RealMealTestLedger(path, { relatedLedgerPaths: [peerPath] });
+    const second = new RealMealTestLedger(peerPath, { relatedLedgerPaths: [path] });
+    try {
+      for (let index = 0; index < 26; index += 1) {
+        const whole = first.reserve({ ...base(`shared-review-${index}`, 'whole'), validationRunId: 'reviews-round' });
+        accepted(first, whole.attemptId);
+        if (index < 25) {
+          const ledger = index % 2 ? second : first;
+          const review = ledger.reserve({ ...base(`shared-review-${index}`, 'crop_review'), validationRunId: 'reviews-round' });
+          if (index === 0) ledger.finish(review.attemptId, { elapsedMs: 20, outcome: 'request_error' });
+          else accepted(ledger, review.attemptId);
+        }
+      }
+      assert.throws(() => second.reserve({ ...base('shared-review-25', 'crop_review'), validationRunId: 'reviews-round' }), /25-meal additional-review/);
+      const nextWhole = second.reserve({ ...base('shared-review-25', 'whole'), validationRunId: 'reviews-next-round' });
+      accepted(second, nextWhole.attemptId);
+      const nextReview = first.reserve({ ...base('shared-review-25', 'crop_review'), validationRunId: 'reviews-next-round' });
+      accepted(first, nextReview.attemptId);
+      assert.equal(first.totals().totalRequests, 53);
+    } finally { first.close(); second.close(); }
+  });
+});
+
+test('a missing shared-budget peer fails closed without creating a replacement ledger', async () => {
+  await withLedger(async (path) => {
+    const missing = join(path, '..', 'missing.sqlite');
+    assert.throws(() => new RealMealTestLedger(path, { relatedLedgerPaths: [missing] }), /missing or unreadable/);
+    await assert.rejects(access(path));
+    await assert.rejects(access(missing));
+  });
+});
+
+test('accepted completion cannot be recorded before the provider completed and business validation succeeded', () => {
+  const ledger = new RealMealTestLedger(':memory:');
+  try {
+    const attempt = ledger.reserve({ ...base('unfinished', 'whole'), resultVersion: 3 });
+    assert.throws(() => ledger.finish(attempt.attemptId, { elapsedMs: 10, providerCompleted: false, resultAccepted: true, outcome: 'accepted' }), /requires provider completion/);
+    assert.throws(() => ledger.finish(attempt.attemptId, { elapsedMs: 10, httpStatus: 500, providerCompleted: true, resultAccepted: true, outcome: 'accepted' }), /successful HTTP status/);
+    ledger.finish(attempt.attemptId, { elapsedMs: 10, outcome: 'timeout', errorName: 'TimeoutError', errorCode: 'https://private.invalid/credential' });
+    assert.equal(ledger.attempts()[0].errorCode, null);
+    assert.equal(ledger.attempts()[0].errorName, 'TimeoutError');
+    assert.equal(ledger.totals().totalRequests, 1);
+  } finally { ledger.close(); }
+});
+
+test('two concurrent writers sharing their final request slot cannot reserve request 76', async () => {
+  await withTwoLedgers(async (path, peerPath) => {
+    seedFirstPasses(path, 37, 'concurrent-a');
+    seedFirstPasses(peerPath, 37, 'concurrent-b');
+    const source = `
+      const { parentPort, workerData } = require('node:worker_threads');
+      (async () => {
+        const { RealMealTestLedger } = await import(workerData.moduleUrl);
+        const ledger = new RealMealTestLedger(workerData.path, { relatedLedgerPaths: [workerData.peer] });
+        parentPort.postMessage({ ready: true });
+        parentPort.once('message', () => {
+          try {
+            ledger.reserve({ mealId: workerData.meal, validationRunId: 'concurrent-final-slot', stage: 'whole', model: 'gpt-6.1-sol', reasoningEffort: 'max', resultVersion: 3 });
+            parentPort.postMessage({ reserved: true });
+          } catch (error) { parentPort.postMessage({ reserved: false, error: error.message }); }
+          finally { ledger.close(); parentPort.close(); }
+        });
+      })().catch((error) => { throw error; });
+    `;
+    const workers = [new Worker(source, { eval: true, workerData: { moduleUrl: new URL('./real-meal-test-ledger.mjs', import.meta.url).href, path, peer: peerPath, meal: 'concurrent-first' } }),
+      new Worker(source, { eval: true, workerData: { moduleUrl: new URL('./real-meal-test-ledger.mjs', import.meta.url).href, path: peerPath, peer: path, meal: 'concurrent-second' } })];
+    try {
+      await Promise.all(workers.map((worker) => once(worker, 'message')));
+      const outcomes = workers.map((worker) => once(worker, 'message'));
+      for (const worker of workers) worker.postMessage('reserve');
+      const results = (await Promise.all(outcomes)).map(([message]) => message);
+      assert.equal(results.filter((result) => result.reserved).length, 1);
+      assert.match(results.find((result) => !result.reserved).error, /75-request/);
+      const ledger = new RealMealTestLedger(path, { relatedLedgerPaths: [peerPath] });
+      try { assert.equal(ledger.totals().totalRequests, 75); } finally { ledger.close(); }
+    } finally { await Promise.all(workers.map((worker) => worker.terminate())); }
+  });
+});
+
+test('an abruptly terminated coordinator holder leaves no stale lock for the next reservation', async () => {
+  await withTwoLedgers(async (path, peerPath) => {
+    const coordinatorPath = resolveRealMealLedgerPaths(path, { relatedLedgerPaths: [peerPath] })[0];
+    const holder = new Worker(`
+      const { parentPort, workerData } = require('node:worker_threads');
+      const { DatabaseSync } = require('node:sqlite');
+      const db = new DatabaseSync(workerData.path);
+      db.exec('BEGIN IMMEDIATE');
+      parentPort.on('message', () => {});
+      parentPort.postMessage('locked');
+    `, { eval: true, workerData: { path: coordinatorPath } });
+    try {
+      assert.deepEqual(await once(holder, 'message'), ['locked']);
+      await holder.terminate();
+      const ledger = new RealMealTestLedger(peerPath, { relatedLedgerPaths: [path] });
+      try {
+        const attempt = ledger.reserve({ ...base('after-coordinator-crash', 'whole'), validationRunId: 'recovery-round' });
+        accepted(ledger, attempt.attemptId);
+        assert.equal(ledger.totals().totalRequests, 1);
+      } finally { ledger.close(); }
+    } finally { await holder.terminate(); }
+  });
 });

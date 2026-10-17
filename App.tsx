@@ -40,7 +40,7 @@ import {
   analyzeMeal, analyzeSummary, clearAiSettings, getAiSettingsVersion, isAiConfigured,
   loadAiSettings, saveAiSettings,
 } from "./src/ai";
-import type { AiSettings } from "./src/ai-provider";
+import { AI_REQUEST_TIMEOUT_MS, MAX_MEAL_ANALYSIS_STAGES, type AiSettings } from "./src/ai-provider";
 import { appendNutritionCorrection } from "./src/nutrition-correction";
 import type { FormSession } from "./src/ui/useFormDraft";
 import type { Kind, MealDraft, ModalKind, PhotoAnalysisResult, SleepDraft, Tab, TrainingDraft } from "./src/ui/app-types";
@@ -197,7 +197,8 @@ function AppShell() {
       requireSession(session);
       const meal = current.meals.find((item) => item.id === mealId);
       const corrected = appendNutritionCorrection(meal, revision, baseAnalysisId, {
-        id: uid(), model: "local/usda-user-quantity-v2",
+        id: uid(), model: analysis.nutritionSource?.method === "ai-per100g-v3"
+          ? "local/ai-per100g-v3" : "local/usda-user-quantity-v2",
         createdAt: new Date().toISOString(), sourceVersion: revision, analysis,
       });
       return {
@@ -434,7 +435,7 @@ function AppShell() {
       () => setMessage("分析已等待 30 秒，你可以取消；记录不会受影响。"),
       30000,
     );
-    const timeout = setTimeout(() => controller.abort(), 60000);
+    const timeout = setTimeout(() => controller.abort(), AI_REQUEST_TIMEOUT_MS + 5000);
     try {
       const result = await analyzeSummary(
         snapshot,
@@ -528,7 +529,7 @@ function AppShell() {
       () => setMessage("分析已等待 30 秒，你可以取消；记录不会受影响。"),
       30000,
     );
-    const timeout = setTimeout(() => controller.abort(), 60000);
+    const timeout = setTimeout(() => controller.abort(), AI_REQUEST_TIMEOUT_MS * MAX_MEAL_ANALYSIS_STAGES + 5000);
     try {
       const result = await analyzeMeal(
         meal,
@@ -561,6 +562,7 @@ function AppShell() {
                       id: uid(),
                       model: result.model,
                       createdAt: result.createdAt,
+                      stageCount: result.stageCount,
                       sourceVersion: item.revision ?? 1,
                       analysis: result.analysis,
                     },

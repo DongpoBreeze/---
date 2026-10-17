@@ -24,6 +24,12 @@ export function mealPhotoAutofill(analysis: MealAnalysis): MealPhotoAutofill {
 }
 
 export function mealPhotoEstimateText(analysis: MealAnalysis) {
+  if (analysis.nutritionSource?.method === 'ai-per100g-v3') {
+    const refs = analysis.coverage?.referenceCount ?? (analysis.components ?? []).filter((item) => item.source?.provider === 'model' && !item.nutritionReferenceStale).length;
+    return refs
+      ? `已提供 ${refs} 道菜的每 100 g AI 营养参考；填写实际食用数量后计算已填小计。`
+      : '已完成菜品识别，营养参考未知；补充菜名或做法后可重新估值。';
+  }
   if (analysis.nutritionSource?.method === 'user-quantity-v2') {
     const refs = (analysis.components ?? []).filter((item) => item.source).length;
     return refs

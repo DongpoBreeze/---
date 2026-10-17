@@ -1,28 +1,28 @@
 import React, { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { AppData } from "../types";
 import { mealCalories, summaryMarkdown } from "../domain";
 import { MarkdownText, SummaryVersions, s as base } from "./components";
-import { dateLabel, rangeLabel, recordDate, sleepHours, timeLabel, today } from "./format";
+import { Dial, type DialMark as Mark } from "./dial";
+import { dateLabel, minutesInto, rangeLabel, recordDate, sleepHours, timeLabel, today } from "./format";
 import { color, moduleTone, radius, space, type } from "./theme";
 import type { Kind } from "./app-types";
 
-/** One data card: module color, primary reading, secondary text. */
-function DataCard({ kind, label, value, unit, sublabel, empty }: { kind: Kind; label: string; value: string; unit?: string; sublabel: string; empty?: boolean }) {
+/** One lit gauge: module hue, reading and a one-line note. */
+function Gauge({ kind, label, value, unit, note }: { kind: Kind; label: string; value: string; unit?: string; note: string }) {
   const tone = moduleTone[kind];
-  const unknown = empty || value === "未知" || value === "—";
+  const unknown = value === "未知" || value === "—";
   return (
-    <View style={[st.card, { backgroundColor: unknown ? color.surface : tone.tint, borderColor: unknown ? color.line : tone.hue }]}>
-      <View style={st.cardHead}>
-        <Ionicons name={tone.icon} size={20} color={unknown ? color.inkFaint : tone.hue} />
-        <Text style={[st.cardLabel, { color: unknown ? color.inkFaint : tone.text }]}>{label}</Text>
+    <View style={[st.gauge, { borderColor: unknown ? color.line : tone.hue }]}>
+      <View style={st.gaugeHead}>
+        <View style={[st.gaugeDot, { backgroundColor: unknown ? color.inkFaint : tone.hue }]} />
+        <Text style={st.gaugeLabel} numberOfLines={1}>{label}</Text>
       </View>
-      <Text style={[st.cardValue, { color: unknown ? color.inkFaint : tone.text }]} numberOfLines={1} adjustsFontSizeToFit>
+      <Text style={[st.gaugeValue, { color: unknown ? color.inkFaint : tone.text }]} numberOfLines={1} adjustsFontSizeToFit>
         {value}
       </Text>
-      {unit && !unknown && <Text style={[st.cardUnit, { color: tone.text }]}>{unit}</Text>}
-      <Text style={[st.cardSub, { color: unknown ? color.inkFaint : color.inkSoft }]} numberOfLines={1}>{sublabel}</Text>
+      <Text style={st.gaugeNote} numberOfLines={2}>{unknown ? note : `${unit ?? ""}${unit ? " · " : ""}${note}`}</Text>
     </View>
   );
 }
@@ -42,6 +42,8 @@ export function Today({
   onAi: () => void;
   onProfile: () => void;
 }) {
+  const { width } = useWindowDimensions();
+  const dialSize = Math.min(300, Math.max(240, Math.min(width, 760) - 80));
   const [showLocal, setShowLocal] = useState(false);
   const date = today();
   const meals = data.meals.filter((r) => recordDate(r) === date);
@@ -62,7 +64,17 @@ export function Today({
   const summary =
     data.summaries.find((r) => r.date === date && r.source !== "ai")
       ?.markdown ?? summaryMarkdown(data, date);
+  const count = meals.length + trainings.length + sleeps.length;
+  const marks: Mark[] = [
+    ...sleeps.map((r) => ({ kind: "sleep" as Kind, start: minutesInto(date, r.fellAsleepAt), end: minutesInto(date, r.wokeAt) })),
+    ...meals.map((r) => ({ kind: "meal" as Kind, start: minutesInto(date, r.occurredAt) })),
+    ...trainings.map((r) => {
+      const start = minutesInto(date, r.occurredAt);
+      return { kind: "training" as Kind, start, end: r.mode === "cardio" && r.durationMinutes ? start + r.durationMinutes : undefined };
+    }),
+  ];
   const nowDate = new Date();
+  const now = nowDate.getHours() * 60 + nowDate.getMinutes();
   const sleepValue = sleeps.length && sleepHours(sleeps[0]) !== null ? sleepHours(sleeps[0])!.toFixed(1) : "未知";
   const recent = [
     ...meals.map((r) => ({
@@ -88,17 +100,22 @@ export function Today({
     })),
   ]
     .sort((a, b) => Date.parse(b.at) - Date.parse(a.at))
-    .slice(0, 8);
+    .slice(0, 5);
   const preview = summary
     .split("\n")
     .filter((line) => line.trim() && !line.startsWith("#") && !line.startsWith("-"))
     .join(" ")
-    .slice(0, 200);
+    .slice(0, 180);
   const kcalValue = known.length ? rangeLabel(total) : "未知";
-  const mealSub = !meals.length ? "暂无饮食" : known.length === meals.length ? `${meals.length} 餐均已估算` : `${meals.length - known.length} 餐未估算`;
+  const incompleteMeals = meals.filter((meal) => {
+    const latest = meal.analyses?.at(-1);
+    return latest?.sourceVersion === (meal.revision ?? 1)
+      && ["user-quantity-v2", "ai-per100g-v3"].includes(latest.analysis.nutritionSource?.method ?? "")
+      && latest.analysis.nutritionSource?.coverage === "incomplete";
+  }).length;
+  const mealNote = !meals.length ? "暂无饮食" : incompleteMeals ? `${incompleteMeals} 餐数据不完整`
+    : known.length === meals.length ? `${meals.length} 餐有摄入估算` : `${meals.length - known.length} 餐摄入未知`;
   const workSets = trainings.reduce((n, r) => n + r.sets.filter((x) => !x.isWarmup).length, 0);
-  const trainingSub = !trainings.length ? "暂无训练" : `${trainings.length} 次 · ${workSets} 个工作组`;
-  const sleepSub = !sleeps.length ? "暂无睡眠" : "非设备测量";
   return (
     <ScrollView contentContainerStyle={contentStyle} showsVerticalScrollIndicator={false}>
       <View style={st.head}>
@@ -112,42 +129,55 @@ export function Today({
           style={st.avatar}
           accessibilityLabel="打开我的资料"
         >
-          <Ionicons name="person-outline" size={22} color={color.ink} />
+          <Ionicons name="person-outline" size={19} color={color.ink} />
         </Pressable>
       </View>
-      <Text style={st.intro}>已有 {days} 个日期留下记录</Text>
-      <View style={st.cards}>
-        <DataCard kind="meal" label="已估算摄入" value={kcalValue} unit="kcal" sublabel={mealSub} empty={!meals.length} />
-        <DataCard kind="training" label="训练" value={trainings.length ? `${trainings.length}` : "—"} unit="次" sublabel={trainingSub} empty={!trainings.length} />
-        <DataCard kind="sleep" label="估算睡眠" value={sleepValue} unit="小时" sublabel={sleepSub} empty={!sleeps.length} />
+      <View
+        style={st.dialWrap}
+        accessible
+        accessibilityLabel={`今日表盘：已记下 ${count} 条，饮食 ${meals.length} 餐，训练 ${trainings.length} 次，睡眠 ${sleeps.length} 段`}
+      >
+        <Dial size={dialSize} marks={marks} now={now}>
+          <Text style={st.dialCount}>{count}</Text>
+          <Text style={st.dialLabel}>{count ? "今天已记下" : days ? "今天还没有记录" : "从第一条记录开始"}</Text>
+          <Text style={st.dialTime}>现在 {timeLabel(nowDate.toISOString())}</Text>
+        </Dial>
+        <View style={st.legend}>
+          {(["sleep", "meal", "training"] as const).map((k) => (
+            <View key={k} style={st.legendItem}>
+              <View style={[st.legendDot, { backgroundColor: moduleTone[k].hue }]} />
+              <Text style={st.legendText}>{moduleTone[k].name}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+      <View style={st.gauges}>
+        <Gauge kind="meal" label="已估算摄入" value={kcalValue} unit="kcal" note={mealNote} />
+        <Gauge kind="training" label="训练" value={trainings.length ? `${trainings.length}` : "—"} unit="次" note={trainings.length ? `${workSets} 个工作组` : "暂无训练"} />
+        <Gauge kind="sleep" label="估算睡眠" value={sleepValue} unit="小时" note={sleeps.length ? "非设备测量" : "暂无睡眠"} />
       </View>
       <View style={st.actions}>
         <Pressable
           accessibilityRole="button"
           onPress={() => onOpen("meal")}
-          style={({ pressed }) => [st.primary, pressed && base.pressed]}
+          style={({ pressed }) => [st.capture, pressed && base.pressed]}
         >
-          <Ionicons name="camera" size={24} color={color.onInk} />
-          <Text style={st.primaryText}>记饮食</Text>
+          <Ionicons name="camera" size={22} color={color.onInk} />
+          <Text style={st.captureTitle}>记饮食</Text>
         </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => onOpen("training")}
-          style={({ pressed }) => [st.secondary, { borderColor: moduleTone.training.hue }, pressed && base.pressed]}
-        >
-          <Ionicons name="barbell-outline" size={22} color={moduleTone.training.hue} />
-          <Text style={[st.secondaryText, { color: moduleTone.training.text }]}>记训练</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => onOpen("sleep")}
-          style={({ pressed }) => [st.secondary, { borderColor: moduleTone.sleep.hue }, pressed && base.pressed]}
-        >
-          <Ionicons name="moon-outline" size={22} color={moduleTone.sleep.hue} />
-          <Text style={[st.secondaryText, { color: moduleTone.sleep.text }]}>记睡眠</Text>
-        </Pressable>
+        {(["training", "sleep"] as const).map((kind) => (
+          <Pressable
+            key={kind}
+            accessibilityRole="button"
+            onPress={() => onOpen(kind)}
+            style={({ pressed }) => [st.side, { borderColor: moduleTone[kind].hue }, pressed && base.pressed]}
+          >
+            <Ionicons name={moduleTone[kind].icon} size={20} color={moduleTone[kind].text} />
+            <Text style={[st.sideText, { color: moduleTone[kind].text }]}>{kind === "training" ? "记训练" : "记睡眠"}</Text>
+          </Pressable>
+        ))}
       </View>
-      <Text style={st.hint}>拍照或直接写下吃了什么</Text>
+      <Text style={st.days}>拍照或直接写下吃了什么 · 已有 {days} 个日期留下记录</Text>
       <View style={st.panel}>
         <View style={st.panelHead}>
           <Text style={st.panelTitle}>今日摘要</Text>
@@ -155,7 +185,7 @@ export function Today({
         </View>
         <Text style={st.summary}>{preview}</Text>
         <Pressable style={st.link} accessibilityRole="button" onPress={() => setShowLocal(!showLocal)}>
-          <Ionicons name={showLocal ? "chevron-up" : "document-text-outline"} size={18} color={color.accent} />
+          <Ionicons name={showLocal ? "chevron-up" : "document-text-outline"} size={16} color={color.pine} />
           <Text style={st.linkText}>{showLocal ? "收起摘要" : "查看完整摘要"}</Text>
         </Pressable>
         {showLocal && <MarkdownText value={summary} />}
@@ -165,27 +195,30 @@ export function Today({
           style={({ pressed }) => [st.ai, pressed && base.pressed]}
           onPress={onAi}
         >
-          <Ionicons name="sparkles" size={19} color={color.accent} />
+          <Ionicons name="sparkles" size={17} color={color.pine} />
           <Text style={st.aiText}>请求 AI 综合分析</Text>
         </Pressable>
         <Text style={st.aiNote}>发送前会询问，记录只在你同意后离开本机。</Text>
       </View>
       <Text style={st.sectionTitle}>今日记录</Text>
       {recent.length ? (
-        <View style={st.list}>
-          {recent.map((r) => (
+        <View style={st.timeline}>
+          {recent.map((r, i) => (
             <Pressable
               accessibilityRole="button"
               key={`${r.kind}-${r.id}`}
               onPress={() => onEdit(r.kind, r.id)}
               style={({ pressed }) => [st.row, pressed && base.pressed]}
             >
-              <View style={[st.rowDot, { backgroundColor: moduleTone[r.kind].hue }]} />
-              <View style={st.rowBody}>
-                <Text style={st.rowTitle} numberOfLines={1}>{r.title}</Text>
-                <Text style={st.rowDetail} numberOfLines={1}>{r.detail}</Text>
+              <View style={st.rail}>
+                <View style={[st.railDot, { backgroundColor: moduleTone[r.kind].hue }]} />
+                {i < recent.length - 1 && <View style={st.railLine} />}
               </View>
-              <Ionicons name="chevron-forward" size={18} color={color.inkFaint} style={{ alignSelf: "center" }} />
+              <View style={st.rowBody}>
+                <Text style={type.label}>{r.title}</Text>
+                <Text style={type.small}>{r.detail}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={17} color={color.inkFaint} style={{ alignSelf: "center" }} />
             </Pressable>
           ))}
         </View>
@@ -201,55 +234,62 @@ export function Today({
 
 const st = StyleSheet.create({
   head: { flexDirection: "row", alignItems: "flex-start", gap: space.md },
-  weekday: { ...type.small, color: color.accent, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.6 },
+  weekday: { ...type.small, color: color.pine, fontWeight: "700" },
   date: { ...type.display, marginTop: 2 },
   avatar: {
-    width: 48, height: 48, borderRadius: 24, backgroundColor: color.surface,
-    alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: color.line,
+    width: 44, height: 44, borderRadius: 22, backgroundColor: color.surface,
+    alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: color.lineStrong,
   },
-  intro: { ...type.small, color: color.inkFaint, marginTop: space.sm },
-  cards: { flexDirection: "row", gap: space.sm, marginTop: space.lg },
-  card: {
-    flex: 1, minWidth: 0, borderRadius: radius.block, padding: space.md,
-    borderWidth: 1.5,
+  dialWrap: { alignItems: "center", marginTop: space.lg },
+  dialCount: { fontSize: 56, lineHeight: 60, fontWeight: "800", color: color.ink, ...type.numeric },
+  dialLabel: { ...type.small, color: color.inkSoft },
+  dialTime: { fontSize: 12, color: color.pine, marginTop: space.xs, fontWeight: "700", ...type.numeric },
+  legend: { flexDirection: "row", gap: space.lg, marginTop: space.md },
+  legendItem: { flexDirection: "row", alignItems: "center", gap: 6 },
+  legendDot: { width: 8, height: 8, borderRadius: 4 },
+  legendText: { ...type.small },
+  gauges: { flexDirection: "row", gap: space.sm, marginTop: space.xl },
+  gauge: {
+    flex: 1, minWidth: 0, backgroundColor: color.surface, borderRadius: radius.block, padding: space.md,
+    borderTopWidth: 3,
   },
-  cardHead: { flexDirection: "row", alignItems: "center", gap: 6 },
-  cardLabel: { ...type.small, fontWeight: "700", flex: 1 },
-  cardValue: { fontSize: 28, lineHeight: 32, fontWeight: "800", marginTop: space.xs, ...type.numeric },
-  cardUnit: { fontSize: 13, fontWeight: "700", marginTop: -4 },
-  cardSub: { fontSize: 11, lineHeight: 15, marginTop: 2 },
-  actions: { flexDirection: "row", gap: space.sm, marginTop: space.xl },
-  primary: {
-    flex: 1.5, minHeight: 60, borderRadius: radius.pill, backgroundColor: color.meal,
+  gaugeHead: { flexDirection: "row", alignItems: "center", gap: 6 },
+  gaugeDot: { width: 6, height: 6, borderRadius: 3 },
+  gaugeLabel: { ...type.small, flex: 1 },
+  gaugeValue: { fontSize: 24, lineHeight: 30, fontWeight: "800", marginTop: space.sm, ...type.numeric },
+  gaugeNote: { fontSize: 11, lineHeight: 15, color: color.inkFaint, marginTop: 2 },
+  actions: { flexDirection: "row", gap: space.sm, marginTop: space.lg },
+  capture: {
+    flex: 1.4, minHeight: 56, borderRadius: radius.pill, backgroundColor: color.meal,
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space.sm,
   },
-  primaryText: { fontSize: 18, fontWeight: "800", color: color.onInk },
-  secondary: {
-    flex: 1, minHeight: 60, borderRadius: radius.pill, borderWidth: 2, backgroundColor: color.paper,
+  captureTitle: { fontSize: 17, fontWeight: "800", color: color.onInk },
+  side: {
+    flex: 1, minHeight: 56, borderRadius: radius.pill, borderWidth: 1.5, backgroundColor: color.surface,
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
   },
-  secondaryText: { fontSize: 15, fontWeight: "700" },
-  hint: { ...type.small, color: color.inkFaint, textAlign: "center", marginTop: space.sm },
-  panel: { marginTop: space.xl, backgroundColor: color.raised, borderRadius: radius.block, padding: space.lg },
+  sideText: { fontSize: 14, fontWeight: "800" },
+  days: { ...type.small, color: color.inkFaint, textAlign: "center", marginTop: space.sm },
+  panel: { marginTop: space.xl, backgroundColor: color.surface, borderRadius: radius.block, padding: space.lg },
   panelHead: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", marginBottom: space.sm },
   panelTitle: { ...type.title },
   panelMeta: { ...type.small, color: color.inkFaint },
   summary: { ...type.body, color: color.inkSoft },
   link: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 44 },
-  linkText: { color: color.accent, fontWeight: "700", fontSize: 15 },
+  linkText: { color: color.pine, fontWeight: "800", fontSize: 14 },
   ai: {
-    marginTop: space.md, minHeight: 54, borderRadius: radius.pill, backgroundColor: color.accentTint,
-    borderWidth: 2, borderColor: color.accent,
+    marginTop: space.md, minHeight: 50, borderRadius: radius.pill, backgroundColor: color.pineTint,
+    borderWidth: 1, borderColor: color.pine,
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space.sm,
   },
-  aiText: { color: color.accent, fontSize: 16, fontWeight: "800" },
+  aiText: { color: color.pine, fontSize: 15, fontWeight: "800" },
   aiNote: { ...type.small, color: color.inkFaint, textAlign: "center", marginTop: space.sm },
   sectionTitle: { ...type.title, marginTop: space.xxl, marginBottom: space.md },
-  list: { backgroundColor: color.surface, borderRadius: radius.block, paddingHorizontal: space.md, paddingVertical: space.xs },
-  row: { flexDirection: "row", alignItems: "center", gap: space.md, minHeight: 62, borderBottomWidth: 1, borderBottomColor: color.line },
-  rowDot: { width: 10, height: 10, borderRadius: 5 },
-  rowBody: { flex: 1, justifyContent: "center" },
-  rowTitle: { ...type.label, fontSize: 15 },
-  rowDetail: { ...type.small, marginTop: 2 },
-  empty: { alignItems: "center", gap: 6, paddingVertical: space.xxl, backgroundColor: color.surface, borderRadius: radius.block, paddingHorizontal: space.lg },
+  timeline: { backgroundColor: color.surface, borderRadius: radius.block, paddingHorizontal: space.md, paddingVertical: space.xs },
+  row: { flexDirection: "row", alignItems: "stretch", gap: space.md, minHeight: 64 },
+  rail: { width: 14, alignItems: "center", paddingTop: 22 },
+  railDot: { width: 10, height: 10, borderRadius: 5 },
+  railLine: { flex: 1, width: 2, backgroundColor: color.lineStrong, marginTop: 4 },
+  rowBody: { flex: 1, justifyContent: "center", paddingVertical: space.md },
+  empty: { alignItems: "center", gap: 4, paddingVertical: space.xl, backgroundColor: color.surface, borderRadius: radius.block },
 });

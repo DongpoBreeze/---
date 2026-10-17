@@ -3,17 +3,24 @@ import assert from 'node:assert/strict';
 import { calculateMealNutrition, validateMealRecognition } from '../shared/nutrition.mjs';
 import { analyseRecognition, nutritionDataset } from './nutrition.mjs';
 
+const modelNutritionEstimate = { basisGrams: 100, method: 'typical_recipe', per100g: {
+  calories: { min: 120, max: 150 }, protein: { min: 2, max: 4 }, carbs: { min: 24, max: 32 }, fat: { min: 0, max: 1 },
+}, recipeBasis: '通常熟米饭配方，水量有差异。', assumptions: [], confidence: 0.8 };
+const provenance = { model: 'configured/test-model', reasoningEffort: 'max', createdAt: '2026-10-17T03:00:00.000Z' };
 const component = (changes = {}) => ({ foodId: 'rice_white_long_grain_cooked', label: '熟米饭', uncertainty: [], ...changes });
-const meal = (components = [component()], changes = {}) => ({ foodName: '测试餐食', components,
+const modelComponent = (changes = {}) => ({ ...component(), nutritionEstimate: modelNutritionEstimate, ...changes });
+const meal = (components = [modelComponent()], changes = {}) => ({ foodName: '测试餐食', components,
   unresolved: [], assumptions: [], advice: '填写每道菜数量后计算。', ...changes });
 const nullTotals = (result) => { for (const key of ['calories', 'protein', 'carbs', 'fat']) assert.equal(result[key], null); };
 
 test('photo recognition exposes per-100g references and never estimates serving weight', () => {
-  const result = analyseRecognition(meal());
+  const result = analyseRecognition(meal(), { provenance });
   assert.equal(result.status, 'unknown');
   assert.equal(result.components[0].grams, null);
-  assert.equal(result.components[0].source.provider, 'usda-fdc');
-  assert.deepEqual(result.components[0].source.per100g, { calories: 130, protein: 2.69, carbs: 28.2, fat: 0.28 });
+  assert.equal(result.components[0].source.provider, 'model');
+  assert.deepEqual(result.components[0].source.per100gRange, modelNutritionEstimate.per100g);
+  assert.equal(result.components[0].source.model, provenance.model);
+  assert.equal(result.coverage.referenceCount, 1);
   assert.deepEqual(result.components[0].householdMeasure, { label: '半碗熟米饭', grams: 100, approximate: true });
   assert.deepEqual(result.coverage.missingQuantityLabels, ['熟米饭']);
   nullTotals(result);
@@ -69,25 +76,25 @@ test('unreliable household conversion is rejected and does not count toward inta
 });
 
 test('model recognition schema rejects visual weights, nutrient totals, and invalid food IDs', () => {
-  assert.throws(() => validateMealRecognition(meal([component({ grams: { min: 10, max: 20 } })])));
+  assert.throws(() => validateMealRecognition(meal([modelComponent({ grams: { min: 10, max: 20 } })])));
   assert.throws(() => validateMealRecognition({ ...meal(), calories: 500 }));
-  assert.throws(() => analyseRecognition(meal([component({ foodId: 'not_in_catalog' })])));
+  assert.throws(() => analyseRecognition(meal([modelComponent({ foodId: 'not_in_catalog' })]), { provenance }));
 });
 
 test('ambiguous identity with close candidate scores withholds exact USDA match', () => {
-  const result = analyseRecognition(meal([component({ candidates: [
+  const result = analyseRecognition(meal([modelComponent({ candidates: [
     { foodId: 'rice_white_long_grain_cooked', label: '熟米饭', confidence: 0.55 },
     { foodId: 'rice_white_medium_grain_cooked', label: '中粒米饭', confidence: 0.48 },
-  ] })]));
+  ] })]), { provenance });
   assert.equal(result.status, 'unknown');
   assert.equal(result.components[0].foodId, null);
-  assert.equal(result.components[0].source.provider, 'local-category');
-  assert.deepEqual(result.components[0].source.per100gRange.calories, { min: 100, max: 150 });
+  assert.equal(result.components[0].source.provider, 'model');
+  assert.deepEqual(result.components[0].source.per100gRange.calories, { min: 120, max: 150 });
 });
 
-test('preparation-specific USDA entries keep independent per-100g references', () => {
-  const raw = analyseRecognition(meal([component({ foodId: 'rice_white_long_grain_raw', label: '生米' })]));
-  const cooked = analyseRecognition(meal([component({ foodId: 'rice_white_long_grain_cooked', label: '熟米饭' })]));
+test('legacy preparation-specific USDA entries keep independent per-100g references', () => {
+  const raw = calculateMealNutrition(meal([component({ foodId: 'rice_white_long_grain_raw', label: '生米' })]), nutritionDataset, { mode: 'user-quantity-v2' });
+  const cooked = calculateMealNutrition(meal([component({ foodId: 'rice_white_long_grain_cooked', label: '熟米饭' })]), nutritionDataset, { mode: 'user-quantity-v2' });
   assert.equal(raw.components[0].source.per100g.calories, 365);
   assert.equal(cooked.components[0].source.per100g.calories, 130);
 });

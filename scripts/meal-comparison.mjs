@@ -1,3 +1,5 @@
+import { validateModelNutritionEstimate } from '../shared/nutrition.mjs';
+
 const NUTRIENTS = Object.freeze([
   ['calories', '热量', 'kcal'],
   ['protein', '蛋白质', 'g'],
@@ -31,6 +33,7 @@ function isObject(value) {
 function acceptedAnalysis(value) {
   if (!isObject(value)) return null;
   if (Object.hasOwn(value, 'analysis')) {
+    if (value.accepted === false || value.resultAccepted === false || value.providerCompleted === false) return null;
     const accepted = value.accepted === true || value.resultAccepted === true || value.status === 'accepted';
     if (!accepted || !isObject(value.analysis)
       || !['estimated', 'approximate', 'unknown'].includes(value.analysis.status)) return null;
@@ -59,16 +62,27 @@ function cleanList(value) {
   return Array.isArray(value) ? value.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim()) : [];
 }
 
+function usefulModelReference(component) {
+  const source = component.source;
+  if (!isObject(source) || source.provider !== 'model' || component.nutritionReferenceStale === true
+    || typeof source.model !== 'string' || !source.model.trim()
+    || typeof source.generatedAt !== 'string' || !Number.isFinite(Date.parse(source.generatedAt))) return false;
+  try {
+    validateModelNutritionEstimate({ basisGrams: source.basisGrams, method: source.method, per100g: source.per100gRange,
+      recipeBasis: source.recipeBasis, assumptions: source.assumptions, confidence: source.confidence });
+    return true;
+  } catch { return false; }
+}
+
 /**
- * Return a display-safe summary of an accepted, locally-calculated MealAnalysis.
- * Raw model nutrient values are intentionally ignored unless the analysis has
- * the local ingredient-weight calculator provenance marker.
+ * Summarize accepted references and locally calculated intake separately.
+ * Model nutrients are read only from the explicit per-100g v3 source snapshot.
  */
 export function summarizeMealAnalysis(input) {
   const analysis = acceptedAnalysis(input);
   if (!analysis) return null;
   const method = analysis.nutritionSource?.method;
-  const locallyCalculated = method === 'ingredient-weight-v1' || method === 'user-quantity-v2';
+  const locallyCalculated = ['ingredient-weight-v1', 'user-quantity-v2', 'ai-per100g-v3'].includes(method);
   const components = Array.isArray(analysis.components) ? analysis.components.filter(isObject).map((component) => ({
     foodId: typeof component.foodId === 'string' ? component.foodId : null,
     label: typeof component.label === 'string' ? component.label : '未标注食材',
@@ -81,7 +95,18 @@ export function summarizeMealAnalysis(input) {
       ? { label: component.householdMeasure.label, grams: component.householdMeasure.grams, approximate: component.householdMeasure.approximate === true } : null,
     reference: isObject(component.source) ? {
       provider: typeof component.source.provider === 'string' ? component.source.provider : null,
-      nutrients: Object.fromEntries(NUTRIENTS.map(([key]) => [key, rangeOrNull(component.source.per100g?.[key] ?? component.source.per100gRange?.[key])])),
+      basisGrams: Number.isFinite(component.source.basisGrams) ? component.source.basisGrams : null,
+      method: typeof component.source.method === 'string' ? component.source.method : null,
+      recipeBasis: typeof component.source.recipeBasis === 'string' ? component.source.recipeBasis : null,
+      assumptions: cleanList(component.source.assumptions),
+      confidence: Number.isFinite(component.source.confidence) ? component.source.confidence : null,
+      model: typeof component.source.model === 'string' ? component.source.model : null,
+      reasoningEffort: typeof component.source.reasoningEffort === 'string' ? component.source.reasoningEffort : null,
+      generatedAt: typeof component.source.generatedAt === 'string' ? component.source.generatedAt : null,
+      stale: component.nutritionReferenceStale === true,
+      useful: method === 'ai-per100g-v3' && usefulModelReference(component),
+      nutrients: Object.fromEntries(NUTRIENTS.map(([key]) => [key, method === 'ai-per100g-v3'
+        ? validRange(component.source.per100gRange?.[key]) : rangeOrNull(component.source.per100g?.[key] ?? component.source.per100gRange?.[key])])),
     } : null,
     consumedFraction: rangeOrNull(component.consumedFraction),
     quantitySource: typeof component.quantitySource === 'string' ? component.quantitySource : null,
@@ -96,6 +121,10 @@ export function summarizeMealAnalysis(input) {
     })) : [],
   })) : [];
 
+  const usefulReferenceCount = components.filter((component) => component.reference?.useful).length;
+  const referenceCount = Number.isInteger(analysis.coverage?.referenceCount) ? analysis.coverage.referenceCount : null;
+  const total = Number.isInteger(analysis.coverage?.total) ? analysis.coverage.total : null;
+  const counted = Number.isInteger(analysis.coverage?.counted) ? analysis.coverage.counted : null;
   return {
     status: typeof analysis.status === 'string' ? analysis.status : 'unknown',
     confidence: typeof analysis.confidence === 'number' && Number.isFinite(analysis.confidence)
@@ -103,9 +132,15 @@ export function summarizeMealAnalysis(input) {
     estimateScope: typeof analysis.estimateScope === 'string' ? analysis.estimateScope : null,
     foodName: typeof analysis.foodName === 'string' ? analysis.foodName : null,
     components,
+    usefulReferenceCount,
+    hasUsefulNutritionReference: method === 'ai-per100g-v3' && usefulReferenceCount > 0,
+    referenceCoverageComplete: components.length > 0 && usefulReferenceCount === components.length,
+    referenceCoverageConsistent: method === 'ai-per100g-v3' ? referenceCount === usefulReferenceCount && total === components.length : null,
+    intakeComplete: analysis.nutritionSource?.coverage === 'complete' || (total > 0 && counted === total),
     coverage: isObject(analysis.coverage) ? {
-      counted: Number.isInteger(analysis.coverage.counted) ? analysis.coverage.counted : null,
-      total: Number.isInteger(analysis.coverage.total) ? analysis.coverage.total : null,
+      referenceCount,
+      counted,
+      total,
       missingQuantityLabels: cleanList(analysis.coverage.missingQuantityLabels),
       unknownNutritionLabels: cleanList(analysis.coverage.unknownNutritionLabels),
     } : null,
@@ -116,6 +151,7 @@ export function summarizeMealAnalysis(input) {
       provider: typeof analysis.nutritionSource.provider === 'string' ? analysis.nutritionSource.provider : null,
       dataset: typeof analysis.nutritionSource.dataset === 'string' ? analysis.nutritionSource.dataset : null,
       method,
+      coverage: typeof analysis.nutritionSource.coverage === 'string' ? analysis.nutritionSource.coverage : null,
     } : null,
   };
 }
@@ -129,6 +165,14 @@ function attemptSummary(attempt) {
     httpStatus: Number.isInteger(attempt.httpStatus) ? attempt.httpStatus : null,
     providerCompleted: typeof attempt.providerCompleted === 'boolean' ? attempt.providerCompleted : null,
     resultAccepted: typeof attempt.resultAccepted === 'boolean' ? attempt.resultAccepted : attempt.status === 'accepted',
+    stageSucceeded: attempt.providerCompleted === true && attempt.resultAccepted === true && attempt.status === 'accepted'
+      && attempt.httpStatus >= 200 && attempt.httpStatus < 300,
+    model: typeof attempt.model === 'string' ? attempt.model : null,
+    reasoningEffort: typeof attempt.reasoningEffort === 'string' ? attempt.reasoningEffort : null,
+    resultVersion: Number.isSafeInteger(attempt.resultVersion) ? attempt.resultVersion : null,
+    usage: isObject(attempt.usage) ? Object.fromEntries(Object.entries(attempt.usage).filter(([key, value]) =>
+      ['input_tokens', 'output_tokens', 'total_tokens', 'cached_input_tokens', 'reasoning_tokens'].includes(key) && Number.isSafeInteger(value) && value >= 0)) : null,
+    errorCode: typeof attempt.errorCode === 'string' ? attempt.errorCode : null,
     startedAt: typeof attempt.startedAt === 'string' ? attempt.startedAt : null,
   };
 }
@@ -179,11 +223,13 @@ function attemptText(attempt) {
   const elapsed = attempt.elapsedMs === null ? '耗时未知' : `${(attempt.elapsedMs / 1000).toFixed(1)} 秒`;
   const http = attempt.httpStatus === null ? '' : `，HTTP ${attempt.httpStatus}`;
   const accepted = attempt.resultAccepted ? '，结果已接受' : '';
-  return `${stageLabel(attempt.stage)}：${status}，${elapsed}${http}${accepted}`;
+  const completed = attempt.providerCompleted === true ? '，传输已完成' : attempt.providerCompleted === false ? '，传输未完成' : '';
+  const error = attempt.errorCode ? `，错误：${attempt.errorCode}` : '';
+  return `${stageLabel(attempt.stage)}：${status}，${elapsed}${http}${accepted}${completed}${error}`;
 }
 
 function componentText(component) {
-  const id = component.foodId ? `（${component.foodId}）` : '（未匹配目录）';
+  const id = component.foodId ? `（${component.foodId}）` : component.reference?.provider === 'model' ? '（AI 营养参考）' : '（未匹配目录）';
   const quantity = component.userQuantity
     ? component.userQuantity.unit === 'g' ? `，用户填写 ${formatNumber(component.userQuantity.amount)} g`
       : `，用户填写 ${formatNumber(component.userQuantity.amount)} × ${component.householdMeasure?.label ?? '家用单位'}`
@@ -194,14 +240,20 @@ function componentText(component) {
   const candidates = component.candidates.length
     ? `；候选：${component.candidates.map(({ label, foodId }) => `${label}${foodId ? `（${foodId}）` : ''}`).join('、')}` : '';
   const reference = component.reference ? `；每 100 g 参考：${NUTRIENTS.map(([key, name, unit]) => `${name} ${formatRange(component.reference.nutrients[key], unit)}`).join('、')}` : '';
+  const method = component.reference?.method ? `；方法：${({ typical_recipe: '典型配方', category: '品类范围' })[component.reference.method] ?? component.reference.method}` : '';
+  const recipe = component.reference?.recipeBasis ? `；配方依据：${component.reference.recipeBasis}` : '';
+  const assumptions = component.reference?.assumptions.length ? `；参考假设：${component.reference.assumptions.join('；')}` : '';
+  const provenance = component.reference?.provider === 'model'
+    ? `；模型：${component.reference.model ?? '未提供'}，推理强度：${component.reference.reasoningEffort ?? '未提供'}；生成：${component.reference.generatedAt ?? '未提供'}` : '';
+  const stale = component.reference?.stale ? '；参考已失效，待重新估值' : '';
   const measure = component.householdMeasure ? `；约 ${component.householdMeasure.label} = ${formatNumber(component.householdMeasure.grams)} g` : '';
-  return `- ${component.label}${id}${quantity}${fraction}${confidence}${reference}${measure}${uncertainty}${candidates}`;
+  return `- ${component.label}${id}${quantity}${fraction}${confidence}${reference}${method}${recipe}${assumptions}${provenance}${stale}${measure}${uncertainty}${candidates}`;
 }
 
 function analysisSection(label, analysis, missingMessage) {
   if (!analysis) return `### ${label}\n${missingMessage}`;
   const status = STATUS_LABELS[analysis.status] ?? analysis.status;
-  const scope = analysis.nutritionSource?.method === 'user-quantity-v2'
+  const scope = ['user-quantity-v2', 'ai-per100g-v3'].includes(analysis.nutritionSource?.method)
     ? '按用户填写数量；未填菜品不计入'
     : SCOPE_LABELS[analysis.estimateScope] ?? analysis.estimateScope ?? '未提供';
   const lines = [
@@ -214,8 +266,9 @@ function analysisSection(label, analysis, missingMessage) {
     '| --- | --- |',
     ...NUTRIENTS.map(([key, name, unit]) => `| ${name} | ${formatRange(analysis.nutrients[key], unit)} |`),
   ];
-  if (analysis.coverage?.counted !== null && analysis.coverage?.total !== null) {
-    lines.push(`数量覆盖：已填写 ${analysis.coverage.counted}/${analysis.coverage.total} 道菜。`);
+  if (analysis.coverage && analysis.coverage.counted !== null && analysis.coverage.total !== null) {
+    lines.push(`数量覆盖：已计入 ${analysis.coverage.counted}/${analysis.coverage.total} 道菜；摄入完整：${analysis.intakeComplete ? '是' : '否'}。`);
+    if (analysis.coverage.referenceCount !== null) lines.push(`营养参考覆盖：${analysis.coverage.referenceCount}/${analysis.coverage.total} 道菜；四项有效参考：${analysis.usefulReferenceCount} 道；有用营养参考：${analysis.hasUsefulNutritionReference ? '是' : '否'}。`);
     if (analysis.coverage.missingQuantityLabels.length) lines.push(`未填写数量：${analysis.coverage.missingQuantityLabels.join('、')}。`);
     if (analysis.coverage.unknownNutritionLabels.length) lines.push(`营养数据未知：${analysis.coverage.unknownNutritionLabels.join('、')}。`);
   }
@@ -228,7 +281,8 @@ function requestSummaryText(summary) {
   if (!isObject(summary)) return '';
   const entries = Object.entries(summary).filter(([, value]) => value !== null && value !== undefined && typeof value !== 'object');
   if (!entries.length) return '';
-  const labels = { totalRequests: '请求数', acceptedRequests: '已接受', failedRequests: '失败', totalElapsedMs: '总耗时毫秒', elapsedMs: '耗时毫秒' };
+  const labels = { totalRequests: '请求数', completedRequests: '完成传输', acceptedRequests: '已接受', successfulStages: '成功阶段',
+    failedRequests: '失败', cumulativeRequests: '累计请求', remainingRequests: '剩余请求', totalElapsedMs: '总耗时毫秒', elapsedMs: '耗时毫秒' };
   const fields = entries.map(([key, value]) => `${labels[key] ?? key}：${value}`);
   if (isObject(summary.statusCounts)) {
     fields.push(`状态统计：${Object.entries(summary.statusCounts).map(([key, value]) => `${STATUS_LABELS[key] ?? key} ${value}`).join('、')}`);

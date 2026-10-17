@@ -4,6 +4,7 @@ import { parseBackupArchive } from '../src/backup';
 import {
   configureMockAi, fulfillProviderJson, fulfillProviderResponse, installMockAiProvider,
   MOCK_AI_KEY, MOCK_AI_URL, openAiSettings, saveAiSettingsUi,
+  mockNutritionEstimate,
 } from './helpers/mock-ai-provider';
 
 test('configured provider and upstream effort drive analysis while keys stay out of health backups', async ({ page }, testInfo) => {
@@ -15,9 +16,8 @@ test('configured provider and upstream effort drive analysis while keys stay out
     onResponse: async (route) => fulfillProviderResponse(route, {
       foodName: '已确认熟白米饭',
       components: [{ foodId: 'rice_white_long_grain_cooked', label: '熟白米饭',
-        grams: { min: 200, max: 200 }, quantitySource: 'user',
-        consumedFraction: { min: 0.5, max: 0.5 }, uncertainty: [] }],
-      unresolved: [], assumptions: ['用户提供完整重量和食用比例'], advice: '按已确认摄入查看营养参考。',
+        nutritionEstimate: mockNutritionEstimate(), uncertainty: [] }],
+      unresolved: [], assumptions: ['每道菜数量需要用户另行填写。'], advice: '填写实际食用量后查看小计。',
     }),
   });
   await page.goto('/');
@@ -62,7 +62,8 @@ test('configured provider and upstream effort drive analysis while keys stay out
   await expect(page.getByRole('dialog').getByText('当前分析', { exact: true })).toBeVisible();
   await page.getByRole('dialog').getByText(/热量.*130 kcal/).scrollIntoViewIfNeeded();
   await expect(page.getByRole('dialog').getByText(/热量.*130 kcal/)).toBeVisible();
-  await page.screenshot({ path: testInfo.outputPath('direct-provider-usda-analysis.png'), fullPage: true });
+  await expect(page.getByText('待填写菜品数量', { exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('direct-provider-ai-reference.png'), fullPage: true });
   await page.getByRole('dialog').getByLabel('关闭', { exact: true }).click();
   await page.getByRole('tab', { name: '我的', exact: true }).click();
   const downloadEvent = page.waitForEvent('download');
@@ -73,8 +74,9 @@ test('configured provider and upstream effort drive analysis while keys stay out
   expect(JSON.stringify(backup)).not.toContain(MOCK_AI_KEY);
   expect(JSON.stringify(backup)).not.toContain(MOCK_AI_URL);
   expect(backup.data.meals[0].analyses?.[0]).toMatchObject({
-    model: 'settings-model', analysis: { status: 'estimated', calories: { min: 130, max: 130 },
-      nutritionSource: { provider: 'usda-fdc', coverage: 'complete' } },
+    model: 'settings-model', analysis: { status: 'unknown', calories: null,
+      components: [{ userQuantity: null, source: { provider: 'model', model: 'settings-model', basisGrams: 100 } }],
+      nutritionSource: { provider: 'model', coverage: 'incomplete', method: 'ai-per100g-v3' } },
   });
   const response = provider.responses()[0];
   expect(response.body).toMatchObject({ model: 'settings-model', reasoning: { effort: 'high' }, store: false });

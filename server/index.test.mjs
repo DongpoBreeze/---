@@ -14,9 +14,12 @@ import { GatewayError, normaliseAnalysis } from './protocol.mjs';
 
 const accessToken = 'test-access-token';
 const jpeg = 'data:image/jpeg;base64,' + Buffer.from([0xff, 0xd8, 0xff, 0xd9]).toString('base64');
+const modelNutritionEstimate = { basisGrams: 100, method: 'typical_recipe', per100g: {
+  calories: { min: 120, max: 150 }, protein: { min: 2, max: 4 }, carbs: { min: 24, max: 32 }, fat: { min: 0, max: 1 },
+}, recipeBasis: '按通常熟米饭配方与含水量估计。', assumptions: ['含水量有差异。'], confidence: 0.8 };
 const mealResult = {
   foodName: '米饭', components: [{ foodId: 'rice_white_long_grain_cooked', label: '熟白米饭',
-    uncertainty: [], category: 'grain', confidence: 0.9 }], confidence: 0.9,
+    uncertainty: [], category: 'grain', confidence: 0.9, nutritionEstimate: modelNutritionEstimate }], confidence: 0.9,
   unresolved: [],
   assumptions: [], advice: '按每 100 g 参考，填写菜品数量后计算。',
 };
@@ -84,7 +87,7 @@ async function withFixture(overrides, behavior, run) {
         if (response.destroyed) return;
         response.writeHead(action.status || 200, { 'Content-Type': 'application/json' });
         const isMeal = parsed.messages[0].content.includes('foodName');
-        response.end(action.raw ?? JSON.stringify({ choices: [{ message: {
+        response.end(action.raw ?? JSON.stringify({ choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant',
           content: action.content ?? JSON.stringify(isMeal ? mealResult : { text: '仅根据已记录内容生成的总结。' }),
         } }] }));
       } catch {
@@ -146,13 +149,15 @@ test('meal analysis uses bounded visual chat input and stores no sensitive resul
     assert.equal(result.body.analysis.calories, null);
     assert.equal(result.body.analysis.coverage.counted, 0);
     assert.deepEqual(result.body.analysis.coverage.missingQuantityLabels, ['熟白米饭']);
-    assert.equal(result.body.analysis.components[0].source.fdcId, '168878');
-    assert.equal(result.body.analysis.nutritionSource.method, 'user-quantity-v2');
+    assert.equal(result.body.analysis.components[0].source.provider, 'model');
+    assert.deepEqual(result.body.analysis.components[0].source.per100gRange, modelNutritionEstimate.per100g);
+    assert.equal(result.body.analysis.nutritionSource.method, 'ai-per100g-v3');
+    assert.equal(result.body.analysis.coverage.referenceCount, 1);
     assert.deepEqual(result.body.analysis.components[0].householdMeasure, { label: '半碗熟米饭', grams: 100, approximate: true });
     assert.equal(result.body.model, 'mock-vision');
     assert.equal(typeof result.body.createdAt, 'string');
     assert.equal(calls.length, 1);
-    assert.equal(calls[0].body.max_tokens, 1200);
+    assert.equal(calls[0].body.max_tokens, 8192);
     assert.equal(calls[0].body.stream, false);
     assert.equal(calls[0].body.messages[1].content[1].image_url.url, jpeg);
     assert.equal(calls[0].headers.authorization, 'Bearer mock-upstream-key');
@@ -221,7 +226,7 @@ test('rejects authentication, malformed JSON, photo types, body size, and conten
   });
 });
 
-test('recognition output is calculated locally; strict model schema rejects forged totals and sources', () => {
+test('new recognition allows per-100g estimates while strict model schema rejects forged totals and sources', () => {
   const unknown = normaliseAnalysis(JSON.stringify(unknownResult));
   assert.equal(unknown.status, 'unknown');
   assert.equal(unknown.calories, null);
@@ -247,7 +252,7 @@ test('recognition output is calculated locally; strict model schema rejects forg
 
 test('unknown ingredients survive the gateway while no intake is claimed without user quantities', async () => {
   const recognition = { ...mealResult, components: [...mealResult.components,
-    { foodId: null, label: '不确定的豆皮或其他配料', uncertainty: ['身份不明'] }],
+    { foodId: null, label: '不确定的豆皮或其他配料', uncertainty: ['身份不明'], nutritionEstimate: null }],
     unresolved: ['身份不明'] };
   await withFixture({}, () => ({ content: JSON.stringify(recognition) }), async ({ url }) => {
     const result = await api(url, input('incomplete-photo'));
@@ -270,7 +275,7 @@ test('preparation uncertainty preserves confirmed identity while leaving nutriti
     assert.equal(result.body.analysis.status, 'unknown');
     for (const key of ['calories', 'protein', 'carbs', 'fat']) assert.equal(result.body.analysis[key], null);
     assert.equal(result.body.analysis.components[0].foodId, 'lotus_root_boiled');
-    assert.equal(result.body.analysis.components[0].source.provider, 'usda-fdc');
+    assert.equal(result.body.analysis.components[0].source.provider, 'model');
     assert.equal(result.body.analysis.components[0].userQuantity, null);
     assert.deepEqual(result.body.analysis.components[0].uncertainty, recognition.components[0].uncertainty);
     assert.deepEqual((await api(url, value)).body, result.body);

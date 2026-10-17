@@ -2,6 +2,40 @@ export type Goal = 'health' | 'fat-loss' | 'muscle-gain';
 
 export type NutrientRange = { min: number; max: number };
 export type NutrientValues = { calories: number | null; protein: number | null; carbs: number | null; fat: number | null };
+export type NutrientRanges = { calories: NutrientRange; protein: NutrientRange; carbs: NutrientRange; fat: NutrientRange };
+/** The only nutrient values a new model response may supply. */
+export type ModelNutritionEstimate = {
+  basisGrams: 100;
+  method: 'typical_recipe' | 'category';
+  per100g: NutrientRanges;
+  recipeBasis: string;
+  assumptions: string[];
+  confidence: number;
+} | null;
+export type ModelNutritionSource = {
+  provider: 'model';
+  basisGrams: 100;
+  method: 'typical_recipe' | 'category';
+  per100gRange: NutrientRanges;
+  recipeBasis: string;
+  assumptions: string[];
+  confidence: number;
+  model: string;
+  reasoningEffort?: string;
+  generatedAt: string;
+};
+export type DatabaseNutritionSource = {
+  provider: 'usda-fdc' | 'local-category';
+  fdcId?: string;
+  dataset: string;
+  categoryId?: string;
+  sourceUrl?: string;
+  description?: string;
+  preparation?: string;
+  householdMeasure?: MealHouseholdMeasure;
+  per100g?: NutrientValues;
+  per100gRange?: NutrientRanges;
+};
 export type MealCandidate = {
   foodId: string | null;
   label: string;
@@ -40,18 +74,9 @@ export type MealComponent = {
   /** Legacy spelling retained for imported records. */
   estimateBasis?: MealEstimationBasis | MealEstimationBasis[];
   uncertainty: string[];
-  source?: {
-    provider: 'usda-fdc' | 'local-category';
-    fdcId?: string;
-    dataset: string;
-    categoryId?: string;
-    sourceUrl?: string;
-    description?: string;
-    preparation?: string;
-    householdMeasure?: MealHouseholdMeasure;
-    per100g?: NutrientValues;
-    per100gRange?: { calories: NutrientRange; protein: NutrientRange; carbs: NutrientRange; fat: NutrientRange };
-  } | null;
+  /** Kept for audit after a user changes the dish identity or cooking method. */
+  nutritionReferenceStale?: boolean;
+  source?: DatabaseNutritionSource | ModelNutritionSource | null;
 };
 export type NutritionSource = {
   provider: 'usda-fdc' | 'local-category' | 'mixed' | 'model' | 'manual';
@@ -68,6 +93,7 @@ export type MealCoverage = {
   total: number;
   unknownLabels: string[];
   counted?: number;
+  referenceCount?: number;
   missingQuantityLabels?: string[];
   unknownNutritionLabels?: string[];
 };

@@ -1,35 +1,50 @@
-# Nutrition Estimation Integration
+# 菜品每 100 g AI 营养估值
 
-Date: 2026-10-17. Scope: dish recognition, local per-100-g nutrition references, user-entered quantities, portable analysis history, and real-photo diagnostics. Health records and original media remain local and are not rewritten by validation.
+更新日期：2026-10-17。用户已确认以本规格替换“新分析的营养只能由本地数据库计算”的旧约定。实施与验证证据见 [开发记录](development.md)。
 
-## Analysis contract
+## 输出口径与范围
 
-The model returns dish-recognition facts only: `foodName`, components, ranked candidates, preparation/cooking observations, optional image regions and evidence, confidence, uncertainty, assumptions, and advice. It must not return photo-derived weight, portion size, consumed fraction, nutrient totals, or nutrition-database provenance. The server rejects those fields and validates the complete response before accepting a stage.
+照片分析识别可单独计量的成品菜，AI 按典型配方直接估算每 100 g 可食用成品的 kcal、蛋白质、碳水和脂肪范围。具体配方无法确认但类别明确时给类别近似；完全无法判断时保留菜品并说明未知。配方、用油、配料比例是估算假设。整道菜的配料、油和酱不重复计入独立菜品；独立可食用的配菜或酱碟可以单列。
 
-Each component retains its label, candidates, identity uncertainty, evidence, category, and image region. A confirmed food identity remains eligible for a local reference when only quantity or cooking details are uncertain; an unresolved identity conflict prevents exact food matching. Older analyses remain readable, including their legacy `grams`, `quantitySource`, `consumedFraction`, and estimate-scope fields, but those legacy photo estimates are never migrated into user-entered quantities.
+本次不扩展微量营养素、配方编辑器、联网菜谱检索或额外识别模型。新分析不推断照片重量、用户数量或实际摄入总量，原图独立保存。USDA SR Legacy 139 条目录与本地类别数据继续用于旧记录及已有手动匹配；本地明确的家用单位换算继续使用，新 AI 参考不被数据库覆盖。
 
-## Local reference and quantity calculation
+## 协议、来源与校验
 
-Every recognized dish is matched against the bundled USDA SR Legacy index or a local broad category range. The result can show per-100-g kcal, protein, carbohydrate, and fat references. A household unit is offered only when the local catalog has an explicit gram conversion, such as half a bowl of cooked rice at approximately 100 g; otherwise the user enters grams.
+模型组件增加 `nutritionEstimate`：非空时包含 `basisGrams: 100`、`method: typical_recipe | category`、`per100g` 四项 `min/max` 范围、`recipeBasis`、`assumptions` 和 0–1 的营养 `confidence`。未知时为 `null`，并在组件不确定项中说明原因。识别置信度与营养置信度分别保存，没有 USDA ID 不影响 AI 参考。
 
-New analyses start with quantity blank. For each dish, a user may enter grams or the displayed household-unit count. The local calculator applies that quantity to the local nutrient reference. It shows the subtotal for counted dishes and names dishes omitted for missing quantity or unavailable nutrition. No quantity means no intake contribution. A partial subtotal is marked incomplete in the meal analysis and daily summary. Nutrients absent from a reference remain unknown instead of being invented.
+程序将已校验参考保存为 `MealComponent.source` 的 `provider: model` 分支，营养值仅保留一个标准化快照。来源含每 100 g 口径、方法、配方依据、假设、营养置信度和实际请求的模型、强度、生成时间；配置元数据由程序填写，不使用模型自报的数据库、许可证或来源身份。`nutritionReferenceStale` 标记用户修改菜名或做法后不再适用的参考。
 
-The bundled index is `data/nutrition/usda-sr-legacy.json`: 139 selected, archive-backed foods, retaining the original 29 identities and adding 110 common ingredients with Chinese aliases and explicit preparation labels. Values come from USDA FoodData Central SR Legacy 2018-04 (CC0-1.0); the data README documents reproducible archive extraction. Broad fallback ranges are maintained in `data/nutrition/category-ranges.json` and are labeled approximate.
+新分析使用 `nutritionSource.method: ai-per100g-v3`。`coverage.referenceCount` 表示有效参考数，`coverage.counted` 表示已填写且计入摄入的菜品数，未填数量与未知/过期参考分别列出。没有可计入数量时总量为 `null`、`status: unknown`，但每 100 g 参考仍可用；有数量时为 `approximate`。`coverage: complete` 仅表示每道菜都有数量和有效参考，不表示 AI 数值已实测。
 
-## Request flow and reliability
+仅放开指定组件字段中的营养数值。模型照片重量、用户数量、整餐总量和来源字段仍被拒绝。每项数值必须有限、非负且下界不超过上界；热量不超过 900 kcal/100 g，各宏量不超过 100 g/100 g，三项宏量下界之和不超过 100 g。类型或范围错误导致阶段失败，不改值代填。`{kind,data}` 包装只在 kind 正确且内容有效时接受。
 
-The adaptive flow makes one whole-photo request, then may make one targeted crop review with at most four crops when confidence, duplicates, candidate ambiguity, or identity conflicts warrant it. A final merge is sent only when review conflicts materially with the first result. Maximum: three requests per meal; no automatic retries. Each stage has a 180-second timeout and can be cancelled. A later review timeout or invalid response does not discard an already validated first-stage result.
+客户端直连和服务端网关共用协议校验及换算。每阶段上限 180 秒、单餐最多三次、可取消、无自动重试。完整完成状态后再做业务校验；HTTP 200、部分文本、单独 `[DONE]` 或结束流不能替代完成。复核失败保留通过校验的首轮结果。识别低置信、重复或身份冲突可触发复核；营养区间宽、营养低置信或油量未知本身不额外触发请求，营养差异本身不触发最终合并。
 
-Only a complete provider completion event followed by schema and business validation is accepted. HTTP 200, partial stream text, `[DONE]`, or an ended stream is not success. `{kind,data}` wrappers are accepted only when the kind matches the request and the wrapped value validates. Native/app clients create local crops. Direct gateway callers without an image-crop callback may skip targeted review; diagnostics must not claim that absent crops were reviewed.
+## 数量、修正和界面
 
-## Saving, correction, and display
+每道菜直接显示每 100 g 四项范围，以及“AI 按典型配方估算”或“AI 按类别近似估算”。营养置信度与识别置信度区分；配方依据、配料/用油假设和不确定性放在“查看估算依据”。未填写数量时显示参考已生成，提示填写实际食用量，不把它当成分析失败。
 
-The app retains the original photo separately from its normalized analysis copy. Analysis versions and input revisions remain separate. A quantity correction creates a new local analysis version and does not modify the original recognition or photo. Exports preserve old analyses and include new `userQuantity`, household conversion, coverage, and nutrition-source fields; import remains backward-compatible.
+用户数量默认空白。按 `每 100 g 范围 × 实际食用克数 / 100` 换算；家用单位仅采用本地已有且有明确克数的参考，无换算时只能填写克数。先用未舍入数值汇总，最后 kcal 向外取整数、宏量向外保留一位小数。只改数量不请求模型、不重新查库，不更改每 100 g 快照。
 
-The result view first shows recognized dishes and confidence. Per-100-g references and any reliable household conversion are available in the estimate basis. User-entered quantities produce either a complete result or a clearly labeled subtotal. Supporting candidates, evidence, uncertainty, and omitted dishes remain available in the estimate-basis details.
+部分填写显示“已填写菜品小计”，列出数量未填、营养未知或参考过期的菜品，日摘要同样标记不完整。全部填写显示按用户食用量估算的总计，没有可计入菜品时总量保持 `null`。
 
-## Validation status
+修改菜名或做法后，旧参考保留但标为过期，不进入小计；主动重新分析时将菜品修正作为用户提供信息发送。新分析另存版本，数量默认空白。只改数量、修改菜品、重新分析均保留原始版本与照片。旧 USDA/类别/照片重量分析和备份继续按原来源读取，旧照片重量不迁移为用户数量。新备份完整导出恢复 AI 依据、来源、参考、过期标识和数量。
 
-The automated checks cover recognition-only schema rejection, wrappers, streaming completion, timeout/cancellation behavior, adaptive review and first-result retention, per-100-g USDA/category references, household conversion, gram/unit entry, partial totals, daily-summary incompleteness, and legacy backup compatibility. Current command results are recorded in `docs/development.md`.
+## 验收标准
 
-The 50-meal truth-set template and offline evaluator are available, but the template contains no labeled meals. Product recognition accuracy and nutrition accuracy therefore remain pending. Real-photo protocol completion can validate transport and schema behavior only; without human-confirmed dish identities and user-entered amounts, it cannot establish nutritional accuracy.
+| 编号 | 场景 | 必须满足 |
+| --- | --- | --- |
+| N-100-01 | 单品、多道菜、典型配方 | 完整回包通过校验后显示每道菜四项每 100 g 参考；数量为空；同道菜的油/配料不重复计入。 |
+| N-100-02 | 类别近似、完全未知 | 正确标注近似，未知为 null 和原因，不填零、不用数据库静默代填。 |
+| N-100-03 | 恶意和越界协议 | 错误包装/类型/单位、负数、反向或越界范围、模型数量/整餐总量/来源被拒绝。 |
+| N-100-04 | 数量换算 | 合成测试 160–200 kcal/100 g × 250 g = 400–500 kcal；四项同比例，原参考不被改写且请求数不增加。 |
+| N-100-05 | 部分、全部、清空数量 | 仅计入有效有数量菜品；遗漏项与摘要一致；清空移出汇总；全部填写仍标近似。 |
+| N-100-06 | 菜品修正与历史 | 改名/做法使参考过期；重分析附带修正；取消、失败、迟到响应不覆盖原输入或历史。 |
+| N-100-07 | 旧备份及新导出恢复 | 原始照片、数值、来源、假设、数量与版本完整往返；旧照片重量不成为用户数量。 |
+| N-100-08 | 请求生命周期 | 完整完成状态、包装与业务校验、180 秒、取消、最多三次、首轮保留均通过离线回归。 |
+| N-100-09 | 手机与桌面 | 拍照回填、参考、数量/校正、依据、历史、摘要、导出恢复通过 E2E，无横向溢出或页面异常。 |
+| N-100-10 | 真实模型 | 本机 gpt-6.1-sol/max 对既有餐图最多三次，至少一道菜有完整四项参考且通过数量换算展示；只有 unknown 或未完成不算此项成功。 |
+
+真实验证继续累计原有两本账本：本轮执行前只读确认 4 + 51 = 55 次；随后按 `gpt-6.1-sol/max`、流式、低分辨率、180 秒阶段上限对既有 App 餐图发起 1 次请求，HTTP 200 但未收到 `response.completed`，按超时失败计入，当前累计 **56/75**，剩余 19 次。失败和取消也计次；每轮每餐最多三次、最多 25 餐复核。保留历史账本，不换本重置额度。记录模型/强度、阶段、耗时、HTTP、completed、accepted、有用参考、usage 和错误，报告不含凭据。
+
+现有照片没有实际配方与称重营养真值。本次验证功能、计算、协议及输出合理性；真实营养准确率仍待带真值数据，不能用协议成功、区间合理或合成测试替代。

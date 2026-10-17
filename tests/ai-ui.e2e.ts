@@ -16,7 +16,7 @@ test('AI versions preserve source input and reject responses after record change
       latestInput = { kind: request.record!.kind, payload: request.record!.data as { summary?: string; profile: object } };
       interceptedKinds.push(latestInput.kind);
       const content = latestInput.kind === 'meal'
-        ? { foodName: '模拟识别餐食', components: [{ foodId: null, label: '未知酱料', grams: null, quantitySource: 'unknown', consumedFraction: null, uncertainty: ['重量和食用比例未知'] }], unresolved: ['未知酱料尚未匹配'], assumptions: ['仅测试输出'], advice: '模拟饮食反馈' }
+        ? { foodName: '模拟识别餐食', components: [{ foodId: null, label: '未知酱料', nutritionEstimate: null, uncertainty: ['配方未知'] }], unresolved: ['未知酱料尚未匹配'], assumptions: ['仅测试输出'], advice: '模拟饮食反馈' }
         : { text: delayed ? '过期测试总结' : '模拟综合总结' };
       const respond = () => fulfillProviderResponse(route, content);
       if (delayed) release = respond;
@@ -72,5 +72,42 @@ test('AI versions preserve source input and reject responses after record change
     expect(request.body).toMatchObject({ model: MOCK_AI_MODEL, reasoning: { effort: 'high' }, store: false });
   }
   expect(provider.legacyRequests).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test('已保存餐食等待80秒后仍可接收完整分析版本', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  page.on('dialog', (dialog) => { void dialog.accept(); });
+  let finishProvider: (() => Promise<void>) | undefined;
+  const provider = await installMockAiProvider(page, {
+    onResponse: async (route) => new Promise<void>((resolve) => {
+      finishProvider = async () => {
+        await fulfillProviderResponse(route, {
+          foodName: '已保存慢响应餐食', confidence: 0.9, components: [],
+          unresolved: [], assumptions: [], advice: '完整响应已收到。',
+        });
+        resolve();
+      };
+    }),
+  });
+  await page.goto('/');
+  await configureMockAi(page);
+  await page.getByText('记饮食', { exact: true }).click();
+  await page.getByLabel('食物名称', { exact: true }).fill('已保存慢响应餐食');
+  await page.getByRole('dialog').getByRole('button', { name: '保存', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.getByRole('tab', { name: '记录', exact: true }).click();
+  await page.clock.install();
+  await page.getByLabel('请求饮食分析', { exact: true }).click();
+  await expect.poll(() => provider.responses().length).toBe(1);
+  await page.clock.fastForward(80_000);
+  await expect(page.getByText('分析已等待 30 秒，你可以取消；记录不会受影响。', { exact: true })).toBeVisible();
+  expect(typeof finishProvider).toBe('function');
+  await finishProvider!();
+  await expect(page.getByText('这餐的分析已保存为独立版本。', { exact: true })).toBeVisible();
+  await page.getByText('已保存慢响应餐食', { exact: true }).click();
+  await expect(page.getByTestId('current-meal-analysis').getByText('完整响应已收到。', { exact: true })).toBeVisible();
+  expect(provider.responses()).toHaveLength(1);
   expect(errors).toEqual([]);
 });

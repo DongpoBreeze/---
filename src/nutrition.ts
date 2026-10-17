@@ -1,5 +1,6 @@
 import type { MealAnalysis, MealComponent, NutrientRange } from './types';
 import { calculateMealNutrition as calculateSharedMealNutrition } from '../shared/nutrition.mjs';
+import type { NutritionCalculationOptions } from '../shared/nutrition.mjs';
 
 export type CatalogFood = {
   id: string;
@@ -48,15 +49,16 @@ export function correctionComponent(food: CatalogFood | null, label: string): Co
   return { foodId: food?.id ?? null, label: label || food?.label || '未匹配食材', grams: null, quantitySource: 'unknown', consumedFraction: null, uncertainty: food ? [] : ['食材未匹配到 USDA 目录。'] };
 }
 
-export async function calculateMealNutrition(recognition: MealAnalysis, dataset: NutritionDataset = nutritionDataset, mode: 'legacy' | 'user-quantity-v2' = 'legacy'): Promise<MealAnalysis> {
+export async function calculateMealNutrition(recognition: MealAnalysis, dataset: NutritionDataset = nutritionDataset, mode: 'legacy' | 'user-quantity-v2' | 'ai-per100g-v3' = 'legacy', options: Omit<NutritionCalculationOptions, 'mode'> = {}): Promise<MealAnalysis> {
   const input = {
     foodName: recognition.foodName,
-    components: (recognition.components ?? []).map(({ source: _source, eatenFraction: _eaten, edibleFraction: _edible, ...component }) => ({ ...component, quantitySource: component.quantitySource ?? 'unknown', consumedFraction: component.consumedFraction ?? null })),
+    components: (recognition.components ?? []).map(({ eatenFraction: _eaten, edibleFraction: _edible, ...component }) => ({ ...component, quantitySource: component.quantitySource ?? 'unknown', consumedFraction: component.consumedFraction ?? null })),
     unresolved: recognition.unresolved ?? [],
     assumptions: recognition.assumptions,
     advice: recognition.advice,
     ...(recognition.estimateScope === undefined ? {} : { estimateScope: recognition.estimateScope }),
     ...(recognition.confidence === undefined ? {} : { confidence: recognition.confidence }),
+    ...(recognition.nutritionSource === undefined ? {} : { nutritionSource: recognition.nutritionSource }),
   };
-  return calculateSharedMealNutrition(input, dataset, { mode });
+  return calculateSharedMealNutrition(input, dataset, { ...options, mode });
 }

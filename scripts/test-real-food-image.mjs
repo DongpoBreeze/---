@@ -2,20 +2,38 @@
 // Real-image diagnostic; never prepares product settings or reuses the app ledger.
 import { readFile, writeFile, mkdir, chmod } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
 import { chromium } from '@playwright/test';
 import { readLocalCodexProvider, LOCAL_MODEL, LOCAL_REASONING } from '../server/local-codex.mjs';
 import { parseConfig } from '../server/config.mjs';
 import { GatewayError, callModel, modelRequest } from '../server/protocol.mjs';
-import { RealMealTestLedger, REAL_MEAL_LIMITS } from './real-meal-test-ledger.mjs';
+import { calculateMealNutrition } from '../shared/nutrition.mjs';
+import { summarizeMealAnalysis } from './meal-comparison.mjs';
+import { RealMealTestLedger, REAL_MEAL_LIMITS, REAL_MEAL_LEDGER_PATHS, isExistingRealMealLedgerPath } from './real-meal-test-ledger.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const DEFAULT_IMAGE = 'C:\\Users\\14360\\.codex\\attachments\\b1448d7b-6357-4c30-94a9-a8a9ebd08c21\\image-1.png';
+export const DEFAULT_IMAGE = 'C:\\Users\\14360\\.codex\\attachments\\b1448d7b-6357-4c30-94a9-a8a9ebd08c21\\image-1.png';
+export const REAL_FOOD_RESULT_VERSION = 3;
 const MAX_REAL_MODEL_CALLS = REAL_MEAL_LIMITS.totalRequests;
-const DEFAULT_LEDGER_PATH = join(root, 'artifacts', 'real-meal-request-ledger.sqlite');
+const DEFAULT_LEDGER_PATH = REAL_MEAL_LEDGER_PATHS[0];
+const NUTRIENTS = ['calories', 'protein', 'carbs', 'fat'];
 const getArg = (name, argv) => argv.find((value) => value.startsWith(`--${name}=`))?.slice(name.length + 3);
 const safeHash = (value) => createHash('sha256').update(value).digest('hex');
+
+function sameValue(left, right) {
+  if (left === right) return true;
+  if (typeof left !== typeof right || left === null || right === null) return false;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return Array.isArray(left) && Array.isArray(right) && left.length === right.length
+      && left.every((value, index) => sameValue(value, right[index]));
+  }
+  if (typeof left !== 'object') return false;
+  const leftKeys = Object.keys(left).sort();
+  const rightKeys = Object.keys(right).sort();
+  return leftKeys.length === rightKeys.length && leftKeys.every((key, index) => key === rightKeys[index]
+    && sameValue(left[key], right[key]));
+}
 
 function cleanUsage(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -35,20 +53,23 @@ function extractUsage(body) {
 
 export function parseOptions(argv = process.argv) {
   const timeoutMs = Number(getArg('timeout-ms', argv) ?? 180_000);
-  const imageDetail = getArg('image-detail', argv);
+  const imageDetail = getArg('image-detail', argv) ?? 'low';
   const approximateCopy = argv.includes('--approximate-copy');
   const actualAppCopy = argv.includes('--app-copy');
   const plannedMeals = Number(getArg('planned-meals', argv) ?? 50);
+  const ledgerPath = getArg('ledger-path', argv) ?? DEFAULT_LEDGER_PATH;
   if (!argv.includes('--live')) throw new Error('Use --live to authorize the real request.');
   if (approximateCopy && actualAppCopy) throw new Error('Choose one copy mode.');
+  if (argv.includes('--stream') && argv.includes('--no-stream')) throw new Error('Choose one streaming mode.');
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1_000 || timeoutMs > 300_000) throw new Error('Invalid timeout.');
   if (imageDetail !== undefined && !['low', 'high', 'auto'].includes(imageDetail)) throw new Error('Invalid image detail.');
   if (!Number.isInteger(plannedMeals) || plannedMeals < 1 || plannedMeals > 50) throw new Error('Invalid planned meal count.');
+  if (!isExistingRealMealLedgerPath(ledgerPath)) throw new Error('Live diagnostics must use one of the two existing shared-budget real-meal ledgers.');
   return {
     imagePath: getArg('image', argv) ?? DEFAULT_IMAGE, timeoutMs, approximateCopy, actualAppCopy,
-    stream: argv.includes('--stream'), imageDetail, mealId: getArg('meal-id', argv), plannedMeals,
+    stream: !argv.includes('--no-stream'), imageDetail, mealId: getArg('meal-id', argv), plannedMeals,
     validationRunId: getArg('run-id', argv), writeStandaloneReport: !argv.includes('--no-standalone-report'),
-    ledgerPath: getArg('ledger-path', argv) ?? DEFAULT_LEDGER_PATH,
+    ledgerPath,
     configPath: getArg('codex-config', argv),
   };
 }
@@ -154,7 +175,7 @@ export function createLocalCropper() {
   };
 }
 
-function redactRawResponse(body, providerKey) {
+export function redactRawResponse(body, providerKey) {
   const rawText = Buffer.isBuffer(body) ? body.toString('utf8') : String(body);
   return rawText.replaceAll(providerKey, '[REDACTED_CREDENTIAL]')
     .replace(/Bearer\s+[^\s"']+/gi, 'Bearer [REDACTED]')
@@ -162,8 +183,111 @@ function redactRawResponse(body, providerKey) {
     .replace(/data:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]+/gi, '[REDACTED_IMAGE]');
 }
 
+/** A hypothetical local arithmetic check; it never edits the accepted model snapshot. */
+export function createOfflineQuantityCheck(analysis, grams = 250) {
+  const summary = summarizeMealAnalysis(analysis);
+  if (!summary?.hasUsefulNutritionReference || !Number.isFinite(grams) || grams <= 0 || grams > 100_000) return null;
+  const index = summary.components.findIndex((component) => component.reference?.useful);
+  const hypothetical = structuredClone(analysis);
+  hypothetical.components = hypothetical.components.map((component, position) => ({ ...component,
+    userQuantity: position === index ? { amount: grams, unit: 'g' } : null }));
+  const calculated = calculateMealNutrition(hypothetical, undefined, { mode: 'ai-per100g-v3' });
+  const reference = summary.components[index].reference;
+  const expectedBeforeRounding = Object.fromEntries(NUTRIENTS.map((key) => [key, {
+    min: reference.nutrients[key].min * grams / 100, max: reference.nutrients[key].max * grams / 100,
+  }]));
+  const passed = NUTRIENTS.every((key) => {
+    const expected = expectedBeforeRounding[key]; const actual = calculated[key]; const step = key === 'calories' ? 1 : 0.1;
+    return actual && actual.min <= expected.min + 1e-8 && actual.max >= expected.max - 1e-8
+      && expected.min - actual.min < step + 1e-8 && actual.max - expected.max < step + 1e-8;
+  });
+  return { syntheticOnly: true, purpose: 'hypothetical-local-quantity-conversion', changesOriginalAnalysis: false,
+    componentIndex: index, componentLabel: summary.components[index].label, userQuantity: { amount: grams, unit: 'g' },
+    expectedBeforeRounding, nutrients: Object.fromEntries(NUTRIENTS.map((key) => [key, calculated[key]])),
+    counted: calculated.coverage.counted, intakeComplete: calculated.nutritionSource.coverage === 'complete', passed };
+}
+
+/** Keep transport, business validation and useful nutrition evidence independent. */
+export function finalizeRealFoodReport(report) {
+  const attempts = (report.requestAttempts ?? []).map((attempt) => ({ ...attempt,
+    completed: attempt.providerCompleted === true, accepted: attempt.resultAccepted === true,
+    stageSucceeded: attempt.providerCompleted === true && attempt.resultAccepted === true && attempt.status === 'accepted'
+      && attempt.httpStatus >= 200 && attempt.httpStatus < 300,
+  }));
+  const stageResults = (report.stageResults ?? []).map((stage) => {
+    const attempt = attempts.find((row) => row.attemptId === stage.attemptId && row.stage === stage.stage);
+    const completed = attempt?.completed === true;
+    const accepted = attempt?.accepted === true;
+    const stageSucceeded = attempt?.stageSucceeded === true;
+    const nutritionReference = summarizeMealAnalysis({ analysis: stage.analysis, accepted, providerCompleted: completed });
+    const hasUsefulNutritionReference = nutritionReference?.hasUsefulNutritionReference === true;
+    const provenanceConsistent = nutritionReference !== null && nutritionReference.components.every((component) => {
+      const reference = component.reference;
+      return !reference?.useful || (reference.model === attempt?.model
+        && (reference.reasoningEffort === null || reference.reasoningEffort === attempt?.reasoningEffort));
+    });
+    return { ...stage, completed, providerCompleted: completed, accepted, resultAccepted: accepted, stageSucceeded,
+      hasUsefulNutritionReference, provenanceConsistent, nutritionFeatureSucceeded: stageSucceeded && hasUsefulNutritionReference && provenanceConsistent
+        && nutritionReference.referenceCoverageConsistent === true && attempt?.resultVersion === REAL_FOOD_RESULT_VERSION,
+      nutritionReference };
+  });
+  const stageAssessments = attempts.map((attempt) => {
+    const stage = stageResults.find((result) => result.attemptId === attempt.attemptId && result.stage === attempt.stage);
+    return { attemptId: attempt.attemptId, stage: attempt.stage, status: attempt.status,
+      model: attempt.model, reasoningEffort: attempt.reasoningEffort, resultVersion: attempt.resultVersion,
+      elapsedMs: attempt.elapsedMs, httpStatus: attempt.httpStatus, usage: attempt.usage,
+      errorCode: attempt.errorCode ?? null, errorName: attempt.errorName ?? null,
+      completed: attempt.completed, accepted: attempt.accepted, stageSucceeded: attempt.stageSucceeded,
+      hasUsefulNutritionReference: stage?.hasUsefulNutritionReference === true,
+      provenanceConsistent: stage?.provenanceConsistent ?? null,
+      nutritionFeatureSucceeded: stage?.nutritionFeatureSucceeded === true,
+      referenceCount: stage?.nutritionReference?.coverage?.referenceCount ?? null,
+      usefulReferenceCount: stage?.nutritionReference?.usefulReferenceCount ?? 0,
+      intakeComplete: stage?.nutritionReference?.intakeComplete ?? false,
+    };
+  });
+  const acceptedStages = stageResults.filter((stage) => stage.stageSucceeded);
+  const firstAcceptedResult = acceptedStages[0] ?? null;
+  const latestAcceptedResult = acceptedStages.at(-1) ?? null;
+  const explicitReturnedAttemptId = report.result?.returnedAttemptId;
+  const explicitReturnedStage = report.result?.returnedStage;
+  const returnedStageResult = acceptedStages.find((stage) => explicitReturnedAttemptId !== undefined
+    && stage.attemptId === explicitReturnedAttemptId)
+    ?? acceptedStages.find((stage) => typeof explicitReturnedStage === 'string' && stage.stage === explicitReturnedStage)
+    ?? acceptedStages.find((stage) => stage.analysis === report.result?.analysis)
+    ?? acceptedStages.findLast((stage) => sameValue(stage.analysis, report.result?.analysis))
+    ?? null;
+  const nutritionReference = returnedStageResult?.nutritionReference ?? null;
+  const workflowCompleted = report.result?.status === 200;
+  return { ...report, requestAttempts: attempts, stageResults, stageAssessments, firstAcceptedResult, latestAcceptedResult,
+    returnedStageResult, returnedAnalysis: report.result?.analysis ?? null, nutritionReference,
+    validation: {
+      workflowCompleted,
+      completed: attempts.length > 0 && attempts.every((attempt) => attempt.completed),
+      accepted: workflowCompleted && returnedStageResult?.accepted === true,
+      hasPreservedAcceptedResult: latestAcceptedResult !== null,
+      allStagesSucceeded: attempts.length > 0 && attempts.every((attempt) => attempt.stageSucceeded),
+      hasUsefulNutritionReference: nutritionReference?.hasUsefulNutritionReference === true,
+      nutritionFeatureSucceeded: workflowCompleted && returnedStageResult?.nutritionFeatureSucceeded === true,
+      referenceCount: nutritionReference?.coverage?.referenceCount ?? null,
+      usefulReferenceCount: nutritionReference?.usefulReferenceCount ?? 0,
+      referenceCoverageComplete: nutritionReference?.referenceCoverageComplete ?? false,
+      referenceCoverageConsistent: nutritionReference?.referenceCoverageConsistent ?? null,
+      counted: nutritionReference?.coverage?.counted ?? null,
+      intakeComplete: nutritionReference?.intakeComplete ?? false,
+      unknownIntakeWithUsefulReference: nutritionReference?.hasUsefulNutritionReference === true
+        && nutritionReference.coverage?.counted === 0 && NUTRIENTS.every((key) => nutritionReference.nutrients[key] === null),
+      returnedStage: returnedStageResult?.stage ?? null,
+      returnedAttemptId: returnedStageResult?.attemptId ?? null,
+    },
+    offlineQuantityCheck: returnedStageResult ? createOfflineQuantityCheck(returnedStageResult.analysis) : null,
+  };
+}
+
 /** Execute one photo diagnostic. Credentials are read-only; no real API call is made without --live. */
 export async function runRealFoodImage(options = parseOptions()) {
+  options = { ...options, ledgerPath: options.ledgerPath ?? DEFAULT_LEDGER_PATH };
+  if (!isExistingRealMealLedgerPath(options.ledgerPath)) throw new Error('Live diagnostics must use one of the two existing shared-budget real-meal ledgers.');
   const image = await loadPhoto(options);
   const provider = await readLocalCodexProvider({ configPath: options.configPath });
   const cropper = createLocalCropper();
@@ -180,14 +304,15 @@ export async function runRealFoodImage(options = parseOptions()) {
   const runId = randomUUID(); const artifactDirectory = join(root, 'artifacts', 'real-validation', runId);
   await mkdir(artifactDirectory, { recursive: true, mode: 0o700 }); await chmod(artifactDirectory, 0o700).catch(() => {});
   const report = {
-    schemaVersion: 'real-food-image-report.v3', testedAt: new Date().toISOString(), runId, imageSource: 'caller-supplied-local-photo', contentType: image.mime,
+    schemaVersion: 'real-food-image-report.v4', testedAt: new Date().toISOString(), runId, imageSource: 'caller-supplied-local-photo', contentType: image.mime,
     original: { contentType: image.mime, bytes: image.bytes.length, sha256: safeHash(image.bytes) }, bytes: image.bytes.length, transmittedBytes: image.transmittedBytes,
     transmittedDimensions: image.transmittedDimensions, appCopy: options.actualAppCopy,
     copyMode: options.actualAppCopy ? 'actual-web-app' : options.approximateCopy ? 'approximate-browser-canvas' : 'original', transform: image.transform,
     transmitted: { contentType: image.transmittedMime, bytes: image.transmittedBytes, dimensions: image.transmittedDimensions, sha256: image.transmittedSha256 },
     syntheticOnly: false, automaticRetries: 0, model: LOCAL_MODEL, reasoningEffort: LOCAL_REASONING, upstreamTimeoutMs: options.timeoutMs,
     validationRunId,
-    stream: options.stream, diagnosticOverrides: options.imageDetail ? { imageDetail: options.imageDetail } : {}, resultVersion: 2,
+    stream: options.stream, diagnosticOverrides: options.imageDetail ? { imageDetail: options.imageDetail } : {}, resultVersion: REAL_FOOD_RESULT_VERSION,
+    nutritionMethod: 'ai-per100g-v3', ledgerBefore: ledger.totals(),
     maxModelCalls: MAX_REAL_MODEL_CALLS, perMealLimit: 3, reviewMealLimit: 25, mealId,
     requestAttempts: [], stageResults: [], stageRejections: [], reviewCrops: [], streamingEvents: [], streamingTerminalEvents: [],
     streamingSummary: { eventCount: 0, byType: {}, lastEventElapsedMs: null }, jsonModeInputMarker: false,
@@ -195,6 +320,10 @@ export async function runRealFoodImage(options = parseOptions()) {
   let activeAttempt; let lastProgressMs = -30_000;
   const callbacks = {
     before: ({ stage, model, reasoningEffort, resultVersion }) => {
+      if (resultVersion !== REAL_FOOD_RESULT_VERSION) {
+        report.stageRejections.push({ stage, kind: 'protocol_rejected', code: 'diagnostic_protocol_mismatch' });
+        throw new GatewayError(500, 'diagnostic_protocol_mismatch', '诊断结果版本与当前营养协议不一致。');
+      }
       try { return ledger.reserve({ mealId, stage, model, reasoningEffort, resultVersion, validationRunId }); }
       catch {
         report.stageRejections.push({ stage, kind: 'budget_rejected', code: 'diagnostic_request_limit' });
@@ -202,11 +331,12 @@ export async function runRealFoodImage(options = parseOptions()) {
       }
     },
     finish: (event) => {
-      ledger.finish(event.attemptId, event);
       const attempt = report.requestAttempts.find((row) => row.attemptId === event.attemptId);
+      const usage = cleanUsage(event.usage ?? attempt?.usage);
+      ledger.finish(event.attemptId, { ...event, usage });
       if (attempt) Object.assign(attempt, { httpStatus: event.httpStatus, providerCompleted: event.providerCompleted,
-        analysisAccepted: event.resultAccepted, completed: event.outcome === 'accepted', elapsedMs: event.elapsedMs ?? attempt.elapsedMs,
-        usage: cleanUsage(event.usage), status: event.outcome });
+        analysisAccepted: event.resultAccepted, completed: event.providerCompleted === true, elapsedMs: event.elapsedMs ?? attempt.elapsedMs,
+        usage, status: event.outcome });
     },
     raw: async ({ attemptId, stage, body }) => {
       const name = `stage-${String(attemptId ?? stage).replace(/[^A-Za-z0-9_-]/g, '_')}-response.txt`;
@@ -219,7 +349,7 @@ export async function runRealFoodImage(options = parseOptions()) {
     event: (event) => {
       if (event.phase === 'stage') {
         activeAttempt = { attemptId: event.attemptId, stage: event.stage, stageCount: event.stageCount, httpStatus: null,
-          model: LOCAL_MODEL, reasoningEffort: LOCAL_REASONING, resultVersion: 2, providerCompleted: false, analysisAccepted: null,
+          model: LOCAL_MODEL, reasoningEffort: LOCAL_REASONING, resultVersion: REAL_FOOD_RESULT_VERSION, providerCompleted: false, analysisAccepted: null,
           completed: false, elapsedMs: null, usage: null, status: 'in_flight' };
         report.requestAttempts.push(activeAttempt);
       } else if (event.phase === 'headers' && activeAttempt) { activeAttempt.httpStatus = event.httpStatus; activeAttempt.elapsedMs = event.elapsedMs;
@@ -251,37 +381,49 @@ export async function runRealFoodImage(options = parseOptions()) {
     foodName: '', mealType: '午餐', portion: '', remaining: '', note: '', photoRoles: ['before'], profile: {}, ...image.appPayload, photos: [image.photo],
   }};
   const modelConfig = { ...config, modelStream: options.stream, upstreamTimeoutMs: options.timeoutMs, timeoutPerStage: true };
-  const request = modelRequest(input, modelConfig);
-  report.jsonModeInputMarker = /json/i.test(request.input[0].content[0].text);
-  report.instructions = { characters: request.instructions.length, sha256: safeHash(request.instructions) };
+  const started = Date.now();
   try {
-    const started = Date.now();
+    const request = modelRequest(input, modelConfig);
+    report.jsonModeInputMarker = /json/i.test(request.input[0].content[0].text);
+    report.instructions = { characters: request.instructions.length, sha256: safeHash(request.instructions) };
     const result = await callModel(input, modelConfig, AbortSignal.timeout(options.timeoutMs * 3 + 5_000), callbacks.diagnostic, callbacks.event,
       callbacks.before, callbacks.finish, callbacks.raw, cropper.createCrops, ({ attemptId, stage, analysis }) => {
-        report.stageResults.push({ attemptId, stage, status: 'accepted', accepted: true, resultAccepted: true, analysis });
+      report.stageResults.push({ attemptId, stage, status: 'accepted', accepted: true, resultAccepted: true,
+        resultVersion: REAL_FOOD_RESULT_VERSION, analysis });
       });
+    const returnedStage = report.stageResults.find((stage) => stage.analysis === result.analysis)
+      ?? report.stageResults.findLast((stage) => sameValue(stage.analysis, result.analysis));
     report.result = { status: 200, elapsedMs: Date.now() - started, model: LOCAL_MODEL, errorCode: null, analysis: result.analysis,
-      resultVersion: 2, stageCount: result.stageCount, requestCount: result.stageCount };
+      returnedStage: returnedStage?.stage ?? null, returnedAttemptId: returnedStage?.attemptId ?? null,
+      reasoningEffort: LOCAL_REASONING, resultVersion: REAL_FOOD_RESULT_VERSION, stageCount: result.stageCount, requestCount: result.stageCount };
   } catch (error) {
-    report.result = { status: error instanceof GatewayError ? error.status : null, model: null,
+    report.result = { status: error instanceof GatewayError ? error.status : null, model: LOCAL_MODEL, reasoningEffort: LOCAL_REASONING,
+      resultVersion: REAL_FOOD_RESULT_VERSION, elapsedMs: Date.now() - started,
       errorCode: error instanceof GatewayError ? error.code : 'diagnostic_transport_failure', failureName: error.name,
       analysis: null, stageCount: error.stageCount ?? report.requestAttempts.length, requestCount: report.requestAttempts.length };
   } finally {
     globalThis.fetch = originalFetch;
     await cropper.close().catch(() => {});
     report.reviewCrops = cropper.history;
+    // A callback or local failure must leave a durable failed attempt, never an
+    // uncounted retry opportunity or an implicitly successful unfinished stage.
+    for (const attempt of ledger.attemptsForRun(validationRunId, mealId)) {
+      if (attempt.status === 'in_flight') ledger.finish(attempt.attemptId, {
+        elapsedMs: Math.max(0, Date.now() - Date.parse(attempt.startedAt)), outcome: 'request_error',
+        errorCode: report.result?.errorCode, errorName: report.result?.failureName,
+      });
+    }
     report.requestAttempts = ledger.attemptsForRun(validationRunId, mealId);
-    report.ledger = { path: options.ledgerPath === DEFAULT_LEDGER_PATH ? 'artifacts/real-meal-request-ledger.sqlite' : 'custom-local-ledger',
+    report.ledger = { path: `artifacts/${basename(options.ledgerPath)}`,
       limits: { totalRequests: MAX_REAL_MODEL_CALLS, perMealRequests: REAL_MEAL_LIMITS.perMealRequests, reviewMeals: REAL_MEAL_LIMITS.reviewMeals }, totals: ledger.totals() };
     ledger.close();
   }
-  const serialized = JSON.stringify(report, null, 2).replaceAll(provider.key, '[REDACTED_CREDENTIAL]')
-    .replace(/Bearer\s+[^\s"']+/gi, 'Bearer [REDACTED]').replace(/https?:\/\/[^\s"'<>\\]+/gi, '[REDACTED_URL]');
+  const serialized = redactRawResponse(JSON.stringify(finalizeRealFoodReport(report), null, 2), provider.key);
   const safeReport = JSON.parse(serialized);
   if (options.writeStandaloneReport !== false) {
     await mkdir(join(root, 'artifacts'), { recursive: true });
     const output = join(root, 'artifacts', `real-food-image-${Date.now()}.json`);
-    await writeFile(output, `${serialized}\n`, { mode: 0o600 }); await chmod(output, 0o600).catch(() => {});
+    await writeFile(output, `${serialized}\n`, { flag: 'wx', mode: 0o600 }); await chmod(output, 0o600).catch(() => {});
     safeReport.report = output;
   }
   if (!options.quiet) console.log(JSON.stringify(safeReport, null, 2));
@@ -289,5 +431,10 @@ export async function runRealFoodImage(options = parseOptions()) {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  runRealFoodImage().catch((error) => { console.error(`Real image validation failed: ${error.message}`); process.exitCode = 1; });
+  if (process.argv.includes('--help') || process.argv.includes('-h')) {
+    console.log('Usage: node scripts/test-real-food-image.mjs --live --stream --timeout-ms=180000 --image-detail=low --app-copy [--run-id=<new-round-id>] [--meal-id=<id>]\nStreaming and low image detail are defaults. --app-copy verifies and uses the existing app capture for the original attachment. Both existing real-meal ledgers share the cumulative 75-request budget.');
+  } else {
+    runRealFoodImage().then((report) => { if (!report.validation.nutritionFeatureSucceeded) process.exitCode = 1; })
+      .catch((error) => { console.error(`Real image validation failed: ${error.message}`); process.exitCode = 1; });
+  }
 }

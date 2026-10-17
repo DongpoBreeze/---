@@ -1,34 +1,34 @@
 import type { TextStyle } from "react-native";
 
-// Health Compass v0.5 — "daytime topography". A warm ivory environment where
-// data layers rise from base terrain: meal = terracotta, training = bronze-green,
-// sleep = amber-gold. Elevation, not color saturation, carries hierarchy.
-// `ink` is the dark text; `onInk` is light text used on strong fills.
+// Health Compass v0.6 — "deep night gauge refined". Six-level deep surfaces
+// (05070C→2A3447) with precise luminous module hues: amber #F59E42 (meal),
+// cyan-teal #4ECDC4 (training), periwinkle #A78BFA (sleep).
+// 24-hour dial returns as the core metaphor.
 export const color = {
-  paper: "#FBF9F6",
-  surface: "#F5F2ED",
-  raised: "#EAE5DD",
-  sunken: "#F0EBE3",
-  ink: "#2A2420",
-  inkSoft: "#6B6258",
-  inkFaint: "#9D9488",
-  line: "#E0DAD0",
-  lineStrong: "#D0C8BA",
-  accent: "#5A8A6F",
-  accentTint: "#EBF3EE",
-  pine: "#5A8A6F", // alias for accent (backward compat)
-  pineTint: "#EBF3EE", // alias for accentTint (backward compat)
-  meal: "#C8593E",
-  mealText: "#A8422A",
-  mealTint: "#F9EBE7",
-  training: "#5A8A6F",
-  trainingText: "#3D6B51",
-  trainingTint: "#E8F0EC",
-  sleep: "#E09C3E",
-  sleepText: "#B57A28",
-  sleepTint: "#FCF4E8",
-  danger: "#D94F3E",
-  dangerTint: "#FCEBE8",
+  paper: "#05070C",
+  surface: "#0F131C",
+  raised: "#161D2B",
+  sunken: "#0A0D14",
+  ink: "#E8EBF0",
+  inkSoft: "#B4BAC5",
+  inkFaint: "#6B7280",
+  line: "#1A202E",
+  lineStrong: "#2D3648",
+  accent: "#4ECDC4",
+  accentTint: "#1A2E2C",
+  pine: "#4ECDC4", // alias for accent (backward compat)
+  pineTint: "#1A2E2C", // alias for accentTint (backward compat)
+  meal: "#E8A547",
+  mealText: "#E8A547",
+  mealTint: "#2A1F0F",
+  training: "#4A998A",
+  trainingText: "#4A998A",
+  trainingTint: "#1A2E2C",
+  sleep: "#8B9FED",
+  sleepText: "#8B9FED",
+  sleepTint: "#1E2238",
+  danger: "#F87171",
+  dangerTint: "#3A1F1F",
   onInk: "#FFFFFF",
   video: "#000000",
 };
@@ -50,9 +50,10 @@ export const type = {
   numeric,
 };
 
-export type ModuleKind = "meal" | "training" | "sleep";
-export const moduleTone: Record<ModuleKind, { hue: string; text: string; tint: string; icon: "restaurant-outline" | "barbell-outline" | "moon-outline"; name: string }> = {
-  meal: { hue: color.meal, text: color.mealText, tint: color.mealTint, icon: "restaurant-outline", name: "饮食" },
-  training: { hue: color.training, text: color.trainingText, tint: color.trainingTint, icon: "barbell-outline", name: "训练" },
-  sleep: { hue: color.sleep, text: color.sleepText, tint: color.sleepTint, icon: "moon-outline", name: "睡眠" },
+export const moduleTone = {
+  meal: { name: "饮食", hue: color.meal, text: color.mealText, tint: color.mealTint, icon: "restaurant-outline" as const },
+  training: { name: "训练", hue: color.training, text: color.trainingText, tint: color.trainingTint, icon: "barbell-outline" as const },
+  sleep: { name: "睡眠", hue: color.sleep, text: color.sleepText, tint: color.sleepTint, icon: "moon-outline" as const },
 };
+
+export type ModuleKind = keyof typeof moduleTone;

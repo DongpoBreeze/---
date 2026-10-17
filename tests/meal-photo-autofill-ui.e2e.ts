@@ -5,6 +5,7 @@ import {
   configureMockAi,
   fulfillProviderResponse,
   installMockAiProvider,
+  mockNutritionEstimate,
 } from './helpers/mock-ai-provider';
 
 const png = Buffer.from(
@@ -26,6 +27,12 @@ test('餐前照片分析自动回填表单并作为独立版本导出', async ({
           label: '鸡肉',
           category: 'meat',
           confidence: 0.45,
+          nutritionEstimate: mockNutritionEstimate({
+            method: 'category', confidence: 0.48,
+            per100g: { calories: { min: 140, max: 240 }, protein: { min: 16, max: 25 }, carbs: { min: 0, max: 8 }, fat: { min: 7, max: 18 } },
+            recipeBasis: '具体部位与做法不确定，按熟鸡肉菜品类别提供宽范围。',
+            assumptions: ['烹调油和酱汁可能使脂肪、热量升高。'],
+          }),
           candidates: [
             { foodId: 'chicken_roasted', label: '烤鸡肉', category: 'meat', confidence: 0.45 },
             { foodId: 'chicken_breast_raw', label: '生鸡胸肉', category: 'meat', confidence: 0.4 },
@@ -39,6 +46,7 @@ test('餐前照片分析自动回填表单并作为独立版本导出', async ({
           label: '熟米饭',
           confidence: 0.86,
           category: 'grain',
+          nutritionEstimate: mockNutritionEstimate(),
           candidates: [{ foodId: 'rice_white_long_grain_cooked', label: '熟白米饭', category: 'grain', confidence: 0.86 }],
           evidence: [{ kind: 'visual', text: '照片右侧可见熟米饭。' }],
           region: { x: 0.6, y: 0.2, width: 0.3, height: 0.5 },
@@ -63,13 +71,16 @@ test('餐前照片分析自动回填表单并作为独立版本导出', async ({
   // A successful upload test requires the complete validated analysis to reach the form.
   await expect(page.getByText('照片识别完成，请核对。', { exact: true })).toBeVisible();
   await expect(page.getByText('识别到：鸡肉、熟米饭', { exact: true })).toBeVisible();
-  await expect(page.getByText(/已提供 2 道菜的每 100 g 本地营养参考/)).toBeVisible();
+  await expect(page.getByText(/已提供 2 道菜的每 100 g AI 营养参考/)).toBeVisible();
+  await expect(page.getByText('来源：AI按类别近似估算', { exact: true })).toBeVisible();
+  await expect(page.getByText('来源：AI按典型配方估算', { exact: true })).toBeVisible();
+  await expect(page.getByText(/每 100 g 可食用成品：热量 .*蛋白质 .*碳水 .*脂肪/)).toHaveCount(2);
   await expect(page.getByText('查看估算依据', { exact: true })).toBeVisible();
   await expect(page.getByText('油和酱料尚未核实', { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: '查看估算依据', exact: true }).click();
   await expect(page.getByText('待确认：油和酱料尚未核实', { exact: true })).toBeVisible();
-  await expect(page.getByText(/每 100 g：热量 .*蛋白质 .*碳水 .*脂肪/).first()).toBeVisible();
-  await expect(page.getByText(/参考份量：半碗熟米饭 ≈ 100 g/)).toBeVisible();
+  await expect(page.getByText(/每 100 g 可食用成品：热量 .*蛋白质 .*碳水 .*脂肪/).first()).toBeVisible();
+  await expect(page.getByText(/本地家用换算：半碗熟米饭 ≈ 100 g/)).toBeVisible();
   await expect(page.getByLabel('食物名称', { exact: true })).toHaveValue('鸡肉米饭餐盘');
   await expect(page.getByLabel('份量或参考物（可选）', { exact: true })).toHaveValue('');
   await expect(page.getByLabel('备注（可选）', { exact: true })).toHaveValue('');
@@ -98,15 +109,14 @@ test('餐前照片分析自动回填表单并作为独立版本导出', async ({
       components: [{ label: '鸡肉', grams: null, userQuantity: null }, { label: '熟米饭', grams: null, userQuantity: null }] },
   });
   const requests = provider.responses();
-  expect(requests).toHaveLength(3);
+  expect(requests).toHaveLength(2);
   expect(requests[0].body?.input[0].content.filter((part: { type: string }) => part.type === 'input_image'))
     .toMatchObject([{ detail: 'low' }]);
   expect(requests[1].record?.reviewContext?.stage).toBe('crop_review');
-  expect(requests[2].record?.reviewContext?.stage).toBe('final_merge');
   for (const request of requests) {
     expect(request.body).toMatchObject({ stream: true, model: 'mock-model', reasoning: { effort: 'high' } });
   }
-  expect(requests[0].body).toMatchObject({ max_output_tokens: 4096 });
+  expect(requests[0].body).toMatchObject({ max_output_tokens: 8192 });
   expect(requests[0].record?.data.photoRoles).toEqual(['before']);
   expect(errors).toEqual([]);
 });
