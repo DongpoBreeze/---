@@ -70,14 +70,6 @@ const blankData = (): AppData => ({
 export default function App() {
   useEffect(() => {
     if (Platform.OS !== "web" || typeof document === "undefined") return;
-    if (!document.getElementById("hc-web-fonts")) {
-      const link = document.createElement("link");
-      link.id = "hc-web-fonts";
-      link.rel = "stylesheet";
-      link.href =
-        "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@600;700;800&family=Noto+Sans+SC:wght@400;500;600;700;800&display=swap";
-      document.head.appendChild(link);
-    }
     if (!document.getElementById("hc-web-font-fallback")) {
       const style = document.createElement("style");
       style.id = "hc-web-font-fallback";
