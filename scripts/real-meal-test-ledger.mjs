@@ -5,6 +5,16 @@ import { fileURLToPath } from 'node:url';
 import { LOCAL_MODEL, LOCAL_REASONING } from '../server/local-codex.mjs';
 
 export const REAL_MEAL_LIMITS = Object.freeze({ totalRequests: 75, perMealRequests: 3, reviewMeals: 25, cohortMeals: 50 });
+function ledgerLimits(input = {}) {
+  const value = { ...REAL_MEAL_LIMITS, ...input };
+  if (!input || typeof input !== 'object' || Array.isArray(input)
+    || Object.keys(input).some((key) => !Object.hasOwn(REAL_MEAL_LIMITS, key))
+    || (value.totalRequests !== null && (!Number.isSafeInteger(value.totalRequests) || value.totalRequests < 1))
+    || ![1, 2, 3].includes(value.perMealRequests)
+    || !Number.isSafeInteger(value.reviewMeals) || value.reviewMeals < 0
+    || !Number.isSafeInteger(value.cohortMeals) || value.cohortMeals < 1) throw new TypeError('Invalid explicit real-meal limits.');
+  return Object.freeze(value);
+}
 const root = fileURLToPath(new URL('../', import.meta.url));
 export const REAL_MEAL_LEDGER_PATHS = Object.freeze([
   resolve(root, 'artifacts/real-meal-request-ledger.sqlite'),
@@ -89,6 +99,14 @@ function attemptView(row) {
 /** Local-only SQLite request counter for real-meal model checks; it has no cost accounting. */
 export class RealMealTestLedger {
   constructor(path, options = {}) {
+    this.limits = ledgerLimits(options.limits);
+    const runLimits = options.runLimits ?? {};
+    if (!runLimits || typeof runLimits !== 'object' || Array.isArray(runLimits)) throw new TypeError('Invalid run limits.');
+    this.runLimits = Object.fromEntries(Object.entries(runLimits).sort(([a], [b]) => a.localeCompare(b)).map(([id, limits]) => {
+      if (!/^[A-Za-z0-9_-]{1,80}$/.test(id)) throw new TypeError('Invalid run ID in limits.');
+      if (!limits || typeof limits !== 'object' || Array.isArray(limits) || Object.hasOwn(limits, 'totalRequests')) throw new TypeError('Invalid run limits.');
+      return [id, ledgerLimits({ ...this.limits, ...limits })];
+    }));
     const paths = resolveRealMealLedgerPaths(path, options);
     const activeKey = path === ':memory:' ? path : pathKey(path);
     const knownLiveLedger = isExistingRealMealLedgerPath(path);
@@ -96,6 +114,7 @@ export class RealMealTestLedger {
     for (const scopedPath of paths) if (scopedPath !== ':memory:' && (knownLiveLedger || pathKey(scopedPath) !== activeKey)) existingFile(scopedPath);
     if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
     this.db = new DatabaseSync(path);
+    this.allowProviderOverride = options.allowProviderOverride === true;
     this.connections = [this.db];
     this.closed = false;
     try {
@@ -132,9 +151,13 @@ export class RealMealTestLedger {
       this.db.exec('CREATE UNIQUE INDEX IF NOT EXISTS one_stage_per_run_meal_stage ON attempts(validation_run_id,meal_id,stage)');
       transaction(this.db, () => {
         const stored = this.db.prepare('SELECT value FROM ledger_metadata WHERE key=?').get('limits');
-        const limits = JSON.stringify(REAL_MEAL_LIMITS);
+        const limits = JSON.stringify(this.limits);
         if (stored && stored.value !== limits) throw new Error('Real-meal ledger limits do not match this runner version.');
         this.db.prepare('INSERT OR IGNORE INTO ledger_metadata(key,value) VALUES(?,?)').run('limits', limits);
+        const runs = JSON.stringify(this.runLimits);
+        const storedRuns = this.db.prepare('SELECT value FROM ledger_metadata WHERE key=?').get('run_limits');
+        if (storedRuns && storedRuns.value !== runs) throw new Error('Real-meal ledger run limits do not match this runner version.');
+        this.db.prepare('INSERT OR IGNORE INTO ledger_metadata(key,value) VALUES(?,?)').run('run_limits', runs);
       });
       this.scope = paths.map((scopedPath) => {
         const active = scopedPath === ':memory:' || pathKey(scopedPath) === activeKey;
@@ -149,7 +172,9 @@ export class RealMealTestLedger {
       });
       // Every writer locks the same existing database, then its active database.
       // SQLite releases these short locks after a crash; there is no stale PID file.
-      this.coordinator = this.scope[0].active ? this.db : new DatabaseSync(this.scope[0].path);
+      // With an explicitly uncapped total, peers are audit history only. Never
+      // acquire a write connection or transaction on those historical files.
+      this.coordinator = this.limits.totalRequests === null || this.scope[0].active ? this.db : new DatabaseSync(this.scope[0].path);
       if (this.coordinator !== this.db) {
         this.connections.push(this.coordinator);
         this.coordinator.exec('PRAGMA busy_timeout=5000');
@@ -176,7 +201,7 @@ export class RealMealTestLedger {
     model = validText(model, 'model');
     reasoningEffort = validText(reasoningEffort, 'reasoning effort');
     if (!['whole', 'crop_review', 'final_merge'].includes(stage)) throw new TypeError('Invalid real-meal stage.');
-    if (model !== LOCAL_MODEL || reasoningEffort !== LOCAL_REASONING) {
+    if (!this.allowProviderOverride && (model !== LOCAL_MODEL || reasoningEffort !== LOCAL_REASONING)) {
       throw new Error('The real-meal validation model and reasoning effort are fixed for this ledger.');
     }
     if (!Number.isSafeInteger(resultVersion) || resultVersion < 1) throw new TypeError('Invalid result version.');
@@ -186,13 +211,15 @@ export class RealMealTestLedger {
       const runRows = allRows.filter((row) => row.validation_run_id === validationRunId);
       const mealRows = runRows.filter((row) => row.meal_id === mealId);
       const mealCount = mealRows.length;
-      if (mealCount >= REAL_MEAL_LIMITS.perMealRequests) throw new Error('The 3-request per-meal validation limit has been reached.');
+      const limits = this.runLimits[validationRunId] ?? this.limits;
+      if (mealCount >= limits.perMealRequests) throw new Error(`The ${limits.perMealRequests}-request per-meal validation limit has been reached.`);
+      if (['whole', 'crop_review', 'final_merge'].indexOf(stage) >= limits.perMealRequests) throw new Error(`Stage ${stage} is not permitted by this run's ${limits.perMealRequests}-stage limit.`);
       const anyFirstPassAlreadyUsed = mealRows.some((row) => row.stage === 'whole');
       const existingStage = mealRows.some((row) => row.stage === stage);
       if (existingStage) throw new Error(`Stage ${stage} has already been attempted for this meal; retries are disabled.`);
       const initialMeals = new Set(runRows.filter((row) => row.stage === 'whole').map((row) => row.meal_id)).size;
-      if (stage === 'whole' && !anyFirstPassAlreadyUsed && initialMeals >= REAL_MEAL_LIMITS.cohortMeals) {
-        throw new Error('The 50 first-pass meal capacity has been reached.');
+      if (stage === 'whole' && !anyFirstPassAlreadyUsed && initialMeals >= limits.cohortMeals) {
+        throw new Error(`The ${limits.cohortMeals} first-pass meal capacity has been reached.`);
       }
       if (stage !== 'whole') {
         const hasAcceptedFirstPass = mealRows.some((row) => row.stage === 'whole' && row.outcome === 'accepted');
@@ -203,11 +230,11 @@ export class RealMealTestLedger {
         }
         const distinctReviews = new Set(runRows.filter((row) => row.stage !== 'whole').map((row) => row.meal_id)).size;
         const hasReviewed = mealRows.some((row) => row.stage !== 'whole');
-        if (!hasReviewed && distinctReviews >= REAL_MEAL_LIMITS.reviewMeals) {
-          throw new Error('The 25-meal additional-review limit has been reached.');
+        if (!hasReviewed && distinctReviews >= limits.reviewMeals) {
+          throw new Error(`The ${limits.reviewMeals}-meal additional-review limit has been reached.`);
         }
       }
-      if (total >= REAL_MEAL_LIMITS.totalRequests) throw new Error('The 75-request real-meal validation limit has been reached.');
+      if (this.limits.totalRequests !== null && total >= this.limits.totalRequests) throw new Error(`The ${this.limits.totalRequests}-request real-meal validation limit has been reached.`);
       const result = this.db.prepare(`INSERT INTO attempts(meal_id,validation_run_id,stage,model,reasoning_effort,result_version,started_at_ms)
         VALUES(?,?,?,?,?,?,?)`).run(mealId, validationRunId, stage, model, reasoningEffort, resultVersion, now);
       return { attemptId: Number(result.lastInsertRowid) };
@@ -272,8 +299,8 @@ export class RealMealTestLedger {
         totalRequests: rows.length,
         localRequests,
         relatedRequests: rows.length - localRequests,
-        remainingRequests: Math.max(0, REAL_MEAL_LIMITS.totalRequests - rows.length),
-        budgetScope: this.scope.length > 1 ? 'shared-existing-ledgers' : 'isolated-ledger',
+        remainingRequests: this.limits.totalRequests === null ? null : Math.max(0, this.limits.totalRequests - rows.length),
+        budgetScope: this.scope.length > 1 ? (this.limits.totalRequests === null ? 'related-ledgers-read-only' : 'shared-existing-ledgers') : 'isolated-ledger',
         ledgerCount: this.scope.length,
         ledgers,
         perMeal: [...perMeal.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([mealId, requests]) => ({ mealId, requests })),

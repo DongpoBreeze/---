@@ -49,10 +49,12 @@ export function correctionComponent(food: CatalogFood | null, label: string): Co
   return { foodId: food?.id ?? null, label: label || food?.label || '未匹配食材', grams: null, quantitySource: 'unknown', consumedFraction: null, uncertainty: food ? [] : ['食材未匹配到 USDA 目录。'] };
 }
 
-export async function calculateMealNutrition(recognition: MealAnalysis, dataset: NutritionDataset = nutritionDataset, mode: 'legacy' | 'user-quantity-v2' | 'ai-per100g-v3' = 'legacy', options: Omit<NutritionCalculationOptions, 'mode'> = {}): Promise<MealAnalysis> {
+export function calculateMealNutrition(recognition: MealAnalysis, dataset: NutritionDataset = nutritionDataset, mode: NonNullable<NutritionCalculationOptions['mode']> = 'legacy', options: Omit<NutritionCalculationOptions, 'mode'> = {}): MealAnalysis {
   const input = {
     foodName: recognition.foodName,
-    components: (recognition.components ?? []).map(({ eatenFraction: _eaten, edibleFraction: _edible, ...component }) => ({ ...component, quantitySource: component.quantitySource ?? 'unknown', consumedFraction: component.consumedFraction ?? null })),
+    components: (recognition.components ?? []).map(({ eatenFraction: _eaten, edibleFraction: _edible, ...component }) => ({ ...component,
+      ...(mode === 'reference-quantity-v1' ? { grams: null, quantitySource: 'unknown' as const, consumedFraction: null }
+        : { quantitySource: component.quantitySource ?? 'unknown', consumedFraction: component.consumedFraction ?? null }) })),
     unresolved: recognition.unresolved ?? [],
     assumptions: recognition.assumptions,
     advice: recognition.advice,

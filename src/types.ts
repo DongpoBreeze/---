@@ -49,14 +49,16 @@ export type MealEvidence = string | {
 };
 export type MealRegion = { x: number; y: number; width: number; height: number };
 export type MealEstimationBasis = string;
-export type MealUserQuantity = { amount: number; unit: 'g' | 'household' };
+export type MealUserQuantity = { amount: number; unit: 'g' | 'household'; origin?: 'estimated' | 'user' };
 export type MealHouseholdMeasure = { label: string; grams: number; approximate: boolean };
 export type MealComponent = {
   foodId: string | null;
   label: string;
   grams: NutrientRange | null;
-  /** User-entered amount for new analyses. Legacy photo-derived grams remain readable separately. */
+  /** Local intake amount; omitted origin means user-entered. Legacy photo grams remain separate. */
   userQuantity?: MealUserQuantity | null;
+  /** Explicit local exclusion survives reopening and AI review; the quantity must remain empty. */
+  userQuantityCleared?: boolean;
   /** Locally curated household equivalent; never inferred from the photo. */
   householdMeasure?: MealHouseholdMeasure | null;
   eatenFraction?: NutrientRange | null;
@@ -76,6 +78,8 @@ export type MealComponent = {
   uncertainty: string[];
   /** Kept for audit after a user changes the dish identity or cooking method. */
   nutritionReferenceStale?: boolean;
+  /** Local edit only: omitted reuses source; null explicitly marks nutrition unknown. */
+  userNutritionPer100g?: NutrientRanges | null;
   source?: DatabaseNutritionSource | ModelNutritionSource | null;
 };
 export type NutritionSource = {
@@ -123,9 +127,13 @@ export type MealRecord = {
   occurredAt: string;
   mealType: '早餐' | '午餐' | '晚餐' | '加餐';
   foodName: string;
+  /** Confirmation writes the current dish names as analysis; subsequent form edits can mark user. */
+  foodNameSource?: 'analysis' | 'user';
   portion: string;
   note: string;
   imageUri?: string;
+  /** Original before-meal photos, in selection order; imageUri mirrors the first. */
+  beforeImageUris?: string[];
   imageBase64?: string;
   afterImageUri?: string;
   remaining?: string;
@@ -140,6 +148,17 @@ export type MealRecord = {
 };
 
 export type ExerciseSet = { reps: number; weight: number; unit: 'kg' | 'lb'; isWarmup?: boolean };
+export type ExerciseTemplate = {
+  id: string;
+  name: string;
+  setCount: number;
+  weightUnit: 'kg' | 'lb';
+  weightBasis: 'total' | 'per-hand' | 'bodyweight';
+  targetSets?: number;
+  targetMin?: number;
+  targetMax?: number;
+  increment?: number;
+};
 
 export type TrainingRecord = {
   id: string;
@@ -172,7 +191,7 @@ export type SleepRecord = {
   fellAsleepAt: string;
   wokeAt: string;
   awakeMinutes: number | null;
-  quality: 1 | 2 | 3 | 4 | 5;
+  quality?: 1 | 2 | 3 | 4 | 5;
   note: string;
   updatedAt?: string;
   timezone?: string;
@@ -204,6 +223,7 @@ export type AppData = {
   meals: MealRecord[];
   trainings: TrainingRecord[];
   sleeps: SleepRecord[];
+  exerciseTemplates?: ExerciseTemplate[];
   summaries: DailySummary[];
   sourceVersion: number;
   drafts?: { meal?: Partial<MealRecord>; training?: Partial<TrainingRecord>; sleep?: Partial<SleepRecord> };
@@ -215,6 +235,7 @@ export const emptyData = (): AppData => ({
   meals: [],
   trainings: [],
   sleeps: [],
+  exerciseTemplates: [],
   summaries: [],
   sourceVersion: 0,
 });

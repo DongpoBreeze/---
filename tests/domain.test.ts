@@ -58,10 +58,13 @@ test('daily summary counts entered-dish subtotals and names excluded dishes', ()
       nutritionSource: { provider: 'usda-fdc', method: 'user-quantity-v2', coverage: 'incomplete' } },
   }] };
   assert.deepEqual(mealCalories(meal), { min: 130, max: 130 });
-  const summary = summaryMarkdown({ ...emptyData(), meals: [meal] }, '2026-10-10');
-  assert.match(summary, /已填写菜品小计 130～130 kcal/);
-  assert.match(summary, /数据不完整/);
-  assert.match(summary, /未计入：烤鸡肉/);
+  for (const method of ['user-quantity-v2', 'reference-quantity-v1']) {
+    meal.analyses![0].analysis.nutritionSource!.method = method;
+    const summary = summaryMarkdown({ ...emptyData(), meals: [meal] }, '2026-10-10');
+    assert.match(summary, /已填写菜品小计 130～130 kcal/);
+    assert.match(summary, /数据不完整/);
+    assert.match(summary, /未计入：烤鸡肉/);
+  }
 });
 
 test('v3 daily summary counts only entered quantities and discloses unknown references', () => {

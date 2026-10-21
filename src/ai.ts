@@ -6,6 +6,7 @@ import { AppData, DailySummary, MealAnalysis, MealRecord, Profile } from './type
 import { summaryInputSnapshot } from './domain';
 import { mealAnalysisSchema } from './nutrition-schema';
 import { requestProvider } from './ai-provider';
+import { canCropMealPhotoRegions, mealAnalysisPhotoSources } from './meal-photos';
 import { getAiSettings, beginAiSettingsRequest } from './ai-settings';
 export { loadAiSettings, saveAiSettings, clearAiSettings, getAiSettings, getAiSettingsVersion } from './ai-settings';
 export { discoverModels, discoverModel, normalizeConnection, validateAiSettings } from './ai-provider';
@@ -15,26 +16,24 @@ const responseSchema = z.object({ analysis: z.unknown(), model: z.string(), crea
 
 export const isAiConfigured = () => Boolean(getAiSettings());
 
-export async function analyzeMeal(meal: MealRecord, profile: Profile, signal?: AbortSignal, _requestId?: string): Promise<{ analysis: MealAnalysis; model: string; createdAt: string; stageCount?: number }> {
+export async function analyzeMeal(meal: MealRecord, _profile: Profile, signal?: AbortSignal, _requestId?: string): Promise<{ analysis: MealAnalysis; model: string; createdAt: string; stageCount?: number }> {
   const request = beginAiSettingsRequest(signal);
   const sourcePhotos: { role: string; uri: string; width: number; height: number }[] = [];
   const temporaryUris: string[] = [];
   try {
     request.assertCurrent();
+    const inputs = mealAnalysisPhotoSources(meal);
     const photos: string[] = [];
     const photoRoles: string[] = [];
-    for (const [role, uri] of [['before', meal.imageUri], ['after', meal.afterImageUri]] as const) {
-      if (!uri) continue;
+    for (const { role, uri } of inputs) {
       request.assertCurrent();
       const image = await manipulateAsync(uri, [{ resize: { width: 1200 } }], { compress: 0.75, format: SaveFormat.JPEG, base64: true });
-      try {
-        request.assertCurrent();
-        if (!image.base64 || image.base64.length > 4 * 1024 * 1024) throw new Error('照片过大，请重新选择。');
-        photos.push(`data:image/jpeg;base64,${image.base64}`);
-        photoRoles.push(role);
-        sourcePhotos.push({ role, uri: image.uri, width: image.width, height: image.height });
-        if (image.uri !== uri) temporaryUris.push(image.uri);
-      } catch (error) { throw error; }
+      if (!inputs.some((source) => source.uri === image.uri)) temporaryUris.push(image.uri);
+      request.assertCurrent();
+      if (!image.base64 || image.base64.length > 4 * 1024 * 1024) throw new Error('照片过大，请重新选择。');
+      photos.push(`data:image/jpeg;base64,${image.base64}`);
+      photoRoles.push(role);
+      sourcePhotos.push({ role, uri: image.uri, width: image.width, height: image.height });
     }
     request.assertCurrent();
     const latest = meal.analyses?.filter((version) => version.sourceVersion === (meal.revision ?? 1)).at(-1);
@@ -43,21 +42,18 @@ export async function analyzeMeal(meal: MealRecord, profile: Profile, signal?: A
       .map((component) => ({
         label: component.label,
         ...(component.cookingMethod ? { cookingMethod: component.cookingMethod } : {}),
-        ...(component.region ? { region: component.region } : {}),
       }));
-    const result = responseSchema.parse(await requestProvider(request.settings, 'meal', { foodName: meal.foodName, mealType: meal.mealType, portion: meal.portion, remaining: meal.remaining ?? '未知', note: meal.note, profile, photos, photoRoles, dishCorrections }, request.signal, {
+    const result = responseSchema.parse(await requestProvider(request.settings, 'meal', { foodName: meal.foodName, note: meal.note, photos, photoRoles, dishCorrections }, request.signal, {
+      promptProfile: 'frontend',
       createCrops: async ({ componentIndices, regions, signal: cropSignal }) => {
         request.assertCurrent();
-        if (cropSignal.aborted || !regions.length || !sourcePhotos.length) return undefined;
+        if (cropSignal.aborted || !regions.length || !sourcePhotos.length || !canCropMealPhotoRegions(sourcePhotos.length, photoRoles)) return undefined;
         const source = sourcePhotos.find((photo) => photo.role === 'before') ?? sourcePhotos[0];
         if (!source.width || !source.height) return undefined;
         const crops: string[] = [];
         const cropRoles: string[] = [];
-        // The first request may contain the before/after pair (at most two
-        // source photos), while a targeted review may inspect up to four
-        // independent regions from the same meal. Keep this cap aligned with
-        // the provider-side review payload limit so one low-confidence meal
-        // can be reviewed in a single second request.
+        // A region has no image index. Multiple before views must be reviewed
+        // together as originals; an unambiguous view may supply four crops.
         for (let index = 0; index < Math.min(regions.length, 4); index += 1) {
           request.assertCurrent();
           const region = regions[index];
@@ -70,11 +66,11 @@ export async function analyzeMeal(meal: MealRecord, profile: Profile, signal?: A
           const cropHeight = Math.max(1, Math.min(source.height - originY, Math.ceil((bottom - y) * source.height)));
           try {
             const crop = await manipulateAsync(source.uri, [{ crop: { originX, originY, width: cropWidth, height: cropHeight } }, { resize: { width: 900 } }], { compress: 0.78, format: SaveFormat.JPEG, base64: true });
+            if (crop.uri !== source.uri && !inputs.some((input) => input.uri === crop.uri)) temporaryUris.push(crop.uri);
             request.assertCurrent();
             if (crop.base64 && crop.base64.length <= 4 * 1024 * 1024) {
               crops.push(`data:image/jpeg;base64,${crop.base64}`);
               cropRoles.push(`${source.role}:crop:${componentIndices[index] + 1}`);
-              if (crop.uri !== source.uri) temporaryUris.push(crop.uri);
             }
           } catch (error) {
             request.assertCurrent();
@@ -108,8 +104,4 @@ export async function analyzeSummary(data: AppData, date: string, signal?: Abort
     request.assertCurrent();
     return { markdown: z.object({ text: z.string().min(1) }).parse(result.analysis).text, model: result.model, createdAt: result.createdAt, inputSnapshot };
   } finally { request.dispose(); }
-}
-
-export async function getGatewayStatus(): Promise<boolean> {
-  return isAiConfigured();
 }

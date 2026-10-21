@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { resolveStoredNutritionReference, storedReferenceProvider } from '../shared/nutrition.mjs';
 
 const text = (limit: number) => z.string().trim().min(1).max(limit);
 const isoTimestamp = z.iso.datetime({ offset: true }).refine((value) => Number.isFinite(Date.parse(value)), 'invalid timestamp');
@@ -41,11 +42,13 @@ const databaseSource = z.object({
 const source = z.union([databaseSource, modelSource]).nullable().optional();
 
 const householdMeasure = z.object({ label: text(100), grams: positive.max(100_000), approximate: z.boolean() }).strict();
-const userQuantity = z.object({ amount: positive.max(100_000), unit: z.enum(['g', 'household']) }).strict();
+const userQuantity = z.object({ amount: positive.max(100_000), unit: z.enum(['g', 'household']), origin: z.enum(['estimated', 'user']).optional() }).strict();
 
 export const mealComponentSchema = z.object({
   foodId: text(128).nullable(), label: text(300), grams: bounds(100_000).nullable(),
   userQuantity: userQuantity.nullable().optional(), householdMeasure: householdMeasure.nullable().optional(),
+  userQuantityCleared: z.boolean().optional(),
+  userNutritionPer100g: modelPer100g.nullable().optional(),
   quantitySource: z.enum(['user', 'visual', 'unknown']).optional(),
   consumedFraction: fraction.nullable().optional(),
   eatenFraction: fraction.nullable().optional(), edibleFraction: fraction.nullable().optional(),
@@ -57,6 +60,9 @@ export const mealComponentSchema = z.object({
 }).strict().superRefine((value, ctx) => {
   if (value.quantitySource !== undefined && (value.grams === null) !== (value.quantitySource === 'unknown')) {
     ctx.addIssue({ code: 'custom', message: 'weight and quantity source disagree' });
+  }
+  if (value.userQuantityCleared && value.userQuantity != null) {
+    ctx.addIssue({ code: 'custom', message: 'cleared quantity must be empty' });
   }
 });
 
@@ -86,15 +92,24 @@ const mealAnalysisObjectSchema = z.object({
   if (value.status === 'unknown' && totals.some((item) => item !== null)) {
     ctx.addIssue({ code: 'custom', message: 'unknown nutrition must have null totals' });
   }
-  if (value.nutritionSource?.method === 'ai-per100g-v3') {
+  const manualTotal = value.nutritionSource?.provider === 'manual' && value.nutritionSource.method === 'manual-total-v1';
+  // A whole-meal manual override keeps the dish quantities for audit only.
+  if (!manualTotal && value.status === 'estimated' && value.components?.some((item) => item.userQuantity?.origin === 'estimated')) {
+    ctx.addIssue({ code: 'custom', message: 'estimated quantities require approximate nutrition totals' });
+  }
+  if (value.nutritionSource?.method === 'ai-per100g-v3' || value.nutritionSource?.method === 'reference-quantity-v1') {
+    const modelOnly = value.nutritionSource.method === 'ai-per100g-v3';
     const coverage = value.coverage;
-    if (value.nutritionSource.provider !== 'model' || !value.nutritionSource.coverage || !value.components || !value.unresolved
+    if ((modelOnly && value.nutritionSource.provider !== 'model') || !value.nutritionSource.coverage || !value.components || !value.unresolved
       || !coverage || coverage.counted === undefined || coverage.referenceCount === undefined
       || !coverage.missingQuantityLabels || !coverage.unknownNutritionLabels) {
       ctx.addIssue({ code: 'custom', message: 'AI per-100g calculation provenance is incomplete' });
       return;
     }
-    const referenced = value.components.filter((item) => item.source?.provider === 'model' && !item.nutritionReferenceStale);
+    const referenced = value.components.filter((item) => resolveStoredNutritionReference(item) !== null);
+    if (!modelOnly && value.nutritionSource.provider !== storedReferenceProvider(value.components)) {
+      ctx.addIssue({ code: 'custom', message: 'saved reference provider disagrees with effective dish references' });
+    }
     const quantified = (item: z.infer<typeof mealComponentSchema>) => Boolean(item.userQuantity
       && (item.userQuantity.unit === 'g' || item.householdMeasure));
     const counted = referenced.filter(quantified).length;
@@ -114,8 +129,8 @@ const mealAnalysisObjectSchema = z.object({
     }
     for (const item of value.components) {
       if (item.grams !== null || item.consumedFraction != null || item.eatenFraction != null || item.edibleFraction != null
-        || (item.source && item.source.provider !== 'model') || (item.userQuantity?.unit === 'household' && !item.householdMeasure)) {
-        ctx.addIssue({ code: 'custom', message: 'AI per-100g intake requires user quantities and model reference snapshots' });
+        || (modelOnly && item.source && item.source.provider !== 'model') || (item.userQuantity?.unit === 'household' && !item.householdMeasure)) {
+        ctx.addIssue({ code: 'custom', message: 'per-100g intake requires user quantities and saved reference snapshots' });
       }
     }
     return;
@@ -199,6 +214,8 @@ export const mealAnalysisSchema = z.preprocess((value) => {
   const unknownLabels = components.flatMap((component) => {
     if (!component || typeof component !== 'object') return ['未标注食材'];
     const item = component as Record<string, any>;
+    if (item.userNutritionPer100g !== undefined) return item.userNutritionPer100g === null
+      ? [typeof item.label === 'string' ? item.label : '未标注食材'] : [];
     return item.foodId || item.category || item.source?.provider === 'local-category'
       || (item.source?.provider === 'model' && !item.nutritionReferenceStale) ? [] : [typeof item.label === 'string' ? item.label : '未标注食材'];
   });
@@ -208,7 +225,7 @@ export const mealAnalysisSchema = z.preprocess((value) => {
     ...input,
     confidence: input.confidence ?? (status === 'estimated' ? 1 : status === 'approximate' ? 0.5 : 0),
     ...((input.nutritionSource && typeof input.nutritionSource === 'object' && !Array.isArray(input.nutritionSource)
-      && ['user-quantity-v2', 'ai-per100g-v3'].includes((input.nutritionSource as Record<string, unknown>).method as string)) ? {} : { estimateScope: input.estimateScope ?? 'consumed_intake' }),
+      && ['user-quantity-v2', 'ai-per100g-v3', 'reference-quantity-v1'].includes((input.nutritionSource as Record<string, unknown>).method as string)) ? {} : { estimateScope: input.estimateScope ?? 'consumed_intake' }),
     coverage: input.coverage ?? { matched, total: components.length, unknownLabels: [...new Set(unknownLabels)] },
   };
 }, mealAnalysisObjectSchema);

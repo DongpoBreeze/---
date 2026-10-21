@@ -3,8 +3,10 @@ import { Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type Vie
 import { Ionicons } from "@expo/vector-icons";
 import type { AppData, Goal } from "../types";
 import type { AiSettings } from "../ai-provider";
-import { s as base, type IconName } from "./components";
-import { color, radius, space, type } from "./theme";
+import type { AppearanceMode } from "../appearance";
+import { SmallButton, useBaseStyles, type IconName } from "./components";
+import { radius, space, type ThemeTokens } from "./theme";
+import { useTheme, useThemedStyles } from "./theme-provider";
 
 const goalLabels: Record<Goal, string> = {
   health: "保持健康",
@@ -20,6 +22,9 @@ function Setting({ icon, title, detail, onPress, danger = false, last = false }:
   danger?: boolean;
   last?: boolean;
 }) {
+  const { color, type } = useTheme();
+  const st = useThemedStyles(createStyles);
+  const base = useBaseStyles();
   return (
     <Pressable
       accessibilityRole="button"
@@ -29,7 +34,7 @@ function Setting({ icon, title, detail, onPress, danger = false, last = false }:
       <View style={[st.settingIcon, danger && { backgroundColor: color.dangerTint }]}>
         <Ionicons name={icon} size={19} color={danger ? color.danger : color.ink} />
       </View>
-      <View style={{ flex: 1 }}>
+      <View style={{ flex: 1, minWidth: 0 }}>
         <Text style={[type.label, danger && { color: color.danger }]}>{title}</Text>
         <Text style={type.small}>{detail}</Text>
       </View>
@@ -38,13 +43,68 @@ function Setting({ icon, title, detail, onPress, danger = false, last = false }:
   );
 }
 
+const appearanceOptions: Array<{ mode: AppearanceMode; label: string; detail: string; icon: IconName }> = [
+  { mode: "system", label: "跟随系统", detail: "随设备设置自动切换", icon: "phone-portrait-outline" },
+  { mode: "light", label: "浅色模式", detail: "始终使用浅色外观", icon: "sunny-outline" },
+  { mode: "dark", label: "暗色模式", detail: "始终使用暗色外观", icon: "moon-outline" },
+];
+
+function AppearanceSettings() {
+  const { color, type, mode, scheme, ready, saving, error, setMode } = useTheme();
+  const st = useThemedStyles(createStyles);
+  const base = useBaseStyles();
+  const disabled = saving || !ready;
+  return (
+    <View>
+      <View style={st.panel} accessibilityRole="radiogroup" accessibilityLabel="外观模式">
+        {appearanceOptions.map((option, index) => {
+          const selected = mode === option.mode;
+          return (
+            <Pressable
+              key={option.mode}
+              accessibilityRole="radio"
+              accessibilityLabel={option.label}
+              aria-checked={selected}
+              aria-disabled={disabled}
+              accessibilityHint={option.detail}
+              accessibilityState={{ checked: selected, disabled }}
+              disabled={disabled}
+              onPress={() => { void setMode(option.mode).catch(() => undefined); }}
+              style={({ pressed }) => [st.appearanceOption, index < appearanceOptions.length - 1 && st.settingLine,
+                selected && st.appearanceSelected, pressed && base.pressed]}
+            >
+              <View style={st.settingIcon}>
+                <Ionicons name={option.icon} size={19} color={color.ink} />
+              </View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={type.label}>{option.label}</Text>
+                <Text style={type.small}>{option.detail}</Text>
+              </View>
+              <View style={[st.radio, selected && st.radioSelected]}>
+                {selected && <View style={st.radioDot} />}
+              </View>
+            </Pressable>
+          );
+        })}
+      </View>
+      <Text style={st.appearanceStatus} accessibilityLiveRegion="polite">
+        {saving ? "正在保存外观设置…" : `当前外观：${scheme === "dark" ? "暗色模式" : "浅色模式"}${mode === "system" ? " · 跟随系统" : ""}。`}
+      </Text>
+      {error ? <Text style={st.appearanceError} accessibilityRole="alert" accessibilityLiveRegion="polite">{error}</Text>
+        : <Text style={st.appearanceHint}>切换立即生效，自动保存在本机。</Text>}
+    </View>
+  );
+}
+
 export function Me({
   data,
   contentStyle,
   onProfile,
   onAiSettings,
+  onAiReconfigure,
   aiSettings,
   aiSettingsReady,
+  aiSettingsError,
   onImport,
   onExport,
   onMarkdown,
@@ -54,13 +114,18 @@ export function Me({
   contentStyle: StyleProp<ViewStyle>;
   onProfile: () => void;
   onAiSettings: () => void;
+  onAiReconfigure?: () => void;
   aiSettings: AiSettings | null;
   aiSettingsReady: boolean;
+  aiSettingsError?: string;
   onImport: () => void;
   onExport: () => void;
   onMarkdown: () => void;
   onDelete: () => void;
 }) {
+  const { color } = useTheme();
+  const st = useThemedStyles(createStyles);
+  const base = useBaseStyles();
   const p = data.profile;
   const total = data.meals.length + data.trainings.length + data.sleeps.length;
   return (
@@ -92,16 +157,23 @@ export function Me({
           <Ionicons name="chevron-forward" size={16} color={color.pine} />
         </View>
       </Pressable>
+      <Text style={st.group}>外观</Text>
+      <AppearanceSettings />
       <Text style={st.group}>AI</Text>
       <View style={st.panel}>
         <Setting
           icon="sparkles-outline"
           title="AI 服务设置"
-          detail={aiSettingsReady ? aiSettings ? `${aiSettings.model} · ${aiSettings.reasoningEffort || "默认强度"}` : "尚未配置" : "读取中"}
+          detail={!aiSettingsReady ? "读取中" : aiSettingsError ? "读取失败，点此重试" : aiSettings ? `${aiSettings.model} · ${aiSettings.reasoningEffort || "默认强度"}` : "尚未配置"}
           onPress={onAiSettings}
           last
         />
       </View>
+      {Boolean(aiSettingsError) && onAiReconfigure && (
+        <View style={{ marginBottom: space.md }}>
+          <SmallButton icon="create-outline" label="重新配置 AI 服务" disabled={!aiSettingsReady} onPress={onAiReconfigure} />
+        </View>
+      )}
       <Text style={st.group}>数据 · 本机共 {total} 条记录</Text>
       <View style={st.panel}>
         <Setting icon="download-outline" title="导出完整备份" detail="记录、媒体和每日摘要" onPress={onExport} />
@@ -119,24 +191,34 @@ export function Me({
   );
 }
 
-const st = StyleSheet.create({
+function createStyles({ color, type, shadow }: ThemeTokens) {
+  return StyleSheet.create({
   title: { ...type.display },
   intro: { ...type.bodySoft, marginTop: space.xs, marginBottom: space.lg },
-  profile: { backgroundColor: color.pineTint, borderRadius: radius.block, padding: space.lg, borderWidth: 1, borderColor: "#24594A" },
+  profile: { backgroundColor: color.surface, borderRadius: radius.block, padding: space.lg, ...shadow.card },
   profileLabel: { color: color.pine, fontSize: 13, fontWeight: "700" },
   profileGoal: { color: color.ink, fontSize: 26, lineHeight: 32, fontWeight: "800", marginTop: 2 },
   stats: { flexDirection: "row", gap: space.sm, marginTop: space.lg },
-  stat: { flex: 1, backgroundColor: color.paper, borderRadius: radius.input, padding: 10 },
+  stat: { flex: 1, minWidth: 0, backgroundColor: color.softSurface, borderRadius: radius.input, padding: 10 },
   statLabel: { color: color.inkSoft, fontSize: 12 },
   statValue: { color: color.ink, fontSize: 20, fontWeight: "800", marginTop: 2, ...type.numeric },
   statUnit: { color: color.inkFaint, fontSize: 11 },
   profileEdit: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: space.md, minHeight: 28 },
   profileEditText: { color: color.pine, fontSize: 14, fontWeight: "700" },
   group: { ...type.small, fontWeight: "700", color: color.inkSoft, marginTop: space.xl, marginBottom: space.sm },
-  panel: { backgroundColor: color.surface, borderRadius: radius.block, paddingHorizontal: space.md, marginBottom: space.sm },
+  panel: { backgroundColor: color.surface, borderRadius: radius.block, paddingHorizontal: space.md, marginBottom: space.sm, ...shadow.card },
   setting: { flexDirection: "row", alignItems: "center", gap: space.md, minHeight: 64 },
   settingLine: { borderBottomWidth: StyleSheet.hairlineWidth, borderColor: color.lineStrong },
   settingIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: color.sunken, alignItems: "center", justifyContent: "center" },
+  appearanceOption: { flexDirection: "row", alignItems: "center", gap: space.md, minHeight: 74, paddingVertical: space.sm, paddingHorizontal: space.sm },
+  appearanceSelected: { backgroundColor: color.accentTint, borderRadius: radius.input },
+  radio: { width: 24, height: 24, borderRadius: 12, borderWidth: 1.5, borderColor: color.inkFaint, alignItems: "center", justifyContent: "center", marginLeft: space.xs },
+  radioSelected: { borderColor: color.pine, backgroundColor: color.pine },
+  radioDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: color.onInk },
+  appearanceStatus: { ...type.small, marginTop: space.xs, paddingHorizontal: space.xs },
+  appearanceHint: { ...type.small, marginTop: 2, paddingHorizontal: space.xs },
+  appearanceError: { ...type.small, color: color.danger, marginTop: space.xs, paddingHorizontal: space.xs },
   privacy: { flexDirection: "row", alignItems: "center", gap: space.sm, marginTop: space.lg, paddingHorizontal: space.xs },
   privacyText: { ...type.small, flex: 1 },
-});
+  });
+}

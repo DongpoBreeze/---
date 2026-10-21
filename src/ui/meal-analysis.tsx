@@ -2,16 +2,20 @@ import React, { useEffect, useRef, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import type { AnalysisVersion, MealComponent, MealRecord, NutritionSource, NutrientRange } from "../types";
+import type { AnalysisVersion, MealAnalysis, MealComponent, MealRecord, NutritionSource, NutrientRange } from "../types";
 import { calculateMealNutrition, catalogFoods, correctionComponent, nutritionDataset, searchCatalogFoods, type CatalogFood } from "../nutrition";
+import { resolveAiHouseholdMeasure } from "../../shared/nutrition.mjs";
 import { createCorrectionSaveGate, fractionToPercent } from "../nutrition-correction";
+import { buildMealReviewAnalysis, createMealReviewRows, updateMealReviewRow } from "../meal-review";
 import { uid } from "../domain";
-import { Banner, CheckRow, Choice, Field, Legend, SmallButton, s as base } from "./components";
+import { Banner, CheckRow, Choice, Field, Legend, SmallButton, useBaseStyles } from "./components";
 import { errorText, localDateTime, nutritionRangeLabel } from "./format";
-import { color, radius, space, type } from "./theme";
+import { radius, space, type ThemeTokens } from "./theme";
+import { useTheme, useThemedStyles } from "./theme-provider";
 import type { SaveNutritionCorrection } from "./app-types";
 
 function Macro({ label, value, unit, nutrient }: { label: string; value: NutrientRange | null | undefined; unit: string; nutrient: "protein" | "carbs" | "fat" }) {
+  const st = useThemedStyles(createStyles);
   const known = Boolean(value);
   return (
     <View style={st.macro}>
@@ -50,12 +54,14 @@ function cookingLabel(component: MealComponent) {
 function nutritionSourceLabel(provider: NutritionSource["provider"]) {
   if (provider === "usda-fdc") return "USDA 食品数据库";
   if (provider === "local-category") return "本地通用类别区间";
-  if (provider === "mixed") return "USDA 与本地类别数据";
+  if (provider === "mixed") return "多来源营养参考";
   if (provider === "manual") return "手动记录";
   return "AI 每 100 g 估值";
 }
 
 function componentSourceLabel(component: MealComponent) {
+  if (component.userNutritionPer100g !== undefined)
+    return component.userNutritionPer100g === null ? "营养参考未知" : "用户填写的每 100 g 营养参考";
   const source = component.source;
   if (source?.provider === "model") return source.method === "category" ? "AI按类别近似估算" : "AI按典型配方估算";
   if (source?.provider === "usda-fdc") return "USDA 食品数据库";
@@ -64,39 +70,51 @@ function componentSourceLabel(component: MealComponent) {
 }
 
 function reliableHouseholdMeasure(component: MealComponent) {
-  if (component.nutritionReferenceStale) return null;
-  const measure = component.householdMeasure
-    ?? (component.source?.provider !== "model" ? component.source?.householdMeasure : undefined);
-  if (!measure || !Number.isFinite(measure.grams) || measure.grams <= 0) return null;
-  // Household units must have an existing local gram equivalent, never an AI guess.
-  return Object.values(nutritionDataset.householdMeasures ?? {}).some((known) =>
-    known.label === measure.label && known.grams === measure.grams)
-    ? measure : null;
+  return resolveAiHouseholdMeasure(nutritionDataset, component);
 }
 
-/** The reference is visible immediately; recipe evidence is shown separately on demand. */
-export function MealNutritionReference({ component }: { component: MealComponent }) {
+/** Production compact rows show only dish, nutrition and quantity fields. */
+export function MealNutritionReference({ component, compact = false }: { component: MealComponent; compact?: boolean }) {
+  const base = useBaseStyles();
+  const st = useThemedStyles(createStyles);
   const source = component.source;
-  const per100 = source?.provider === "usda-fdc" ? source.per100g : source?.per100gRange;
+  const per100 = component.userNutritionPer100g !== undefined ? component.userNutritionPer100g
+    : component.nutritionReferenceStale ? null
+      : source?.per100gRange ?? (source?.provider !== "model" ? source?.per100g : undefined);
   const measure = reliableHouseholdMeasure(component);
+  if (compact) {
+    const label = source || component.userNutritionPer100g ? component.label : "待确认菜品";
+    const cooking = cookingLabel(component);
+    return <View style={st.referenceRow}>
+      <Text style={st.referenceTitle}>{label}</Text>
+      {cooking ? <Text style={base.helper}>做法：{cooking}</Text> : null}
+      {per100 ? <Text style={base.helper}>
+        每 100 g：热量 {nutritionRangeLabel(referenceRange(per100.calories), "calories", " kcal")} · 蛋白质 {nutritionRangeLabel(referenceRange(per100.protein), "protein", " g")} · 碳水 {nutritionRangeLabel(referenceRange(per100.carbs), "carbs", " g")} · 脂肪 {nutritionRangeLabel(referenceRange(per100.fat), "fat", " g")}
+      </Text> : <Text style={base.helper}>每 100 g：—</Text>}
+      {measure ? <Text style={base.helper}>参考份数：{measure.label} ≈ {measure.grams} g</Text> : null}
+      {component.userQuantity ? <Text style={base.helper}>{component.userQuantity.origin === 'estimated' ? '估计食用量' : '已填数量'}：{component.userQuantity.amount} {component.userQuantity.unit === "g" ? "g" : `× ${measure?.label ?? "家用单位"}`}</Text> : null}
+    </View>;
+  }
   return <View style={st.referenceRow}>
     <Text style={st.referenceTitle}>{component.label}</Text>
     <Text style={base.helper}>来源：{componentSourceLabel(component)}</Text>
-    {source?.provider === "model" && <Text style={base.helper}>营养置信度：{confidenceLabel(source.confidence)}</Text>}
+    {source?.provider === "model" && component.userNutritionPer100g === undefined && <Text style={base.helper}>营养置信度：{confidenceLabel(source.confidence)}</Text>}
     {per100 ? <Text style={base.helper}>
       {source?.provider === "model" ? "每 100 g 可食用成品" : "每 100 g"}：热量 {nutritionRangeLabel(referenceRange(per100.calories), "calories", " kcal")} · 蛋白质 {nutritionRangeLabel(referenceRange(per100.protein), "protein", " g")} · 碳水 {nutritionRangeLabel(referenceRange(per100.carbs), "carbs", " g")} · 脂肪 {nutritionRangeLabel(referenceRange(per100.fat), "fat", " g")}
     </Text> : <Text style={base.helper}>营养参考未知，当前不计入小计。</Text>}
     {measure && <Text style={base.helper}>本地家用换算：{measure.label} ≈ {measure.grams} g</Text>}
-    {component.userQuantity && <Text style={base.helper}>实际食用量：{component.userQuantity.amount} {component.userQuantity.unit === "g" ? "g" : `× ${measure?.label ?? "家用单位"}`}</Text>}
-    {component.nutritionReferenceStale && <Text style={st.warn}>旧参考已失效：菜名或做法已修改，重新分析前不计入小计。</Text>}
+    {component.userQuantity && <Text style={base.helper}>{component.userQuantity.origin === 'estimated' ? '估计食用量' : '用户食用量'}：{component.userQuantity.amount} {component.userQuantity.unit === "g" ? "g" : `× ${measure?.label ?? "家用单位"}`}</Text>}
+    {component.nutritionReferenceStale && component.userNutritionPer100g == null && <Text style={st.warn}>旧参考已失效：菜名或做法已修改，请补充新的每 100 g 参考。</Text>}
   </View>;
 }
 
 export function MealNutritionBasis({ component }: { component: MealComponent }) {
+  const base = useBaseStyles();
+  const st = useThemedStyles(createStyles);
   const source = component.source;
   return <View style={st.component}>
     <Text style={st.componentText}>
-      菜品：{component.label}{component.userQuantity ? ` · 用户填写 ${component.userQuantity.amount} ${component.userQuantity.unit === "g" ? "g" : `× ${reliableHouseholdMeasure(component)?.label ?? "家用单位"}`}` : " · 尚未填写数量"}
+      菜品：{component.label}{component.userQuantity ? ` · ${component.userQuantity.origin === 'estimated' ? '参考估计' : '用户填写'} ${component.userQuantity.amount} ${component.userQuantity.unit === "g" ? "g" : `× ${reliableHouseholdMeasure(component)?.label ?? "家用单位"}`}` : " · 尚未填写数量"}
       {cookingLabel(component) ? ` · 烹调：${cookingLabel(component)}` : ""}
       {` · 识别置信度：${confidenceLabel(component.confidence)}`}
     </Text>
@@ -123,9 +141,11 @@ export function MealAnalysisList({ meal, onSaveCorrection }: {
   meal: MealRecord;
   onSaveCorrection: SaveNutritionCorrection;
 }) {
+  const { type } = useTheme();
+  const base = useBaseStyles();
+  const st = useThemedStyles(createStyles);
   const [showHistory, setShowHistory] = useState(false);
   const [showRevisions, setShowRevisions] = useState(false);
-  const [openBasisId, setOpenBasisId] = useState<string | null>(null);
   const [correctionBase, setCorrectionBase] = useState<AnalysisVersion | null>(null);
   const analyses = meal.analyses ?? [];
   const latest = analyses.filter((item) => item.sourceVersion === (meal.revision ?? 1)).at(-1);
@@ -145,75 +165,28 @@ export function MealAnalysisList({ meal, onSaveCorrection }: {
       {[...(latest ? [latest] : []), ...(showHistory ? previous : [])].map((item) => {
         const current = item.id === latest?.id;
         const a = item.analysis;
+        const manualTotal = a.nutritionSource?.method === "manual-total-v1";
         const components = a.components ?? [];
-        const aiPer100g = a.nutritionSource?.method === "ai-per100g-v3";
-        const referenceCount = a.coverage?.referenceCount ?? components.filter((component) => component.source && !component.nutritionReferenceStale).length;
-        const recognized = [...new Set(components.filter((component) => component.label.trim()).map((component) => component.label.trim()))];
-        const basisOpen = openBasisId === item.id;
         return (
           <View key={item.id} testID={current ? "current-meal-analysis" : `meal-analysis-history-${item.id}`} style={[st.card, !current && st.cardOld]}>
-            <View style={st.cardHead}>
-              <Text style={[st.cardTag, !current && { color: color.inkSoft }]}>
-                {current ? "当前分析" : `历史分析 · 输入版本 ${item.sourceVersion}`}
-              </Text>
-              <Text style={st.cardMeta}>{localDateTime(item.createdAt)} · {item.model}</Text>
-            </View>
-            <Text style={st.food}>{a.foodName}</Text>
-            <Text style={st.recognized}>
-              {recognized.length ? `识别到：${recognized.join("、")}` : "尚未可靠识别出具体食材"}
-            </Text>
-            <View style={st.metaPills}>
-              <Text style={[st.pill, a.confidence === undefined && st.pillMuted]}>识别置信度：{confidenceLabel(a.confidence)}</Text>
-              <Text style={st.pill}>营养参考按每道菜列出</Text>
-              {a.status === "approximate" && <Text style={st.pill}>近似小计</Text>}
-            </View>
-            {aiPer100g && <Text style={st.referenceStatus}>
-              {referenceCount ? `已生成 ${referenceCount}/${components.length} 道菜的每 100 g AI 营养参考。` : "当前没有可用营养参考，请核对菜品后重新分析。"}
-              {a.coverage?.counted ? `已计入 ${a.coverage.counted}/${components.length} 道菜，按实际填写数量换算。` : referenceCount ? "填写实际食用量后计算摄入小计。" : ""}
-            </Text>}
+            <Text style={st.cardTag}>{current ? manualTotal ? "营养值（手动修改）" : "饮食营养" : `历史营养 · 输入版本 ${item.sourceVersion}`}</Text>
             <Text style={st.kcalLine}>
-              <Text style={st.kcalLabel}>{a.coverage?.counted ? "已填写菜品小计 · 热量 " : "摄入热量 "}</Text>
-              <Text style={[st.kcalValue, !a.calories && st.macroUnknown]}>{a.calories ? `约 ${nutritionRangeLabel(a.calories, "calories", " kcal")}` : "待填写菜品数量"}</Text>
+              <Text style={st.kcalLabel}>{manualTotal ? "热量 " : "已填写菜品小计 · 热量 "}</Text>
+              <Text style={[st.kcalValue, !a.calories && st.macroUnknown]}>{a.calories ? `约 ${nutritionRangeLabel(a.calories, "calories", " kcal")}` : manualTotal ? "未知" : "待填写菜品数量"}</Text>
             </Text>
             <View style={st.macros}>
-              <Macro label="蛋白质小计" value={a.protein} nutrient="protein" unit="g" />
-              <Macro label="碳水小计" value={a.carbs} nutrient="carbs" unit="g" />
-              <Macro label="脂肪小计" value={a.fat} nutrient="fat" unit="g" />
+              <Macro label={manualTotal ? "蛋白质" : "蛋白质小计"} value={a.protein} nutrient="protein" unit="g" />
+              <Macro label={manualTotal ? "碳水" : "碳水小计"} value={a.carbs} nutrient="carbs" unit="g" />
+              <Macro label={manualTotal ? "脂肪" : "脂肪小计"} value={a.fat} nutrient="fat" unit="g" />
             </View>
-            {components.map((component, index) => <MealNutritionReference key={`reference-${item.id}-${index}`} component={component} />)}
-            {a.coverage?.missingQuantityLabels?.length ? <Text style={st.warn}>未计入（未填数量）：{a.coverage.missingQuantityLabels.join("、")}</Text> : null}
-            {a.coverage?.unknownNutritionLabels?.length ? <Text style={st.warn}>未计入（营养数据未知）：{a.coverage.unknownNutritionLabels.join("、")}</Text> : null}
-            {current && components.some((component) => component.nutritionReferenceStale) && <Text style={st.warn}>请使用下方“重新分析已修正菜品”生成新参考；历史分析保留修改前的数量和依据。</Text>}
-            <Text style={st.advice}>{a.advice}</Text>
-            {a.nutritionSource && (
-              <Text style={base.helper}>
-                营养来源：{nutritionSourceLabel(a.nutritionSource.provider)}
-                {a.nutritionSource.dataset ? ` · ${a.nutritionSource.dataset}` : ""}
-                {a.nutritionSource.coverage === "incomplete" ? " · 数量或参考不完整" : aiPer100g ? " · 数量填写完整，仍为近似值" : ""}
-              </Text>
-            )}
-            <Pressable
-              accessibilityRole="button"
-              accessibilityState={{ expanded: basisOpen }}
-              accessibilityLabel={basisOpen ? "收起估算依据" : "查看估算依据"}
-              style={st.basisButton}
-              onPress={() => setOpenBasisId(basisOpen ? null : item.id)}
-            >
-              <Ionicons name={basisOpen ? "chevron-up" : "information-circle-outline"} size={17} color={color.mealText} />
-              <Text style={st.basisButtonText}>{basisOpen ? "收起估算依据" : "查看估算依据"}</Text>
-              {a.coverage && <Text style={st.coverageText}>{aiPer100g ? `参考 ${referenceCount}/${a.coverage.total}` : `目录匹配 ${a.coverage.matched}/${a.coverage.total}`}</Text>}
-            </Pressable>
-            {basisOpen && <View accessibilityLabel="估算依据" style={st.basisPanel}>
-              {components.map((component, index) => <MealNutritionBasis key={`${component.foodId ?? "unknown"}-${index}`} component={component} />)}
-              {a.coverage?.unknownLabels.map((label, index) => <Text key={`unknown-${index}`} style={st.warn}>未匹配食材：{label}</Text>)}
-              {a.unresolved?.map((warning, index) => <Text key={`unresolved-${index}`} style={st.warn}>待确认：{warning}</Text>)}
-              {a.assumptions.map((line, index) => <Text key={`assumption-${index}`} style={base.helper}>估算假设：{line}</Text>)}
-            </View>}
+            {components.map((component, index) => <MealNutritionReference key={`reference-${item.id}-${index}`} component={component} compact />)}
+            {!manualTotal && a.coverage?.missingQuantityLabels?.length ? <Text style={st.partial}>未计入菜品：{a.coverage.missingQuantityLabels.map((label) => label || "待确认菜品").join("、")}</Text> : null}
+            {!manualTotal && a.coverage?.unknownNutritionLabels?.length ? <Text style={st.partial}>营养值未知：{a.coverage.unknownNutritionLabels.map((label) => label || "待确认菜品").join("、")}</Text> : null}
           </View>
         );
       })}
       <View style={st.actions}>
-        {latest ? <SmallButton icon="create-outline" label="填写菜品数量" onPress={() => setCorrectionBase(latest)} /> : null}
+        {latest?.analysis.components?.length ? <SmallButton icon="create-outline" label="填写菜品数量" onPress={() => setCorrectionBase(latest)} /> : null}
         {previous.length > 0 && (
           <SmallButton
             icon={showHistory ? "chevron-up" : "time-outline"}
@@ -247,6 +220,7 @@ type CorrectionRow = {
   component: MealComponent;
   quantity: string;
   quantityUnit: 'g' | 'household';
+  quantityEdited: boolean;
   cookingMethod: string;
   originalLabel: string;
   originalCookingMethod: string;
@@ -258,6 +232,7 @@ function correctionRow(component: MealComponent): CorrectionRow {
     id: uid(), component: { ...component },
     quantity: component.userQuantity ? String(component.userQuantity.amount) : "",
     quantityUnit: component.userQuantity?.unit ?? "g",
+    quantityEdited: false,
     cookingMethod: cookingLabel(component) ?? "",
     originalLabel: component.label,
     originalCookingMethod: cookingLabel(component) ?? "",
@@ -275,6 +250,9 @@ function CatalogFoodPicker({ value, onChange, disabled = false }: {
   onChange: (food: CatalogFood | null) => void;
   disabled?: boolean;
 }) {
+  const { color, type } = useTheme();
+  const base = useBaseStyles();
+  const st = useThemedStyles(createStyles);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const foods = catalogFoods();
@@ -312,7 +290,13 @@ function NutritionCorrection({ meal, base: baseVersion, onSave, onClose }: {
   onSave: SaveNutritionCorrection;
   onClose: () => void;
 }) {
-  const aiPer100g = baseVersion.analysis.nutritionSource?.method === "ai-per100g-v3";
+  const { color } = useTheme();
+  const base = useBaseStyles();
+  const st = useThemedStyles(createStyles);
+  const snapshotReferences = baseVersion.analysis.nutritionSource?.method === "ai-per100g-v3"
+    || baseVersion.analysis.nutritionSource?.method === "reference-quantity-v1"
+    || (baseVersion.analysis.nutritionSource?.method === "manual-total-v1"
+      && Boolean(baseVersion.analysis.components?.length));
   const [rows, setRows] = useState<CorrectionRow[]>(() =>
     (baseVersion.analysis.components ?? []).map(correctionRow));
   const rowsRef = useRef(rows);
@@ -329,13 +313,14 @@ function NutritionCorrection({ meal, base: baseVersion, onSave, onClose }: {
   }, [saveGate]);
   const update = (id: string, patch: Partial<CorrectionRow>) => {
     if (savingRef.current) return;
-    const next = rowsRef.current.map((item) => item.id === id ? { ...item, ...patch } : item);
+    const next = rowsRef.current.map((item) => item.id === id ? { ...item, ...patch,
+      ...(('quantity' in patch || 'quantityUnit' in patch) ? { quantityEdited: true } : {}) } : item);
     rowsRef.current = next;
     setRows(next);
   };
   const updateDish = (row: CorrectionRow, patch: Partial<CorrectionRow>) => update(row.id, {
     ...patch,
-    ...(aiPer100g && row.quantityUnit === "household" ? { quantity: "", quantityUnit: "g" } : {}),
+    ...(snapshotReferences && row.quantityUnit === "household" ? { quantity: "", quantityUnit: "g" } : {}),
   });
   const save = async () => {
     const token = saveGate.begin();
@@ -344,53 +329,56 @@ function NutritionCorrection({ meal, base: baseVersion, onSave, onClose }: {
     setSaving(true);
     setError("");
     try {
-      const components = rowsRef.current.map((row) => {
-        const label = row.component.label.trim();
-        if (!label) throw new Error("食材标签不能为空。");
-        const quantityText = row.quantity.trim();
-        const quantity = quantityText ? Number(quantityText) : null;
-        if (quantityText && (!Number.isFinite(quantity) || quantity! <= 0 || quantity! > 100_000)) throw new Error(`${label}数量必须大于 0 且不超过 100000。`);
-        const cookingMethod = row.cookingMethod.trim();
-        if (aiPer100g) {
-          const changed = dishChanged(row);
+      let analysis: MealAnalysis;
+      if (snapshotReferences) {
+        const reviewRows = rowsRef.current.map((row) => {
+          const original = createMealReviewRows({ ...baseVersion.analysis, components: [{ ...row.component,
+            label: row.originalLabel, cookingMethod: row.originalCookingMethod || undefined }] })[0];
+          const edited = updateMealReviewRow(original, { label: row.component.label, cookingMethod: row.cookingMethod });
+          return row.quantityEdited
+            ? updateMealReviewRow(edited, { quantity: row.quantity, quantityUnit: row.quantityUnit })
+            : { ...edited, quantity: row.quantity, quantityUnit: row.quantityUnit };
+        });
+        analysis = buildMealReviewAnalysis(baseVersion.analysis, reviewRows);
+      } else {
+        const components = rowsRef.current.map((row) => {
+          const label = row.component.label.trim();
+          if (!label) throw new Error("食材标签不能为空。");
+          const quantityText = row.quantity.trim();
+          const quantity = quantityText ? Number(quantityText) : null;
+          if (quantityText && (!Number.isFinite(quantity) || quantity! <= 0 || quantity! > 100_000)) throw new Error(`${label}数量必须大于 0 且不超过 100000。`);
+          const cookingMethod = row.cookingMethod.trim();
+          const selectedFood = catalogFoods().find((food) => food.id === row.component.foodId);
+          const preparationMismatch = Boolean(selectedFood && cookingMethod
+            && selectedFood.preparation.trim().toLocaleLowerCase() !== cookingMethod.toLocaleLowerCase());
+          const { userQuantityCleared: wasCleared, ...original } = row.component;
           return {
-            ...row.component, label, cookingMethod: cookingMethod || undefined, preparation: undefined,
-            grams: null,
-            userQuantity: quantity === null || (changed && row.quantityUnit === "household")
-              ? null : { amount: quantity, unit: row.quantityUnit },
-            nutritionReferenceStale: Boolean(row.component.nutritionReferenceStale || changed),
-            ...(changed ? { foodId: null, householdMeasure: null } : {}),
+            ...original, label, grams: null, cookingMethod: cookingMethod || undefined,
+            userQuantity: quantity === null ? null : { amount: quantity, unit: row.quantityUnit,
+              origin: row.quantityEdited ? 'user' as const : row.component.userQuantity?.origin ?? 'user' as const },
+            ...(quantity === null && (row.quantityEdited || wasCleared) ? { userQuantityCleared: true } : {}),
+            foodId: preparationMismatch ? null : row.component.foodId,
             quantitySource: "unknown" as const,
             consumedFraction: null,
+            uncertainty: [
+              ...(row.uncertaintyReviewed && coverage ? [] : row.component.uncertainty),
+              ...(preparationMismatch ? ["所填烹调方式与所选 USDA 条目不符，已停止使用该精确食材数据。"] : []),
+            ],
           };
-        }
-        const selectedFood = catalogFoods().find((food) => food.id === row.component.foodId);
-        const preparationMismatch = Boolean(selectedFood && cookingMethod
-          && selectedFood.preparation.trim().toLocaleLowerCase() !== cookingMethod.toLocaleLowerCase());
-        return {
-          ...row.component, label, grams: null, cookingMethod: cookingMethod || undefined,
-          userQuantity: quantity === null ? null : { amount: quantity, unit: row.quantityUnit },
-          foodId: preparationMismatch ? null : row.component.foodId,
-          quantitySource: "unknown" as const,
-          consumedFraction: null,
-          uncertainty: [
-            ...(row.uncertaintyReviewed && coverage ? [] : row.component.uncertainty),
-            ...(preparationMismatch ? ["所填烹调方式与所选 USDA 条目不符，已停止使用该精确食材数据。"] : []),
-          ],
-        };
-      });
-      const unresolved = aiPer100g ? (baseVersion.analysis.unresolved ?? []) : [
-        ...(coverage ? (baseVersion.analysis.unresolved ?? []).filter((_, index) => !resolvedIssues.has(index)) : (baseVersion.analysis.unresolved ?? [])),
-        ...components.flatMap((item) => item.uncertainty.map((issue) => `${item.label}：${issue}`)),
-        ...(!coverage ? ["食物、油和酱料覆盖未确认。"] : []),
-      ];
-      const analysis = await calculateMealNutrition({
-        ...baseVersion.analysis, foodName: meal.foodName, components,
-        estimateScope: undefined,
-        unresolved: [...new Set(unresolved)],
-        assumptions: aiPer100g ? baseVersion.analysis.assumptions : ["食材、重量和食用比例按用户本次校正；未确认项保持未知。"],
-        advice: aiPer100g ? "按已填写的实际食用量换算近似小计；修改菜名或做法后请重新分析。" : "依据已确认食材和份量查看营养参考。",
-      }, undefined, aiPer100g ? "ai-per100g-v3" : "user-quantity-v2");
+        });
+        const unresolved = [
+          ...(coverage ? (baseVersion.analysis.unresolved ?? []).filter((_, index) => !resolvedIssues.has(index)) : (baseVersion.analysis.unresolved ?? [])),
+          ...components.flatMap((item) => item.uncertainty.map((issue) => `${item.label}：${issue}`)),
+          ...(!coverage ? ["食物、油和酱料覆盖未确认。"] : []),
+        ];
+        analysis = calculateMealNutrition({
+          ...baseVersion.analysis, foodName: meal.foodName, components,
+          estimateScope: undefined,
+          unresolved: [...new Set(unresolved)],
+          assumptions: ["食材、重量和食用比例按用户本次校正；未确认项保持未知。"],
+          advice: "依据已确认食材和份量查看营养参考。",
+        }, undefined, "user-quantity-v2");
+      }
       if (!saveGate.isCurrent(token)) throw new Error("校正表单已过期，请重新打开。");
       await onSave(meal.id, meal.revision ?? 1, baseVersion.id, analysis);
       // A successful onSave has already committed the new version. Do not
@@ -417,7 +405,7 @@ function NutritionCorrection({ meal, base: baseVersion, onSave, onClose }: {
           <Pressable accessibilityLabel="关闭校正" disabled={saving} onPress={close} style={base.sheetIcon}>
             <Ionicons name="close" size={24} color={color.ink} />
           </Pressable>
-          <Text style={base.sheetTitle} numberOfLines={1}>{aiPer100g ? "填写数量与修正菜品" : "填写菜品数量"}</Text>
+          <Text style={base.sheetTitle} numberOfLines={1}>{snapshotReferences ? "填写数量与修正菜品" : "填写菜品数量"}</Text>
           <Pressable accessibilityRole="button" accessibilityLabel="保存营养校正"
             disabled={saving} onPress={() => void save()} style={[base.saveButton, saving && base.saveButtonOff]}>
             <Text style={[base.saveText, saving && base.saveTextOff]}>{saving ? "保存中" : "保存"}</Text>
@@ -425,16 +413,16 @@ function NutritionCorrection({ meal, base: baseVersion, onSave, onClose }: {
         </View>
         <ScrollView contentContainerStyle={base.form} keyboardShouldPersistTaps="handled">
           {error ? <Banner text={error} danger onClose={() => setError("")} /> : null}
-          <Text style={st.intro}>填写每道菜实际吃下的可食用成品克数，或选择已有本地克数换算的家用单位。留空只保留每 100 g 营养参考，不计入小计。数量在本机换算。</Text>
-          {aiPer100g && <Text style={st.intro}>可修正菜名和做法；修改后旧参考会失效。保存后点击“重新分析已修正菜品”，生成新的营养参考。</Text>}
+          <Text style={st.intro}>修改每道菜的食用克数，或选择已有本地换算的家用份数。估计量可按实际情况调整；留空不计入小计，数量在本机换算。</Text>
+          {snapshotReferences && <Text style={st.intro}>可修正菜名和做法；修改后旧参考会失效。保存后点击“重新分析已修正菜品”，生成新的营养参考。</Text>}
           {rows.map((row, index) => {
-            const component = aiPer100g && dishChanged(row)
-              ? { ...row.component, foodId: null, nutritionReferenceStale: true } : row.component;
+            const component = snapshotReferences && dishChanged(row)
+              ? { ...row.component, foodId: null, nutritionReferenceStale: true, userNutritionPer100g: null } : row.component;
             const measure = reliableHouseholdMeasure(component);
             return (
             <View key={row.id} style={st.card}>
-              <Legend text={`${aiPer100g ? "菜品" : "食材"} ${index + 1}`} />
-              {!aiPer100g && <CatalogFoodPicker value={row.component.foodId} disabled={saving} onChange={(food) => update(row.id, {
+              <Legend text={`${snapshotReferences ? "菜品" : "食材"} ${index + 1}`} />
+              {!snapshotReferences && <CatalogFoodPicker value={row.component.foodId} disabled={saving} onChange={(food) => update(row.id, {
                 quantity: "", quantityUnit: "g",
                 cookingMethod: food?.preparation ?? "",
                 component: {
@@ -447,14 +435,14 @@ function NutritionCorrection({ meal, base: baseVersion, onSave, onClose }: {
                   uncertainty: row.component.uncertainty,
                 },
               })} />}
-              <Field label={aiPer100g ? `菜品 ${index + 1} 名称` : `食材 ${index + 1} 标签`} value={row.component.label}
+              <Field label={snapshotReferences ? `菜品 ${index + 1} 名称` : `食材 ${index + 1} 标签`} value={row.component.label}
                 onChangeText={(label) => updateDish(row, { component: { ...row.component, label } })} disabled={saving} />
-              <Field label={aiPer100g ? `菜品 ${index + 1} 做法` : `食材 ${index + 1} 烹调方式`} value={row.cookingMethod}
+              <Field label={snapshotReferences ? `菜品 ${index + 1} 做法` : `食材 ${index + 1} 烹调方式`} value={row.cookingMethod}
                 onChangeText={(cookingMethod) => updateDish(row, { cookingMethod })}
                 placeholder="例如：水煮、清炒、油炸" disabled={saving} />
-              {aiPer100g && <MealNutritionReference component={component} />}
+              {snapshotReferences && <MealNutritionReference component={component} compact />}
               <View style={st.two}>
-                <Field label={aiPer100g ? `菜品 ${index + 1} 实际食用量` : `食材 ${index + 1} 数量`} value={row.quantity}
+                <Field label={snapshotReferences ? `菜品 ${index + 1} ${row.quantityUnit === 'g' ? '食用量' : '食用份数'}` : `食材 ${index + 1} 数量`} value={row.quantity}
                   onChangeText={(quantity) => update(row.id, { quantity })} keyboardType="numeric" placeholder={measure ? "填写实际数量" : "填写克数（g）"} disabled={saving} />
                 {measure
                   ? <View style={st.unitChoice}><Choice label="单位" value={row.quantityUnit} tone="meal" choices={[["g", "克（g）"], ["household", "家用份数"]]} onChange={(quantityUnit) => {
@@ -462,7 +450,7 @@ function NutritionCorrection({ meal, base: baseVersion, onSave, onClose }: {
                     }} /><Text style={base.helper}>1 份 {measure.label} ≈ {measure.grams} g</Text></View>
                   : <Text style={base.helper}>无可靠家用换算，请用克数填写。</Text>}
               </View>
-              {!aiPer100g && row.component.uncertainty.length > 0 && (
+              {!snapshotReferences && row.component.uncertainty.length > 0 && (
                 <>
                   {row.component.uncertainty.map((issue, issueIndex) =>
                     <Text key={issueIndex} style={st.warn}>待核实：{issue}</Text>)}
@@ -472,7 +460,7 @@ function NutritionCorrection({ meal, base: baseVersion, onSave, onClose }: {
                     disabled={saving} />
                 </>
               )}
-              <SmallButton icon="trash-outline" label={`移除${aiPer100g ? "菜品" : "食材"} ${index + 1}`} danger
+              <SmallButton icon="trash-outline" label={`移除${snapshotReferences ? "菜品" : "食材"} ${index + 1}`} danger
                 disabled={saving}
                 onPress={() => {
                   if (savingRef.current) return;
@@ -481,16 +469,16 @@ function NutritionCorrection({ meal, base: baseVersion, onSave, onClose }: {
                 }} />
             </View>
           ); })}
-          {rows.length < 20 && <SmallButton icon="add-outline" label={aiPer100g ? "添加菜品" : "添加食材"}
+          {rows.length < 20 && <SmallButton icon="add-outline" label={snapshotReferences ? "添加菜品" : "添加食材"}
             disabled={saving}
             onPress={() => {
               if (savingRef.current) return;
-              rowsRef.current = [...rowsRef.current, correctionRow(aiPer100g
+              rowsRef.current = [...rowsRef.current, correctionRow(snapshotReferences
                 ? { ...correctionComponent(null, ""), label: "", uncertainty: [], nutritionReferenceStale: true }
                 : correctionComponent(null, ""))];
               setRows(rowsRef.current);
             }} />}
-          {!aiPer100g && (baseVersion.analysis.unresolved ?? []).map((issue, index) => (
+          {!snapshotReferences && (baseVersion.analysis.unresolved ?? []).map((issue, index) => (
             <View key={index} style={st.issue}>
               <Text style={st.warn}>待解决：{issue}</Text>
               <CheckRow checked={resolvedIssues.has(index)} label={`已核实疑问 ${index + 1}`}
@@ -502,7 +490,7 @@ function NutritionCorrection({ meal, base: baseVersion, onSave, onClose }: {
                 }); }} />
             </View>
           ))}
-          {!aiPer100g && <CheckRow checked={coverage} label="我已确认所有食物、油和酱料均已列出"
+          {!snapshotReferences && <CheckRow checked={coverage} label="我已确认所有食物、油和酱料均已列出"
             disabled={saving}
             onPress={() => { if (!savingRef.current) setCoverage((current) => !current); }} />}
         </ScrollView>
@@ -511,7 +499,7 @@ function NutritionCorrection({ meal, base: baseVersion, onSave, onClose }: {
   );
 }
 
-const st = StyleSheet.create({
+const createStyles = ({ color, type }: ThemeTokens) => StyleSheet.create({
   wrap: { marginTop: space.lg },
   intro: { ...type.bodySoft, marginBottom: space.lg },
   card: {
@@ -527,6 +515,7 @@ const st = StyleSheet.create({
   referenceRow: { marginTop: space.sm, padding: space.md, backgroundColor: color.paper, borderRadius: radius.input },
   referenceTitle: { ...type.label, marginBottom: 2 },
   referenceStatus: { ...type.bodySoft, marginTop: space.sm },
+  partial: { ...type.small, color: color.mealText, marginTop: space.sm },
   metaPills: { flexDirection: "row", flexWrap: "wrap", gap: space.xs, marginTop: space.sm },
   pill: { ...type.small, color: color.mealText, backgroundColor: color.mealTint, borderRadius: radius.pill, overflow: "hidden", paddingHorizontal: 10, paddingVertical: 5 },
   pillMuted: { color: color.inkSoft, backgroundColor: color.sunken },

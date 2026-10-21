@@ -89,7 +89,7 @@ test('missing capability metadata uses default and stale discovery cannot restor
   await page.getByLabel('API Key', { exact: true }).fill(key);
   await page.getByText('获取模型列表', { exact: true }).click();
   await page.getByRole('radio', { name: '模型 basic-model', exact: true }).click();
-  await expect(page.getByText('上游未提供推理强度，使用服务默认值。', { exact: true })).toBeVisible();
+  await expect(page.getByText('上游未提供推理强度，可使用服务默认或自定义填写。', { exact: true })).toBeVisible();
   await expect(page.getByRole('radio', { name: '推理强度 服务默认', exact: true })).toBeVisible();
   await expect(page.getByRole('radio', { name: '推理强度 max', exact: true })).toHaveCount(0);
   await page.screenshot({ path: info.outputPath('missing-capabilities.png'), fullPage: true });

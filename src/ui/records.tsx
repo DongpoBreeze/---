@@ -3,9 +3,10 @@ import { Image, Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, t
 import { Ionicons } from "@expo/vector-icons";
 import type { AppData } from "../types";
 import { mealCalories } from "../domain";
-import { SummaryVersions, s as base } from "./components";
+import { SummaryVersions, useBaseStyles } from "./components";
 import { rangeLabel, recordDate, sleepHours, timeLabel } from "./format";
-import { color, moduleTone, radius, space, type } from "./theme";
+import { radius, space, type ThemeTokens } from "./theme";
+import { useTheme, useThemedStyles } from "./theme-provider";
 import type { Kind } from "./app-types";
 
 type Entry = { kind: Kind; id: string; title: string; detail: string; at: string; date: string; imageUri?: string };
@@ -34,6 +35,9 @@ export function Records({
   onDelete: (kind: Kind, id: string) => void;
   onAi: (id: string) => void;
 }) {
+  const { color, type, moduleTone } = useTheme();
+  const base = useBaseStyles();
+  const st = useThemedStyles(createStyles);
   const [filter, setFilter] = useState<Filter>("all");
   const entries: Entry[] = [
     ...data.meals.map((r) => ({
@@ -42,12 +46,12 @@ export function Records({
     })),
     ...data.trainings.map((r) => ({
       kind: "training" as Kind, id: r.id, title: r.exercise, at: r.occurredAt, date: recordDate(r),
-      detail: `${timeLabel(r.occurredAt)} · ${r.mode === "cardio" ? `${r.durationMinutes ?? 0} 分钟` : `${r.sets.filter((x) => !x.isWarmup).length} 工作组`}`,
+      detail: `${timeLabel(r.occurredAt)} · ${r.mode === "cardio" ? r.durationMinutes === undefined ? "时长未知" : `${r.durationMinutes} 分钟` : `${r.sets.filter((x) => !x.isWarmup).length} 工作组`}`,
     })),
     ...data.sleeps.map((r) => ({
       kind: "sleep" as Kind, id: r.id, at: r.wokeAt, date: recordDate(r),
       title: sleepHours(r) === null ? "时长未知" : `${sleepHours(r)!.toFixed(1)} 小时估算睡眠`,
-      detail: `质量 ${r.quality}/5 · ${r.awakeMinutes === null ? "清醒未知" : `清醒 ${r.awakeMinutes} 分钟`}`,
+      detail: `质量 ${r.quality === undefined ? "未填写" : `${r.quality}/5`} · ${r.awakeMinutes === null ? "清醒未知" : `清醒 ${r.awakeMinutes} 分钟`}`,
     })),
   ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
   const counts = { all: entries.length, meal: data.meals.length, training: data.trainings.length, sleep: data.sleeps.length };
@@ -146,7 +150,7 @@ export function Records({
   );
 }
 
-const st = StyleSheet.create({
+const createStyles = ({ color, type, shadow }: ThemeTokens) => StyleSheet.create({
   title: { ...type.display },
   intro: { ...type.bodySoft, marginTop: space.xs, marginBottom: space.lg },
   filters: { flexDirection: "row", flexWrap: "wrap", gap: space.sm, marginBottom: space.lg },
@@ -161,14 +165,14 @@ const st = StyleSheet.create({
   groupTitle: { ...type.small, fontWeight: "700", color: color.inkSoft, marginBottom: space.sm },
   row: {
     flexDirection: "row", alignItems: "center", backgroundColor: color.surface, borderRadius: radius.block,
-    marginBottom: space.sm, paddingRight: 4, overflow: "hidden",
+    marginBottom: space.sm, paddingRight: 4, overflow: "hidden", ...shadow.card,
   },
   rowMain: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: space.md, minHeight: 64, paddingRight: space.sm },
   spine: { width: 4, alignSelf: "stretch" },
   thumb: { width: 44, height: 44, borderRadius: radius.input, backgroundColor: color.sunken },
   icon: { width: 44, height: 44, borderRadius: radius.input, alignItems: "center", justifyContent: "center" },
   action: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
-  empty: { alignItems: "center", gap: 4, paddingVertical: space.xl, paddingHorizontal: space.lg, backgroundColor: color.surface, borderRadius: radius.block },
+  empty: { alignItems: "center", gap: 4, paddingVertical: space.xl, paddingHorizontal: space.lg, backgroundColor: color.surface, borderRadius: radius.block, ...shadow.card },
   summaries: { marginTop: space.lg },
   sectionTitle: { ...type.title, marginBottom: space.sm },
 });

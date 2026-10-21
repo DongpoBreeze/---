@@ -1,7 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { parseBackupArchive } from '../src/backup';
-import { configureMockAi, fulfillProviderResponse, installMockAiProvider, MOCK_AI_KEY, MOCK_AI_MODEL, MOCK_AI_URL } from './helpers/mock-ai-provider';
+import { configureMockAi, fulfillProviderResponse, installMockAiProvider, MOCK_AI_KEY, MOCK_AI_MODEL, MOCK_AI_URL, mockNutritionEstimate } from './helpers/mock-ai-provider';
+import { confirmAndSaveMealReview } from './helpers/saved-meal-review';
 
 test('AI versions preserve source input and reject responses after record changes', async ({ page }, testInfo) => {
   page.on('dialog', (dialog) => { void dialog.accept(); });
@@ -31,13 +32,13 @@ test('AI versions preserve source input and reject responses after record change
   await expect(page.getByLabel('食物名称', { exact: true })).toHaveCount(0);
   await page.getByRole('tab', { name: '记录', exact: true }).click();
   await page.getByLabel('请求饮食分析', { exact: true }).click();
-  await expect(page.getByText('这餐的分析已保存为独立版本。', { exact: true })).toBeVisible();
-  await expect(page.getByText('原始餐食', { exact: true })).toBeVisible();
+  await confirmAndSaveMealReview(page);
+  await expect(page.getByText('未知酱料', { exact: true })).toBeVisible();
   await page.getByRole('tab', { name: '今天', exact: true }).click();
   await page.getByText('请求 AI 综合分析', { exact: true }).click();
   await expect(page.getByText('AI 总结已保存为独立版本。', { exact: true })).toBeVisible();
   expect(latestInput!.kind).toBe('summary');
-  expect(latestInput!.payload.summary).toContain('原始餐食');
+  expect(latestInput!.payload.summary).toContain('未知酱料');
   await page.screenshot({ path: testInfo.outputPath('ai-summary.png'), fullPage: true });
   await page.getByLabel('打开我的资料', { exact: true }).click();
   await page.getByText('增肌', { exact: true }).click();
@@ -58,7 +59,8 @@ test('AI versions preserve source input and reject responses after record change
   await page.getByText('导出完整备份', { exact: true }).click();
   const download = await downloadEvent;
   const backup = await parseBackupArchive(new Uint8Array(await readFile((await download.path())!)));
-  expect(backup.data.meals[1].foodName).toBe('原始餐食');
+  expect(backup.data.meals[1].foodName).toBe('未知酱料');
+  expect(backup.data.meals[1].revisions?.[0].foodName).toBe('原始餐食');
   expect(backup.data.meals[1].analyses?.[0].model).toBe(MOCK_AI_MODEL);
   const summaries = backup.data.summaries.filter((entry) => entry.source === 'ai');
   expect(summaries).toHaveLength(1);
@@ -75,7 +77,7 @@ test('AI versions preserve source input and reject responses after record change
   expect(errors).toEqual([]);
 });
 
-test('已保存餐食等待80秒后仍可接收完整分析版本', async ({ page }) => {
+test('已保存餐食实时显示等待时间，110秒后仍可接收完整分析版本', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('dialog', (dialog) => { void dialog.accept(); });
@@ -84,7 +86,10 @@ test('已保存餐食等待80秒后仍可接收完整分析版本', async ({ pag
     onResponse: async (route) => new Promise<void>((resolve) => {
       finishProvider = async () => {
         await fulfillProviderResponse(route, {
-          foodName: '已保存慢响应餐食', confidence: 0.9, components: [],
+          foodName: '已保存慢响应餐食', confidence: 0.9, components: [{
+            label: '慢响应米饭', cookingMethod: '蒸煮', confidence: 0.9,
+            nutritionEstimate: mockNutritionEstimate(), uncertainty: [],
+          }],
           unresolved: [], assumptions: [], advice: '完整响应已收到。',
         });
         resolve();
@@ -101,13 +106,16 @@ test('已保存餐食等待80秒后仍可接收完整分析版本', async ({ pag
   await page.clock.install();
   await page.getByLabel('请求饮食分析', { exact: true }).click();
   await expect.poll(() => provider.responses().length).toBe(1);
-  await page.clock.fastForward(80_000);
-  await expect(page.getByText('分析已等待 30 秒，你可以取消；记录不会受影响。', { exact: true })).toBeVisible();
+  await page.clock.fastForward(110_000);
+  await expect(page.getByTestId('analysis-wait-time')).toHaveText(/已等待 11[0-2] 秒 · 单次请求上限 120 秒/);
   expect(typeof finishProvider).toBe('function');
   await finishProvider!();
-  await expect(page.getByText('这餐的分析已保存为独立版本。', { exact: true })).toBeVisible();
+  await confirmAndSaveMealReview(page, { clearQuantities: true, foodName: '已保存慢响应餐食' });
+  await expect(page.getByTestId('analysis-wait-time')).toHaveCount(0);
   await page.getByText('已保存慢响应餐食', { exact: true }).click();
-  await expect(page.getByTestId('current-meal-analysis').getByText('完整响应已收到。', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('current-meal-analysis').getByText('慢响应米饭', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('current-meal-analysis').getByText(/每 100 g：热量 130 kcal/)).toBeVisible();
+  await expect(page.getByTestId('current-meal-analysis').getByText('完整响应已收到。', { exact: true })).toHaveCount(0);
   expect(provider.responses()).toHaveLength(1);
   expect(errors).toEqual([]);
 });

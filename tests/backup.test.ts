@@ -16,12 +16,14 @@ import {
   remapDraftMedia,
   sha256Hex,
   validateAppData,
+  validateFormDrafts,
 } from '../src/backup';
 import { DATA_KEY, LocalRepository, parseLocalSnapshot } from '../src/local-store';
 import { mealAnalysisSchema } from '../src/nutrition-schema';
 import { emptyData, type AppData, type MealRecord } from '../src/types';
 import { calculateMealNutrition as calculateShared } from '../shared/nutrition.mjs';
 import { calculateMealNutrition, nutritionDataset } from '../src/nutrition';
+import { removeRecord } from '../src/domain';
 
 const now = '2026-10-10T03:00:00.000Z';
 const imageA = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4, 5]);
@@ -44,6 +46,7 @@ function fixture(): AppData {
     version: 1, profile: { goal: 'health', heightCm: 172, weightKg: 67 }, sourceVersion: 5,
     meals: [{ ...meal, revisions: [revision] }],
     trainings: [{ id: 'training-1', type: 'training', createdAt: now, occurredAt: now, exercise: 'squat', sets: [{ reps: 12, weight: 20, unit: 'kg', isWarmup: true }, { reps: 10, weight: 20, unit: 'lb' }], note: '', pain: 'no', controlled: 'yes', rir: '2', videoUri: media[2].uri, mode: 'strength', weightBasis: 'per-hand', targetSets: 1, targetMin: 8, targetMax: 12, increment: 2 }],
+    exerciseTemplates: [{ id: 'template-squat', name: '深蹲', setCount: 3, weightUnit: 'kg', weightBasis: 'total', targetSets: 3, targetMin: 8, targetMax: 12, increment: 2 }],
     sleeps: [{ id: 'sleep-1', type: 'sleep', createdAt: now, occurredAt: now, fellAsleepAt: '2026-10-09T23:30:00+08:00', wokeAt: '2026-10-10T07:00:00+08:00', awakeMinutes: null, quality: 4, note: 'unknown awake time' }],
     summaries: [{ id: 'local-2026-10-10', date: '2026-10-10', markdown: '# 2026-10-10\n\n## Diet\nText\n', sourceVersion: 5, status: 'current', source: 'local', createdAt: now }, { id: 'ai-1', date: '2026-10-10', markdown: '# AI\nSource retained\n', sourceVersion: 5, status: 'current', source: 'ai', model: 'mock/new-model', sourceRecordIds: ['meal-1', 'training-1', 'sleep-1'], createdAt: now }],
     drafts: { meal: { foodName: 'unfinished', imageUri: media[0].uri } },
@@ -84,6 +87,8 @@ test('SHA-256 adapter matches Node crypto for binary and Unicode payloads', asyn
 
 test('byte-complete ZIP roundtrip retains records, revisions, sources, drafts, and readable outputs', async () => {
   const data = fixture();
+  data.meals[0].foodNameSource = 'user';
+  data.meals[0].revisions![0].foodNameSource = 'analysis';
   data.summaries[1].inputSnapshot = { date: '2026-10-10', profile: { goal: 'health', weightKg: 67 }, summary: '# Original AI input', recordVersions: [{ id: 'meal-1', version: '2' }] };
   const parsed = await parseBackupArchive(await createBackupArchive(data, media, now, { drafts: formDrafts }));
   assert.equal(parsed.media.length, 3);
@@ -91,6 +96,7 @@ test('byte-complete ZIP roundtrip retains records, revisions, sources, drafts, a
   const restored = remapBackupMedia(parsed.data, replacements);
   assert.equal(canonicalJson(restored), canonicalJson(validateAppData(data)));
   assert.deepEqual(remapDraftMedia(parsed.drafts, replacements), formDrafts);
+  assert.deepEqual(restored.exerciseTemplates, data.exerciseTemplates);
   for (const item of parsed.media) {
     const original = media.find((input) => input.uri === replacements.get(item.path))!;
     assert.deepEqual(item.bytes, original.bytes);
@@ -102,6 +108,14 @@ test('byte-complete ZIP roundtrip retains records, revisions, sources, drafts, a
   assert.equal(await zip.file('summaries/2026-10-10-2.md')!.async('string'), data.summaries[1].markdown);
   assert.ok(collectMediaReferences(restored).some((ref) => ref.kind === 'video'));
   assert.equal(collectDraftMediaReferences(parsed.drafts).length, 2);
+});
+
+test('sleep records may omit subjective quality and retain exercise templates in backups', async () => {
+  const data = fixture();
+  data.sleeps[0].quality = undefined;
+  const parsed = await parseBackupArchive(await createBackupArchive(data, media, now));
+  assert.equal(parsed.data.sleeps[0].quality, undefined);
+  assert.deepEqual(parsed.data.exerciseTemplates, data.exerciseTemplates);
 });
 
 test('nutrition provenance and component uncertainties round-trip without loss', async () => {
@@ -361,4 +375,131 @@ test('loading healthy data tolerates cleanup failure and retries cleanup on the 
   assert.equal(canonicalJson(await load()), canonicalJson(fixture()));
   assert.equal(attempts, 2);
   assert.equal(repository.consumeWarning(), undefined, 'a successful retry clears an obsolete cleanup warning');
+});
+
+function multiplePhotoFixture() {
+  const additionalMedia = ['second', 'third', 'revision-only', 'draft-only'].map((name, index) => ({
+    uri: `file:///${name}.jpg`, kind: 'image' as const, bytes: new Uint8Array([0xff, 0xd8, 0xff, 11 + index, 21 + index]), extension: 'jpg', mimeType: 'image/jpeg',
+  }));
+  const data = fixture();
+  data.meals[0].beforeImageUris = [media[0].uri, additionalMedia[0].uri, additionalMedia[1].uri];
+  data.meals[0].imageBase64 = 'analysis-copy-not-original';
+  data.meals[0].revisions![0].beforeImageUris = [media[0].uri, additionalMedia[2].uri];
+  data.drafts!.meal = { id: 'meal-1', imageUri: media[0].uri, beforeImageUris: [media[0].uri, additionalMedia[0].uri] };
+  const drafts = { 'meal-new': { imageUri: additionalMedia[3].uri, beforeImageUris: [additionalMedia[3].uri, additionalMedia[0].uri], note: media[0].uri } };
+  return { data, drafts, media: [...media, ...additionalMedia], additionalMedia };
+}
+
+function readCsv(source: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [], cell = '', quoted = false;
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === '"') {
+      if (quoted && source[index + 1] === '"') { cell += '"'; index += 1; }
+      else quoted = !quoted;
+    } else if (!quoted && char === ',') { row.push(cell); cell = ''; }
+    else if (!quoted && char === '\n') { row.push(cell); rows.push(row); row = []; cell = ''; }
+    else if (quoted || char !== '\r') cell += char;
+  }
+  if (cell || row.length) { row.push(cell); rows.push(row); }
+  return rows;
+}
+
+test('all before originals round-trip byte-for-byte across records, revisions, both draft stores and CSV', async () => {
+  const f = multiplePhotoFixture();
+  const original = canonicalJson(f.data);
+  const archiveBytes = await createBackupArchive(f.data, f.media, now, { drafts: f.drafts });
+  const parsed = await parseBackupArchive(archiveBytes);
+  assert.equal(parsed.media.length, f.media.length);
+  const byHash = new Map(f.media.map((item) => [createHash('sha256').update(item.bytes).digest('hex'), item]));
+  const replacements = new Map(parsed.media.map((item) => {
+    const source = byHash.get(item.sha256)!;
+    assert.deepEqual(item.bytes, source.bytes);
+    return [item.path, source.uri];
+  }));
+  assert.equal(canonicalJson(remapBackupMedia(parsed.data, replacements)), original);
+  assert.deepEqual(remapDraftMedia(parsed.drafts, replacements), f.drafts);
+  assert.equal(canonicalJson(f.data), original);
+  const zip = await JSZip.loadAsync(archiveBytes);
+  const records = readCsv(await zip.file('records.csv')!.async('string'));
+  const csvMeal = JSON.parse(records.find((row) => row[0] === 'meal')![records[0].indexOf('json')]);
+  assert.deepEqual(csvMeal, parsed.data.meals[0]);
+  const meals = readCsv(await zip.file('meals.csv')!.async('string'));
+  assert.deepEqual(JSON.parse(meals[1][meals[0].indexOf('beforeImageUris')]), parsed.data.meals[0].beforeImageUris);
+  assert.deepEqual(JSON.parse(meals[1][meals[0].indexOf('revisions')]), parsed.data.meals[0].revisions);
+  assert.match(await zip.file('README.md')!.async('string'), /beforeImageUris/);
+});
+
+test('before arrays reject invalid shapes and a fifth source in records, revisions and drafts without rejecting legacy meals', () => {
+  const f = multiplePhotoFixture();
+  for (const value of ['uri', null, [''], [null], [4], [undefined], Array.from({ length: 5 }, (_, i) => `uri-${i}`)]) {
+    for (const location of ['record', 'revision', 'data-draft'] as const) {
+      const data = structuredClone(f.data);
+      const target = location === 'record' ? data.meals[0] : location === 'revision' ? data.meals[0].revisions![0] : data.drafts!.meal!;
+      (target as Record<string, unknown>).beforeImageUris = value;
+      assert.throws(() => validateAppData(data), isCode('invalid-data'), `${location}: ${JSON.stringify(value)}`);
+    }
+    assert.throws(() => validateFormDrafts({ 'meal-new': { beforeImageUris: value } }), isCode('invalid-draft'));
+  }
+  const full = { beforeImageUris: ['a', 'b', 'c', 'd'], afterImageUri: 'old-after' };
+  const tooMany = structuredClone(f.data); Object.assign(tooMany.meals[0], full, { imageUri: 'a' });
+  assert.throws(() => validateAppData(tooMany), isCode('invalid-data'));
+  assert.throws(() => validateFormDrafts({ 'meal-new': full }), isCode('invalid-draft'));
+  assert.deepEqual(validateFormDrafts({ 'meal-new': { beforeImageUris: [] } }), { 'meal-new': { beforeImageUris: [] } });
+  assert.equal(validateAppData(fixture()).meals[0].beforeImageUris, undefined);
+  const manual = structuredClone(f.data); manual.meals[0].beforeImageUris = []; delete manual.meals[0].imageUri; delete manual.meals[0].afterImageUri;
+  assert.deepEqual(validateAppData(manual).meals[0].beforeImageUris, []);
+});
+
+test('multi-photo references protect originals in revisions and drafts, and release them only after their last reference', () => {
+  const f = multiplePhotoFixture();
+  const images = collectMediaReferences(f.data).filter((ref) => ref.kind === 'image');
+  assert.equal(images.length, 5);
+  assert.equal(images.filter((ref) => ref.uri === media[0].uri).length, 1);
+  assert.ok(images.some((ref) => ref.uri === f.additionalMedia[2].uri));
+  assert.deepEqual(collectDraftMediaReferences(f.drafts).map((ref) => ref.uri).sort(), [f.additionalMedia[0].uri, f.additionalMedia[3].uri].sort());
+  const withoutMeal = removeRecord(f.data, 'meal', f.data.meals[0].id);
+  assert.deepEqual(collectMediaReferences(withoutMeal), [{ uri: media[2].uri, kind: 'video' }]);
+  assert.deepEqual(collectDraftMediaReferences(f.drafts).map((ref) => ref.uri).sort(), [f.additionalMedia[0].uri, f.additionalMedia[3].uri].sort());
+  assert.deepEqual(collectDraftMediaReferences({}), []);
+});
+
+test('repeated multi-photo import compares byte aliases in every URI array while retaining factual conflicts', async () => {
+  const f = multiplePhotoFixture();
+  const parsed = await parseBackupArchive(await createBackupArchive(f.data, f.media, now, { drafts: f.drafts }));
+  const aliases = new Map<string, string>();
+  for (const item of f.media) aliases.set(item.uri, `${item.kind}:${createHash('sha256').update(item.bytes).digest('hex')}`);
+  for (const item of parsed.media) aliases.set(item.path, `${item.kind}:${item.sha256}`);
+  const equivalent = (left: unknown, right: unknown) => canonicalJson(left, aliases) === canonicalJson(right, aliases);
+  assert.equal(canonicalJson({ note: media[0].uri }, aliases), canonicalJson({ note: media[0].uri }));
+  let merged = f.data;
+  for (let round = 0; round < 3; round += 1) {
+    merged = mergeBackupData(merged, parsed.data, equivalent);
+    assert.equal(merged.meals.length, 1); assert.equal(merged.meals[0].revisions!.length, 1); assert.equal(merged.sourceVersion, f.data.sourceVersion);
+    assert.deepEqual(mergeFormDrafts(f.drafts, parsed.drafts, equivalent), f.drafts);
+  }
+  assert.equal(canonicalJson(merged), canonicalJson(f.data));
+  const conflict = structuredClone(parsed.data); conflict.meals[0].beforeImageUris!.reverse();
+  assert.throws(() => mergeBackupData(merged, conflict, equivalent), isCode('import-conflict'));
+  const sameBytes = { ...f.media[0], uri: 'file:///alternate-primary.jpg' };
+  f.data.meals[0].beforeImageUris!.push(sameBytes.uri);
+  delete f.data.meals[0].afterImageUri;
+  const shared = await parseBackupArchive(await createBackupArchive(f.data, [...f.media, sameBytes], now, { drafts: f.drafts }));
+  assert.equal(shared.media.length, f.media.length - 1);
+  assert.equal(shared.data.meals[0].beforeImageUris![0], shared.data.meals[0].beforeImageUris!.at(-1));
+});
+
+test('local snapshots preserve multi-photo arrays atomically and reject corrupt draft replacements', async () => {
+  const f = multiplePhotoFixture();
+  const values = new Map<string, string>();
+  const repository = new LocalRepository({ getItem: async (key) => values.get(key) ?? null, setItem: async (key, value) => { values.set(key, value); }, removeItem: async (key) => { values.delete(key); } });
+  await repository.commit({ storageVersion: 1, data: f.data, drafts: f.drafts });
+  const committed = values.get(DATA_KEY);
+  const restored = parseLocalSnapshot(committed!);
+  assert.deepEqual(restored.data.meals[0].beforeImageUris, f.data.meals[0].beforeImageUris);
+  assert.deepEqual(restored.data.meals[0].revisions![0].beforeImageUris, f.data.meals[0].revisions![0].beforeImageUris);
+  assert.deepEqual(restored.drafts, f.drafts);
+  await assert.rejects(repository.commit({ storageVersion: 1, data: f.data, drafts: { 'meal-new': { beforeImageUris: [null] } } }), isCode('invalid-draft'));
+  assert.equal(values.get(DATA_KEY), committed);
 });

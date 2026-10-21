@@ -72,7 +72,7 @@ test('Responses config validates protocol, effort and endpoint construction', ()
   const config = parseConfig({ MODEL_BASE_URL: 'https://example.com/v1', MODEL_API_PROTOCOL: 'responses', MODEL_REASONING_EFFORT: 'max' });
   assert.equal(config.modelApiUrl, 'https://example.com/v1/responses');
   assert.equal(config.modelReasoningEffort, 'max');
-  assert.equal(normalizeConfig({}).upstreamTimeoutMs, 180_000);
+  assert.equal(normalizeConfig({}).upstreamTimeoutMs, 120_000);
   assert.equal(normalizeConfig({ upstreamTimeoutMs: 180_000 }).upstreamTimeoutMs, 180_000);
   assert.equal(parseConfig({ UPSTREAM_TIMEOUT_MS: '180000' }).upstreamTimeoutMs, 180_000);
   assert.throws(() => normalizeConfig({ upstreamTimeoutMs: 180_001 }), /Invalid UPSTREAM_TIMEOUT_MS/);
@@ -223,6 +223,27 @@ test('low confidence remaining after targeted review does not trigger a final me
     assert.equal(crops[0].stage, 'crop_review');
     assert.deepEqual(crops[0].regions, [cropRegion]);
   }, { createCrops: async (context) => { crops.push(context); return [crop]; } });
+});
+
+test('review label rewrites without resolved food IDs do not trigger a third stage', async () => {
+  const region = { x: 0.2, y: 0.25, width: 0.25, height: 0.3 };
+  const recognition = (label, confidence, uncertainty) => ({ foodName: label, components: [{
+    foodId: null, label, uncertainty, confidence, category: 'vegetable',
+    candidates: [{ foodId: null, label: '烫拌菜', confidence: 0.55 }, { foodId: null, label: '冒菜', confidence: 0.5 }],
+    evidence: [], region, nutritionEstimate: modelNutritionEstimate,
+  }], unresolved: ['身份待确认'], assumptions: [], advice: '请按实际记录补充。', confidence });
+  const original = 'data:image/png;base64,iVBORw0KGgo=';
+  const crop = 'data:image/jpeg;base64,/9j/AA==';
+  await fixture(async ({ api, calls, setRaw }) => {
+    setRaw((_sent, callNumber) => output(JSON.stringify(callNumber === 1
+      ? recognition('混合菜', 0.6, ['身份待确认'])
+      : recognition('什锦烫拌菜', 0.8, ['具体配方不确定']))));
+    const result = await api('review-label-rewrite', 'meal', { photos: [original], photoRoles: ['before'] });
+    assert.equal(result.status, 200);
+    assert.equal(result.body.stageCount, 2);
+    assert.equal(calls.length, 2);
+    assert.equal(result.body.analysis.foodName, '什锦烫拌菜');
+  }, { createCrops: async () => [crop] });
 });
 
 test('review is skipped when no crop generator is configured', async () => {

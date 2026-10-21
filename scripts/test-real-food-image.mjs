@@ -52,8 +52,11 @@ function extractUsage(body) {
 }
 
 export function parseOptions(argv = process.argv) {
-  const timeoutMs = Number(getArg('timeout-ms', argv) ?? 180_000);
+  const timeoutMs = Number(getArg('timeout-ms', argv) ?? 90_000);
   const imageDetail = getArg('image-detail', argv) ?? 'low';
+  const reasoningEffort = getArg('reasoning-effort', argv);
+  const maxOutputTokens = Number(getArg('max-output-tokens', argv) ?? 8_192);
+  const allowProviderOverride = argv.includes('--allow-provider-override');
   const approximateCopy = argv.includes('--approximate-copy');
   const actualAppCopy = argv.includes('--app-copy');
   const plannedMeals = Number(getArg('planned-meals', argv) ?? 50);
@@ -62,11 +65,13 @@ export function parseOptions(argv = process.argv) {
   if (approximateCopy && actualAppCopy) throw new Error('Choose one copy mode.');
   if (argv.includes('--stream') && argv.includes('--no-stream')) throw new Error('Choose one streaming mode.');
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1_000 || timeoutMs > 300_000) throw new Error('Invalid timeout.');
+  if (reasoningEffort !== undefined && !['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(reasoningEffort)) throw new Error('Invalid reasoning effort.');
+  if (!Number.isInteger(maxOutputTokens) || maxOutputTokens < 256 || maxOutputTokens > 8_192) throw new Error('Invalid max output tokens.');
   if (imageDetail !== undefined && !['low', 'high', 'auto'].includes(imageDetail)) throw new Error('Invalid image detail.');
   if (!Number.isInteger(plannedMeals) || plannedMeals < 1 || plannedMeals > 50) throw new Error('Invalid planned meal count.');
   if (!isExistingRealMealLedgerPath(ledgerPath)) throw new Error('Live diagnostics must use one of the two existing shared-budget real-meal ledgers.');
   return {
-    imagePath: getArg('image', argv) ?? DEFAULT_IMAGE, timeoutMs, approximateCopy, actualAppCopy,
+    imagePath: getArg('image', argv) ?? DEFAULT_IMAGE, timeoutMs, reasoningEffort, maxOutputTokens, allowProviderOverride, approximateCopy, actualAppCopy,
     stream: !argv.includes('--no-stream'), imageDetail, mealId: getArg('meal-id', argv), plannedMeals,
     validationRunId: getArg('run-id', argv), writeStandaloneReport: !argv.includes('--no-standalone-report'),
     ledgerPath,
@@ -290,17 +295,19 @@ export async function runRealFoodImage(options = parseOptions()) {
   if (!isExistingRealMealLedgerPath(options.ledgerPath)) throw new Error('Live diagnostics must use one of the two existing shared-budget real-meal ledgers.');
   const image = await loadPhoto(options);
   const provider = await readLocalCodexProvider({ configPath: options.configPath });
+  const model = provider.model || LOCAL_MODEL;
+  const reasoningEffort = options.reasoningEffort ?? provider.reasoningEffort ?? LOCAL_REASONING;
   const cropper = createLocalCropper();
   const config = parseConfig({
     HOST: '127.0.0.1', PORT: 0, SERVER_ACCESS_TOKEN: randomUUID().replaceAll('-', ''), MODEL_BASE_URL: provider.baseUrl,
-    MODEL_API_PROTOCOL: 'responses', MODEL_API_KEY: provider.key, MODEL_NAME: LOCAL_MODEL, MODEL_REASONING_EFFORT: LOCAL_REASONING,
-    MODEL_STREAM: String(Boolean(options.stream)), MODEL_MAX_OUTPUT_TOKENS: '8192', UPSTREAM_TIMEOUT_MS: String(options.timeoutMs),
+    MODEL_API_PROTOCOL: 'responses', MODEL_API_KEY: provider.key, MODEL_NAME: model, MODEL_REASONING_EFFORT: reasoningEffort,
+    MODEL_STREAM: String(Boolean(options.stream)), MODEL_MAX_OUTPUT_TOKENS: String(options.maxOutputTokens), UPSTREAM_TIMEOUT_MS: String(options.timeoutMs),
     MONTHLY_BUDGET_CNY: '1000000', MAX_REQUEST_COST_CNY: '1', SAFETY_RESERVE_CNY: '0', INSTALLATION_DAILY_QUOTA: String(MAX_REAL_MODEL_CALLS),
     HEALTH_DB_PATH: ':memory:',
   });
   const mealId = options.mealId ?? `photo-${image.transmittedSha256.slice(0, 24)}`;
   const validationRunId = options.validationRunId ?? options.runId ?? randomUUID();
-  const ledger = new RealMealTestLedger(options.ledgerPath);
+  const ledger = new RealMealTestLedger(options.ledgerPath, { allowProviderOverride: options.allowProviderOverride === true });
   const runId = randomUUID(); const artifactDirectory = join(root, 'artifacts', 'real-validation', runId);
   await mkdir(artifactDirectory, { recursive: true, mode: 0o700 }); await chmod(artifactDirectory, 0o700).catch(() => {});
   const report = {
@@ -309,9 +316,15 @@ export async function runRealFoodImage(options = parseOptions()) {
     transmittedDimensions: image.transmittedDimensions, appCopy: options.actualAppCopy,
     copyMode: options.actualAppCopy ? 'actual-web-app' : options.approximateCopy ? 'approximate-browser-canvas' : 'original', transform: image.transform,
     transmitted: { contentType: image.transmittedMime, bytes: image.transmittedBytes, dimensions: image.transmittedDimensions, sha256: image.transmittedSha256 },
-    syntheticOnly: false, automaticRetries: 0, model: LOCAL_MODEL, reasoningEffort: LOCAL_REASONING, upstreamTimeoutMs: options.timeoutMs,
+    syntheticOnly: false, automaticRetries: 0, model, reasoningEffort, maxOutputTokens: options.maxOutputTokens, upstreamTimeoutMs: options.timeoutMs,
     validationRunId,
-    stream: options.stream, diagnosticOverrides: options.imageDetail ? { imageDetail: options.imageDetail } : {}, resultVersion: REAL_FOOD_RESULT_VERSION,
+    stream: options.stream,
+    diagnosticOverrides: {
+      ...(options.imageDetail ? { imageDetail: options.imageDetail } : {}),
+      ...(options.reasoningEffort ? { reasoningEffort: options.reasoningEffort } : {}),
+      ...(options.maxOutputTokens !== 8_192 ? { maxOutputTokens: options.maxOutputTokens } : {}),
+    },
+    resultVersion: REAL_FOOD_RESULT_VERSION,
     nutritionMethod: 'ai-per100g-v3', ledgerBefore: ledger.totals(),
     maxModelCalls: MAX_REAL_MODEL_CALLS, perMealLimit: 3, reviewMealLimit: 25, mealId,
     requestAttempts: [], stageResults: [], stageRejections: [], reviewCrops: [], streamingEvents: [], streamingTerminalEvents: [],
@@ -349,7 +362,7 @@ export async function runRealFoodImage(options = parseOptions()) {
     event: (event) => {
       if (event.phase === 'stage') {
         activeAttempt = { attemptId: event.attemptId, stage: event.stage, stageCount: event.stageCount, httpStatus: null,
-          model: LOCAL_MODEL, reasoningEffort: LOCAL_REASONING, resultVersion: REAL_FOOD_RESULT_VERSION, providerCompleted: false, analysisAccepted: null,
+          model, reasoningEffort, resultVersion: REAL_FOOD_RESULT_VERSION, providerCompleted: false, analysisAccepted: null,
           completed: false, elapsedMs: null, usage: null, status: 'in_flight' };
         report.requestAttempts.push(activeAttempt);
       } else if (event.phase === 'headers' && activeAttempt) { activeAttempt.httpStatus = event.httpStatus; activeAttempt.elapsedMs = event.elapsedMs;
@@ -393,11 +406,11 @@ export async function runRealFoodImage(options = parseOptions()) {
       });
     const returnedStage = report.stageResults.find((stage) => stage.analysis === result.analysis)
       ?? report.stageResults.findLast((stage) => sameValue(stage.analysis, result.analysis));
-    report.result = { status: 200, elapsedMs: Date.now() - started, model: LOCAL_MODEL, errorCode: null, analysis: result.analysis,
+    report.result = { status: 200, elapsedMs: Date.now() - started, model, errorCode: null, analysis: result.analysis,
       returnedStage: returnedStage?.stage ?? null, returnedAttemptId: returnedStage?.attemptId ?? null,
-      reasoningEffort: LOCAL_REASONING, resultVersion: REAL_FOOD_RESULT_VERSION, stageCount: result.stageCount, requestCount: result.stageCount };
+      reasoningEffort, resultVersion: REAL_FOOD_RESULT_VERSION, stageCount: result.stageCount, requestCount: result.stageCount };
   } catch (error) {
-    report.result = { status: error instanceof GatewayError ? error.status : null, model: LOCAL_MODEL, reasoningEffort: LOCAL_REASONING,
+    report.result = { status: error instanceof GatewayError ? error.status : null, model, reasoningEffort,
       resultVersion: REAL_FOOD_RESULT_VERSION, elapsedMs: Date.now() - started,
       errorCode: error instanceof GatewayError ? error.code : 'diagnostic_transport_failure', failureName: error.name,
       analysis: null, stageCount: error.stageCount ?? report.requestAttempts.length, requestCount: report.requestAttempts.length };
@@ -432,7 +445,7 @@ export async function runRealFoodImage(options = parseOptions()) {
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   if (process.argv.includes('--help') || process.argv.includes('-h')) {
-    console.log('Usage: node scripts/test-real-food-image.mjs --live --stream --timeout-ms=180000 --image-detail=low --app-copy [--run-id=<new-round-id>] [--meal-id=<id>]\nStreaming and low image detail are defaults. --app-copy verifies and uses the existing app capture for the original attachment. Both existing real-meal ledgers share the cumulative 75-request budget.');
+    console.log('Usage: node scripts/test-real-food-image.mjs --live --stream --timeout-ms=90000 --image-detail=low --app-copy [--reasoning-effort=<provider-effort>] [--max-output-tokens=<256..8192>] [--allow-provider-override] [--run-id=<new-round-id>] [--meal-id=<id>]\nStreaming and low image detail are defaults. The default per-stage wait is 90s; use --timeout-ms=180000 only for an explicit slow-provider diagnostic. Omitted reasoning and output limits use the active Codex effort and 8192 tokens. --allow-provider-override is required for a lower-effort comparison and still consumes the shared 75-request budget. --app-copy verifies and uses the existing app capture for the original attachment. Both existing real-meal ledgers share the cumulative 75-request budget.');
   } else {
     runRealFoodImage().then((report) => { if (!report.validation.nutritionFeatureSucceeded) process.exitCode = 1; })
       .catch((error) => { console.error(`Real image validation failed: ${error.message}`); process.exitCode = 1; });

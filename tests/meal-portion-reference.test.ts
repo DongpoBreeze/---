@@ -1,0 +1,303 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { estimateMealPortion, hasIncompleteMealRecognition } from '../src/meal-portion-reference';
+import type { MealAnalysis, MealComponent, MealRecord, NutrientRange, NutrientRanges, Profile } from '../src/types';
+
+const nutrients = (min = 120, max = 160): NutrientRanges => ({
+  calories: { min, max }, protein: { min: 3, max: 8 }, carbs: { min: 10, max: 25 }, fat: { min: 1, max: 7 },
+});
+const dish = (overrides: Partial<MealComponent> = {}): MealComponent => ({
+  foodId: null, label: '鸡肉烩饭', grams: null, uncertainty: [],
+  source: { provider: 'model', basisGrams: 100, method: 'typical_recipe', per100gRange: nutrients(),
+    recipeBasis: '通常成品配方', assumptions: ['油量未知'], confidence: 0.8,
+    model: 'configured/model', generatedAt: '2026-10-20T00:00:00.000Z' },
+  ...overrides,
+});
+const meal = (components: MealComponent[] = [dish()], changes: Partial<MealAnalysis> = {}): MealAnalysis => ({
+  status: 'unknown', foodName: '午餐', calories: null, protein: null, carbs: null, fat: null,
+  assumptions: [], advice: '', components, ...changes,
+});
+const ready = (profile: Profile = { calorieTarget: 2000 }, mealType: MealRecord['mealType'] = '午餐', analysis: MealAnalysis = meal()) => {
+  const result = estimateMealPortion(profile, mealType, analysis);
+  assert.equal(result.status, 'ready', result.reason);
+  assert.ok(result.dailyCalories && result.mealCalories && result.totalGrams);
+  assert.equal(result.reason, undefined);
+  return result;
+};
+const unavailable = (profile: Profile, analysis: MealAnalysis | null, pattern: RegExp) => {
+  const result = estimateMealPortion(profile, '午餐', analysis);
+  assert.equal(result.status, 'unavailable');
+  assert.match(result.reason ?? '', pattern);
+  assert.equal(result.totalGrams, null);
+  assert.deepEqual(result.dishes, []);
+  return result;
+};
+
+test('valid body weight scales the general adult product interval without requiring height', () => {
+  const result = ready({ heightCm: 170, weightKg: 70 });
+  assert.deepEqual(result.dailyCalories, { min: 1750, max: 2450 });
+  assert.deepEqual(result.mealCalories, { min: 612, max: 858 });
+  assert.deepEqual(result.totalGrams, { min: 382, max: 715 });
+  assert.equal(result.weightKg, 70);
+  assert.equal(result.basis, 'body-weight');
+  const assumptions = result.assumptions.join(' ');
+  assert.match(assumptions, /25–35 kcal\/kg\/day/);
+  assert.match(assumptions, /体重 70 kg.*60 kg.*同比例/);
+  assert.match(assumptions, /一般成人.*不代表照片重量或称重实测/);
+  assert.deepEqual(ready({ weightKg: 70 }).dailyCalories, result.dailyCalories);
+  assert.deepEqual(ready({ heightCm: 230, weightKg: 70 }).totalGrams, result.totalGrams);
+  assert.deepEqual(ready({ weightKg: 60 }).dailyCalories, { min: 1500, max: 2100 });
+  assert.deepEqual(ready({ weightKg: 90 }).dailyCalories, { min: 2250, max: 3150 });
+});
+
+test('an absent valid weight uses a visible 60 kg general adult fallback even with height alone', () => {
+  for (const profile of [{}, { heightCm: 170 }, { heightCm: Infinity }]) {
+    const result = ready(profile);
+    assert.equal(result.basis, 'general-adult');
+    assert.equal(result.weightKg, 60);
+    assert.deepEqual(result.dailyCalories, { min: 1500, max: 2100 });
+    assert.deepEqual(result.mealCalories, { min: 525, max: 735 });
+    assert.match(result.assumptions.join(' '), /尚无有效体重.*一般成人 60 kg/);
+  }
+});
+
+test('an explicit valid daily target wins even without usable body data and goals do not alter energy', () => {
+  for (const goal of ['health', 'fat-loss', 'muscle-gain'] as const) {
+    const result = ready({ goal, calorieTarget: 2000, heightCm: Infinity, weightKg: -5 });
+    assert.deepEqual(result.dailyCalories, { min: 2000, max: 2000 });
+    assert.deepEqual(result.mealCalories, { min: 700, max: 700 });
+    assert.deepEqual(result.totalGrams, { min: 437, max: 584 });
+    assert.match(result.assumptions.join(' '), /已填写的每日热量目标/);
+    assert.equal(result.basis, 'daily-target');
+    assert.equal(result.weightKg, undefined);
+    assert.doesNotMatch(result.assumptions.join(' '), /Mifflin-St Jeor/);
+  }
+  assert.deepEqual(ready({ calorieTarget: 2000 }).totalGrams, ready({ calorieTarget: 2000, heightCm: 190, weightKg: 100 }).totalGrams);
+});
+
+test('each meal type uses its reference share of daily calories', () => {
+  for (const [mealType, calories] of [['早餐', 500], ['午餐', 700], ['晚餐', 600], ['加餐', 200]] as const) {
+    const result = ready({ calorieTarget: 2000 }, mealType);
+    assert.deepEqual(result.mealCalories, { min: calories, max: calories });
+    assert.match(result.assumptions.join(' '), /早餐 25%.*午餐 35%.*晚餐 30%.*加餐 10%/);
+  }
+  assert.equal(estimateMealPortion({ calorieTarget: 2000 }, '宵夜' as MealRecord['mealType'], meal()).status, 'unavailable');
+});
+
+test('different dish densities are averaged by equal grams and interval division reverses density bounds', () => {
+  const result = ready({ calorieTarget: 2000 }, '午餐', meal([
+    dish({ label: '主食', userNutritionPer100g: nutrients(100, 140) }),
+    dish({ label: '肉菜', userNutritionPer100g: nutrients(200, 260) }),
+  ]));
+  // Mean density 150–200 kcal/100 g => total 350–466.66… g.
+  assert.deepEqual(result.totalGrams, { min: 350, max: 467 });
+  assert.deepEqual(result.dishes, [
+    { index: 0, label: '主食', grams: { min: 175, max: 234 } },
+    { index: 1, label: '肉菜', grams: { min: 175, max: 234 } },
+  ]);
+  assert.match(result.assumptions.join(' '), /各道菜等克数.*平均值/);
+  const denser = ready({ calorieTarget: 2000 }, '午餐', meal([dish({ userNutritionPer100g: nutrients(300, 400) })]));
+  assert.deepEqual(denser.totalGrams, { min: 175, max: 234 });
+});
+
+test('all rounded bounds contain the fractional energy and portion intervals', () => {
+  const result = ready({ heightCm: 172.3, weightKg: 67.4 }, '早餐', meal([
+    dish({ userNutritionPer100g: nutrients(111.1, 155.5) }),
+    dish({ userNutritionPer100g: nutrients(222.2, 277.7) }),
+    dish({ userNutritionPer100g: nutrients(166.6, 199.9) }),
+  ]));
+  assert.ok(result.dailyCalories!.min <= 25 * 67.4);
+  assert.ok(result.dailyCalories!.max >= 35 * 67.4);
+  assert.ok(result.mealCalories!.min <= result.dailyCalories!.min * 0.25);
+  assert.ok(result.mealCalories!.max >= result.dailyCalories!.max * 0.25);
+  const minGrams = result.mealCalories!.min / ((155.5 + 277.7 + 199.9) / 3) * 100;
+  const maxGrams = result.mealCalories!.max / ((111.1 + 222.2 + 166.6) / 3) * 100;
+  assert.ok(result.totalGrams!.min <= minGrams);
+  assert.ok(result.totalGrams!.max >= maxGrams);
+  for (const item of result.dishes) {
+    assert.ok(item.grams.min <= minGrams / 3);
+    assert.ok(item.grams.max >= maxGrams / 3);
+  }
+});
+
+test('user references override model and stale snapshots, with or without an original source', () => {
+  for (const overrides of [{}, { nutritionReferenceStale: true }, { source: null }] satisfies Partial<MealComponent>[]) {
+    const result = ready({ calorieTarget: 2000 }, '午餐', meal([dish({ ...overrides, userNutritionPer100g: nutrients(200, 250) })]));
+    assert.deepEqual(result.totalGrams, { min: 280, max: 350 });
+  }
+  unavailable({ calorieTarget: 2000 }, meal([dish({ userNutritionPer100g: null })]), /营养未知或不完整/);
+  unavailable({ calorieTarget: 2000 }, meal([dish({ nutritionReferenceStale: true })]), /旧营养参考已失效/);
+});
+
+test('complete local point and range references can be used without consulting a food database', () => {
+  for (const source of [
+    { provider: 'usda-fdc', dataset: 'local snapshot', per100g: { calories: 200, protein: 10, carbs: 25, fat: 7 } },
+    { provider: 'local-category', dataset: 'local category', per100gRange: nutrients(200, 200) },
+  ] satisfies NonNullable<MealComponent['source']>[]) {
+    assert.deepEqual(ready({ calorieTarget: 2000 }, '午餐', meal([dish({ source })])).totalGrams, { min: 350, max: 350 });
+  }
+});
+
+test('unknown, omitted, partial and invalid per-100g nutrients never become zeros or partial meal recommendations', () => {
+  const invalid: Array<Partial<MealComponent>> = [
+    { source: null },
+    { source: { provider: 'usda-fdc', dataset: 'partial', per100g: { calories: 200, protein: null, carbs: 25, fat: 7 } } },
+    { userNutritionPer100g: { ...nutrients(), protein: undefined } as unknown as NutrientRanges },
+    { userNutritionPer100g: { ...nutrients(), fat: null } as unknown as NutrientRanges },
+    { userNutritionPer100g: nutrients(200, 100) },
+    { userNutritionPer100g: nutrients(-1, 100) },
+    { userNutritionPer100g: nutrients(100, Infinity) },
+    { userNutritionPer100g: nutrients(100, NaN) },
+    { userNutritionPer100g: nutrients(900, 901) },
+    { userNutritionPer100g: { ...nutrients(), fat: { min: 0, max: 101 } } },
+    { userNutritionPer100g: { ...nutrients(), protein: { min: 80, max: 90 }, carbs: { min: 30, max: 40 } } },
+  ];
+  for (const changes of invalid) {
+    const result = unavailable({ calorieTarget: 2000 }, meal([dish(), dish({ ...changes, label: '未确认菜' })]), /未确认菜.*营养未知或不完整/);
+    assert.deepEqual(result.mealCalories, { min: 700, max: 700 });
+  }
+});
+
+test('identity conflicts veto even user nutrition while pure quantity or recipe uncertainty does not', () => {
+  const conflicts: Partial<MealComponent>[] = [
+    { uncertainty: ['菜品身份待确认。'] },
+    { foodId: 'rice', candidates: [{ foodId: 'rice', label: '米饭', confidence: 0.6 }, { foodId: 'egg', label: '鸡蛋', confidence: 0.55 }] },
+    { foodId: 'rice', candidates: [{ foodId: 'rice', label: '米饭' }, { foodId: 'egg', label: '鸡蛋' }] },
+    { foodId: 'rice', candidates: [{ foodId: 'egg', label: '鸡蛋', confidence: 0.95 }, { foodId: 'rice', label: '米饭', confidence: 0.1 }] },
+  ];
+  for (const conflict of conflicts)
+    unavailable({ calorieTarget: 2000 }, meal([dish({ ...conflict, userNutritionPer100g: nutrients() })]), /身份尚未确认/);
+  ready({ calorieTarget: 2000 }, '午餐', meal([dish({ uncertainty: ['照片没有比例尺，重量未知。', '烹调油用量未知。'] })], {
+    unresolved: ['重量未知。', '实际食用比例未知。'],
+  }));
+});
+
+test('missing component records and unresolved dishes block the full meal while missing actual quantities do not', () => {
+  const components = [dish()];
+  for (const changes of [
+    { coverage: { matched: 1, total: 2, unknownLabels: [] } },
+    { coverage: { matched: 1, total: 1, unknownLabels: ['漏掉的主食'] } },
+    { coverage: { matched: 1, total: 1, unknownLabels: [], unknownNutritionLabels: ['未记录的汤'] } },
+    { unresolved: ['还有一道菜未识别。'] },
+    { unresolved: ['菜品有遗漏。'] },
+    { unresolved: ['主食不完整。'] },
+    { unresolved: ['Unidentified food behind the bowl.'] },
+  ] satisfies Partial<MealAnalysis>[]) unavailable({ calorieTarget: 2000 }, meal(components, changes), /遗漏或记录不完整/);
+  const noQuantities = meal(components, {
+    coverage: { matched: 1, total: 1, counted: 0, referenceCount: 1, unknownLabels: [], unknownNutritionLabels: [], missingQuantityLabels: ['鸡肉烩饭'] },
+    nutritionSource: { provider: 'model', method: 'ai-per100g-v3', coverage: 'incomplete' },
+  });
+  ready({ calorieTarget: 2000 }, '午餐', noQuantities);
+  // Effective user corrections take precedence over an old aggregate coverage snapshot too.
+  ready({ calorieTarget: 2000 }, '午餐', meal([dish({ source: null, userNutritionPer100g: nutrients() })], {
+    coverage: { matched: 0, total: 1, unknownLabels: ['鸡肉烩饭'], unknownNutritionLabels: ['鸡肉烩饭'] },
+  }));
+});
+
+test('public recognition completeness flags explicit omissions even with complete dish references and totals', () => {
+  const components = [dish({ label: '米饭', userQuantity: { amount: 100, unit: 'g', origin: 'user' } }),
+    dish({ label: '鸡肉烩菜', userQuantity: { amount: 100, unit: 'g', origin: 'user' } })];
+  const complete = meal(components, { status: 'approximate', ...nutrients(240, 320),
+    coverage: { matched: 2, total: 2, counted: 2, referenceCount: 2,
+      unknownLabels: [], unknownNutritionLabels: [], missingQuantityLabels: [] } });
+  assert.equal(hasIncompleteMealRecognition(complete), false);
+  for (const unresolved of [['还有一道主食未识别。'], ['菜品有遗漏。'], ['Unidentified food behind the bowl.']])
+    assert.equal(hasIncompleteMealRecognition({ ...complete, unresolved }), true);
+  for (const coverage of [
+    { ...complete.coverage!, unknownLabels: ['漏掉的汤'] },
+    { ...complete.coverage!, unknownNutritionLabels: ['未记录的主食'] },
+  ]) assert.equal(hasIncompleteMealRecognition({ ...complete, coverage }), true);
+});
+
+test('public recognition completeness flags absent records and counts that disagree with the dish list', () => {
+  const components = [dish({ label: '米饭' }), dish({ label: '肉菜' })];
+  for (const total of [0, 1, 3, 2.5]) assert.equal(hasIncompleteMealRecognition(meal(components, {
+    coverage: { matched: 0, total, unknownLabels: [] },
+  })), true);
+  for (const incomplete of [meal([]), meal(undefined, { components: undefined }), meal([dish({ label: ' ' })]),
+    meal(Array.from({ length: 21 }, (_, index) => dish({ label: `菜品 ${index + 1}` })))])
+    assert.equal(hasIncompleteMealRecognition(incomplete), true);
+});
+
+test('public recognition completeness keeps a normal reference-only meal complete without actual quantities', () => {
+  const components = [dish({ label: '米饭' }), dish({ label: '肉菜' })];
+  const noQuantities = meal(components, {
+    coverage: { matched: 2, total: 2, counted: 0, referenceCount: 2,
+      unknownLabels: [], unknownNutritionLabels: [], missingQuantityLabels: ['米饭', '肉菜'] },
+    nutritionSource: { provider: 'model', method: 'ai-per100g-v3', coverage: 'incomplete' },
+  });
+  assert.equal(hasIncompleteMealRecognition(noQuantities), false);
+  assert.equal(hasIncompleteMealRecognition(meal(components)), false);
+  assert.equal(hasIncompleteMealRecognition(meal(components, {
+    coverage: { matched: 0, total: 2, counted: 0, unknownLabels: ['米饭', '肉菜'], unknownNutritionLabels: ['米饭', '肉菜'] },
+  })), false);
+});
+
+test('public recognition completeness is read-only and oil, salt or quantity uncertainty does not imply a missing dish', () => {
+  const complete = freezeDeep(meal([dish({ uncertainty: ['烹调油和盐用量未知。'] })], {
+    unresolved: ['烹调油和盐用量未知。', '无法从照片确认酱汁用量。', '实际食用量尚未填写。'],
+  }));
+  const before = JSON.stringify(complete);
+  assert.equal(hasIncompleteMealRecognition(complete), false);
+  assert.equal(JSON.stringify(complete), before);
+});
+
+test('absent analyses and incomplete dishes remain unavailable', () => {
+  for (const analysis of [null, meal([]), meal([dish({ label: ' ' })]), meal(undefined, { components: undefined })])
+    unavailable({ calorieTarget: 2000 }, analysis, /完整菜品|遗漏或记录不完整/);
+});
+
+test('invalid or extreme filled profile values are explicitly excluded from the fallback', () => {
+  for (const weightKg of [0, -1, 29.9, 250.1, Infinity, NaN, '70', null]) {
+    const result = ready({ heightCm: 170, weightKg } as unknown as Profile);
+    assert.equal(result.basis, 'general-adult');
+    assert.equal(result.weightKg, 60);
+    assert.deepEqual(result.dailyCalories, { min: 1500, max: 2100 });
+    assert.match(result.assumptions.join(' '), /体重不在.*30–250 kg.*未采用异常数值.*60 kg/);
+  }
+  for (const calorieTarget of [0, -100, 799, 6001, Infinity, NaN]) {
+    const fallback = ready({ calorieTarget, weightKg: 70 });
+    assert.deepEqual(fallback.dailyCalories, { min: 1750, max: 2450 });
+    assert.equal(fallback.basis, 'body-weight');
+    assert.match(fallback.assumptions.join(' '), /每日热量目标不在.*未采用该数值/);
+    const general = ready({ calorieTarget });
+    assert.equal(general.basis, 'general-adult');
+    assert.deepEqual(general.dailyCalories, { min: 1500, max: 2100 });
+  }
+});
+
+test('very low or zero energy density and recommendations over 2000 g are refused rather than clipped', () => {
+  for (const range of [{ min: 0, max: 0 }, { min: 0, max: 150 }, { min: 20, max: 60 }, { min: 49.9, max: 70 }])
+    unavailable({ calorieTarget: 2000 }, meal([dish({ label: '青菜汤', userNutritionPer100g: nutrients(range.min, range.max) })]), /热量密度.*补充完整菜品或调整各菜比例/);
+  unavailable({ calorieTarget: 6000 }, meal([dish({ userNutritionPer100g: nutrients(50, 100) })]), /超过 2000 g/);
+  const boundary = ready({ calorieTarget: 4000 }, '早餐', meal([dish({ userNutritionPer100g: nutrients(50, 50) })]));
+  assert.deepEqual(boundary.totalGrams, { min: 2000, max: 2000 });
+});
+
+function freezeDeep<T>(value: T): T {
+  if (value && typeof value === 'object') {
+    Object.values(value).forEach(freezeDeep);
+    Object.freeze(value);
+  }
+  return value;
+}
+
+test('photo grams, actual quantities, eaten fractions and old meal totals do not participate in preparation estimates', () => {
+  const baseline = ready();
+  const profile = freezeDeep({ calorieTarget: 2000, heightCm: 170, weightKg: 70 });
+  const analysis = freezeDeep(meal([dish({
+    grams: { min: 3, max: 99_999 }, quantitySource: 'visual', userQuantity: { amount: 99_999, unit: 'household' },
+    consumedFraction: { min: 0, max: 0.1 }, eatenFraction: { min: 0.5, max: 1 }, edibleFraction: { min: 0.1, max: 0.2 },
+    householdMeasure: { label: '夸大的旧份数', grams: 99_999, approximate: true },
+  })], { calories: { min: 999_999, max: 999_999 }, protein: { min: 999, max: 999 }, status: 'estimated' }));
+  const before = JSON.stringify({ profile, analysis });
+  const result = ready(profile, '午餐', analysis);
+  assert.deepEqual(result.totalGrams, baseline.totalGrams);
+  assert.deepEqual(result.dishes, baseline.dishes);
+  assert.equal(JSON.stringify({ profile, analysis }), before);
+  // Returned per-dish objects do not alias one another or caller-owned data.
+  const two = ready(profile, '午餐', meal([dish(), dish()]));
+  two.dishes[0].grams.min = -1;
+  assert.notEqual(two.dishes[1].grams.min, -1);
+  assert.notEqual(analysis.components![0].source?.per100gRange?.calories.min, -1);
+});

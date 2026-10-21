@@ -24,6 +24,12 @@ export function mealPhotoAutofill(analysis: MealAnalysis): MealPhotoAutofill {
 }
 
 export function mealPhotoEstimateText(analysis: MealAnalysis) {
+  if (analysis.nutritionSource?.method === 'reference-quantity-v1') {
+    const refs = analysis.coverage?.referenceCount ?? 0;
+    return refs
+      ? `已保留 ${refs} 道菜的每 100 g 营养参考；填写实际食用数量后计算已填小计。`
+      : '已保留菜品记录，营养参考未知；补全每 100 g 参考后可按实际食用量计算。';
+  }
   if (analysis.nutritionSource?.method === 'ai-per100g-v3') {
     const refs = analysis.coverage?.referenceCount ?? (analysis.components ?? []).filter((item) => item.source?.provider === 'model' && !item.nutritionReferenceStale).length;
     return refs

@@ -4,9 +4,12 @@ import type { AppData } from "../types";
 import { localDate } from "../domain";
 import { Note } from "./components";
 import { recordDate, sleepHours } from "./format";
-import { color, moduleTone, radius, space, type, type ModuleKind } from "./theme";
+import { radius, space, type ModuleKind, type ThemeTokens } from "./theme";
+import { useTheme, useThemedStyles } from "./theme-provider";
 
 export function Trends({ data, contentStyle }: { data: AppData; contentStyle: StyleProp<ViewStyle> }) {
+  const { color } = useTheme();
+  const st = useThemedStyles(createStyles);
   const [days, setDays] = useState<7 | 30>(7);
   const dates = useMemo(
     () =>
@@ -81,6 +84,8 @@ function Coverage({ dates, meals, training, sleep }: {
   training: Map<string, number>;
   sleep: Map<string, number[]>;
 }) {
+  const { moduleTone } = useTheme();
+  const st = useThemedStyles(createStyles);
   const rows: Array<[ModuleKind, (d: string) => boolean]> = [
     ["meal", (d) => meals.has(d)],
     ["training", (d) => training.has(d)],
@@ -114,6 +119,8 @@ function Trend({ kind, title, dates, values, unit }: {
   values: Array<number | null>;
   unit: string;
 }) {
+  const { type, moduleTone } = useTheme();
+  const st = useThemedStyles(createStyles);
   const known = values.filter((v): v is number => v !== null);
   const max = Math.max(...known, 1);
   const tone = moduleTone[kind];
@@ -157,7 +164,7 @@ function Trend({ kind, title, dates, values, unit }: {
   );
 }
 
-const st = StyleSheet.create({
+const createStyles = ({ color, type, shadow }: ThemeTokens) => StyleSheet.create({
   title: { ...type.display },
   intro: { ...type.bodySoft, marginTop: space.xs, marginBottom: space.lg },
   segment: { flexDirection: "row", alignSelf: "flex-start", backgroundColor: color.surface, borderRadius: radius.pill, padding: 3, marginBottom: space.lg },
@@ -165,14 +172,14 @@ const st = StyleSheet.create({
   segmentOn: { backgroundColor: color.pine },
   segmentText: { color: color.inkSoft, fontSize: 14, fontWeight: "700" },
   segmentTextOn: { color: color.onInk },
-  coverage: { backgroundColor: color.surface, borderRadius: radius.block, padding: space.lg, marginBottom: space.lg },
+  coverage: { backgroundColor: color.surface, borderRadius: radius.block, padding: space.lg, marginBottom: space.lg, ...shadow.card },
   blockTitle: { ...type.heading, marginBottom: space.md },
   covRow: { flexDirection: "row", alignItems: "center", gap: space.md, marginBottom: space.sm },
   covLabel: { width: 32, ...type.small, color: color.ink, fontWeight: "700" },
-  covCells: { flex: 1, flexDirection: "row", gap: 2 },
+  covCells: { flex: 1, minWidth: 0, flexDirection: "row", gap: 2 },
   cell: { flex: 1, height: 18, borderRadius: 3, backgroundColor: color.sunken },
   covCount: { width: 40, textAlign: "right", ...type.small, ...type.numeric },
-  trend: { backgroundColor: color.surface, borderRadius: radius.block, padding: space.lg, marginBottom: space.lg },
+  trend: { backgroundColor: color.surface, borderRadius: radius.block, padding: space.lg, marginBottom: space.lg, ...shadow.card },
   trendHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: space.md },
   trendTitleRow: { flexDirection: "row", alignItems: "center", gap: space.sm },
   dot: { width: 10, height: 10, borderRadius: 5 },
