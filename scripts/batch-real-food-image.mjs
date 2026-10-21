@@ -203,7 +203,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       '  --output-dir=<path>   Report directory (default: artifacts/real-validation-batch)',
       '  --run-id=<id>         Stable run ID for ledger/report association',
       '  --ledger-path=<path>  Existing experiment ledger (default: artifacts/real-meal-request-ledger-batch-20261016.sqlite)',
-      '  --timeout-ms=<ms>     Per-request timeout (default: 180000)',
+      '  --timeout-ms=<ms>     Per-request timeout (default: 90000; explicit diagnostics may use 180000)',
       '  --image-detail=<mode> Image detail (default: low)',
       '  --stream              Use streaming model responses (default: on)',
       '  --live                Required to send model requests',
@@ -218,7 +218,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     if (!/^[A-Za-z0-9_-]{1,80}$/.test(runId)) throw new Error('Invalid run ID.');
     const outputDir = resolve(arg('output-dir', join(process.cwd(), 'artifacts', `real-meal-retest-${runId}`)));
     const ledgerPath = arg('ledger-path', join(process.cwd(), 'artifacts', 'real-meal-request-ledger-batch-20261016.sqlite'));
-    const shared = { timeoutMs: Number(arg('timeout-ms', '180000')), approximateCopy: false, actualAppCopy: false,
+  const shared = { timeoutMs: Number(arg('timeout-ms', '90000')), approximateCopy: false, actualAppCopy: false,
       stream: true, imageDetail: arg('image-detail', 'low'), plannedMeals: 50, ledgerPath, quiet: true, writeStandaloneReport: false };
     import('./test-real-food-image.mjs').then(({ runRealFoodImage }) => runLiveBatch({ inputDir, outputDir, runId,
       runMeal: ({ mealId, imagePath, validationRunId }) => runRealFoodImage({ ...shared, imagePath, mealId, validationRunId }),

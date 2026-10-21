@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { parseBackupArchive } from '../src/backup';
+import { confirmAndSaveMealReview } from './helpers/saved-meal-review';
 import {
   configureMockAi, fulfillProviderJson, fulfillProviderResponse, installMockAiProvider,
   MOCK_AI_KEY, MOCK_AI_URL, openAiSettings, saveAiSettingsUi,
@@ -13,12 +14,12 @@ test('configured provider and upstream effort drive analysis while keys stay out
   page.on('dialog', (dialog) => { void dialog.accept(); });
   const provider = await installMockAiProvider(page, {
     models: [{ id: 'settings-model', supported_reasoning_efforts: ['medium', 'high'] }],
-    onResponse: async (route) => fulfillProviderResponse(route, {
-      foodName: '已确认熟白米饭',
-      components: [{ foodId: 'rice_white_long_grain_cooked', label: '熟白米饭',
-        nutritionEstimate: mockNutritionEstimate(), uncertainty: [] }],
-      unresolved: [], assumptions: ['每道菜数量需要用户另行填写。'], advice: '填写实际食用量后查看小计。',
-    }),
+    onResponse: async (route) => {
+      const { basisGrams: _basis, ...nutritionEstimate } = mockNutritionEstimate();
+      await fulfillProviderResponse(route, {
+        components: [{ label: '熟白米饭', cookingMethod: '蒸煮', confidence: 0.95, nutritionEstimate, uncertainty: [] }], uncertainty: [],
+      });
+    },
   });
   await page.goto('/');
   const dialog = await openAiSettings(page);
@@ -51,15 +52,14 @@ test('configured provider and upstream effort drive analysis while keys stay out
   await page.getByRole('tab', { name: '今天', exact: true }).click();
   await page.getByText('记饮食', { exact: true }).click();
   await page.getByLabel('食物名称', { exact: true }).fill('设置验收米饭');
-  await page.getByLabel('份量或参考物（可选）', { exact: true }).fill('已称重 200g');
-  await page.getByLabel('剩余量（可选）', { exact: true }).fill('吃下 50%，无其他油酱料');
+  await page.getByLabel('备注（可选）', { exact: true }).fill('已称重 200g，吃下 50%，无其他油酱料');
   await page.getByRole('dialog').getByRole('button', { name: '保存', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await page.getByRole('tab', { name: '记录', exact: true }).click();
   await page.getByLabel('请求饮食分析', { exact: true }).click();
-  await expect(page.getByText('这餐的分析已保存为独立版本。', { exact: true })).toBeVisible();
+  await confirmAndSaveMealReview(page, { clearQuantities: true, foodName: '设置验收米饭' });
   await page.getByRole('button', { name: /设置验收米饭 午餐/ }).click();
-  await expect(page.getByRole('dialog').getByText('当前分析', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('current-meal-analysis').getByText('饮食营养', { exact: true })).toBeVisible();
   await page.getByRole('dialog').getByText(/热量.*130 kcal/).scrollIntoViewIfNeeded();
   await expect(page.getByRole('dialog').getByText(/热量.*130 kcal/)).toBeVisible();
   await expect(page.getByText('待填写菜品数量', { exact: true })).toBeVisible();
@@ -92,9 +92,11 @@ test('configured provider and upstream effort drive analysis while keys stay out
   await configureMockAi(page, 'settings-model', 'high');
   await page.reload();
   await openAiSettings(page);
-  await expect(dialog.getByLabel('API 地址', { exact: true })).toHaveValue('https://api.bblabu.ai/v1');
-  await expect(dialog.getByLabel('API Key', { exact: true })).toHaveValue('');
-  await expect(dialog.getByText('删除 AI 配置', { exact: true })).toHaveCount(0);
+  await expect(dialog.getByLabel('API 地址', { exact: true })).toHaveValue(MOCK_AI_URL);
+  await expect(dialog.getByLabel('API Key', { exact: true })).toHaveValue(MOCK_AI_KEY);
+  await expect(dialog.getByLabel('API Key', { exact: true })).toHaveAttribute('type', 'password');
+  await expect(dialog.getByText('high（已保存；能力尚未刷新）', { exact: true })).toBeVisible();
+  await expect(dialog.getByText('删除 AI 配置', { exact: true })).toBeVisible();
   const localStorageText = await page.evaluate(() => JSON.stringify(Object.entries(localStorage)));
   expect(localStorageText).not.toContain(MOCK_AI_KEY);
   expect(localStorageText).not.toContain(MOCK_AI_URL);
@@ -157,8 +159,8 @@ test('changing connection cancels late discovery and absent upstream effort uses
   await dialog.getByRole('button', { name: 'Responses', exact: true }).click();
   await dialog.getByText('获取模型列表', { exact: true }).click();
   await dialog.getByRole('radio', { name: '模型 default-model', exact: true }).click();
-  await expect(dialog.getByText('上游未提供推理强度，使用服务默认值。', { exact: true })).toBeVisible();
-  await expect(dialog.getByRole('radio', { name: /^推理强度 / })).toHaveCount(1);
+  await expect(dialog.getByText('上游未提供推理强度，可使用服务默认或自定义填写。', { exact: true })).toBeVisible();
+  await expect(dialog.getByRole('radio', { name: /^推理强度 / })).toHaveCount(2);
   await expect(dialog.getByRole('radio', { name: '推理强度 服务默认', exact: true })).toHaveAttribute('aria-checked', 'true');
   await dialog.getByRole('radio', { name: '推理强度 服务默认', exact: true }).scrollIntoViewIfNeeded();
   expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(false);

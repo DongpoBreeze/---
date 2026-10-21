@@ -15,7 +15,8 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { VideoView, useVideoPlayer } from "expo-video";
 import type { DailySummary } from "../types";
-import { color, moduleTone, radius, space, type, type ModuleKind } from "./theme";
+import { lightTheme, radius, space, type ModuleKind, type ThemeTokens } from "./theme";
+import { useTheme, useThemedStyles } from "./theme-provider";
 import { localDateTime } from "./format";
 
 export type IconName = keyof typeof Ionicons.glyphMap;
@@ -27,12 +28,14 @@ export function Banner({
   action,
   onAction,
 }: {
-  text: string;
+  text: React.ReactNode;
   danger?: boolean;
   onClose: () => void;
   action?: string;
   onAction?: () => void;
 }) {
+  const { color } = useTheme();
+  const s = useBaseStyles();
   const tone = danger ? color.danger : color.pine;
   return (
     <View style={[s.banner, danger && s.bannerDanger]}>
@@ -60,7 +63,7 @@ export function Banner({
   );
 }
 
-/** Full-height form sheet. `tone` tints the top edge so the module is obvious. */
+/** Full-height form sheet. `tone` identifies the record module. */
 export function Sheet({
   title,
   tone,
@@ -80,6 +83,8 @@ export function Sheet({
   saving?: boolean;
   closing?: boolean;
 }) {
+  const { color, moduleTone } = useTheme();
+  const s = useBaseStyles();
   const off = disabled || saving || closing;
   return (
     <KeyboardAvoidingView
@@ -121,6 +126,7 @@ export function Sheet({
 
 export function Field({
   label,
+  labelAccessory,
   value,
   onChangeText,
   placeholder,
@@ -130,6 +136,7 @@ export function Field({
   style,
 }: {
   label: string;
+  labelAccessory?: React.ReactNode;
   value: string;
   onChangeText: (value: string) => void;
   placeholder?: string;
@@ -138,10 +145,17 @@ export function Field({
   disabled?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
+  const { color, scheme } = useTheme();
+  const s = useBaseStyles();
   const [focused, setFocused] = useState(false);
+  // UIKit uses selectionColor for the caret tint and applies its own selection opacity.
+  const selectionColor = Platform.OS === "ios" ? color.ink : color.selection;
   return (
     <View style={[s.field, style]}>
-      <Text style={s.fieldLabel}>{label}</Text>
+      {labelAccessory ? <View style={s.fieldLabelRow}>
+        <Text style={[s.fieldLabel, s.fieldLabelWithAccessory]}>{label}</Text>
+        {labelAccessory}
+      </View> : <Text style={s.fieldLabel}>{label}</Text>}
       <TextInput
         style={[s.input, multiline && s.multiline, focused && s.inputFocused, disabled && s.inputDisabled]}
         value={value}
@@ -151,6 +165,9 @@ export function Field({
         placeholder={placeholder}
         placeholderTextColor={color.inkFaint}
         keyboardType={keyboardType}
+        keyboardAppearance={scheme}
+        selectionColor={selectionColor}
+        cursorColor={Platform.OS === "android" ? color.ink : undefined}
         multiline={multiline}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
@@ -172,8 +189,11 @@ export function Choice<T extends string>({
   onChange: (value: T) => void;
   tone?: ModuleKind;
 }) {
+  const { color, moduleTone } = useTheme();
+  const s = useBaseStyles();
   const active = tone ? moduleTone[tone].hue : color.pine;
   const activeText = tone ? moduleTone[tone].text : color.pine;
+  const foreground = tone ? moduleTone[tone].onHue : color.onInk;
   const joined = choices.length <= 4;
   return (
     <View style={s.choice}>
@@ -195,7 +215,7 @@ export function Choice<T extends string>({
               <Text
                 style={[
                   s.chipText,
-                  on && (joined ? { color: activeText, fontWeight: "800" } : { color: color.onInk, fontWeight: "700" }),
+                  on && (joined ? { color: activeText, fontWeight: "800" } : { color: foreground, fontWeight: "700" }),
                 ]}
                 numberOfLines={1}
               >
@@ -222,6 +242,8 @@ export function SmallButton({
   disabled?: boolean;
   danger?: boolean;
 }) {
+  const { color } = useTheme();
+  const s = useBaseStyles();
   const tone = danger ? color.danger : color.pine;
   return (
     <Pressable
@@ -250,6 +272,9 @@ export function PrimaryButton({
   tone?: string;
   disabled?: boolean;
 }) {
+  const { color, moduleTone } = useTheme();
+  const s = useBaseStyles();
+  const foreground = Object.values(moduleTone).find((item) => item.hue === tone)?.onHue ?? color.onInk;
   return (
     <Pressable
       accessibilityRole="button"
@@ -257,8 +282,8 @@ export function PrimaryButton({
       disabled={disabled}
       style={({ pressed }) => [s.primary, { backgroundColor: tone ?? color.pine }, pressed && s.pressed, disabled && s.dim]}
     >
-      {icon && <Ionicons name={icon} size={19} color={color.onInk} />}
-      <Text style={s.primaryText}>{label}</Text>
+      {icon && <Ionicons name={icon} size={19} color={foreground} />}
+      <Text style={[s.primaryText, { color: foreground }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -269,6 +294,8 @@ export function CheckRow({ checked, label, onPress, disabled = false }: {
   onPress: () => void;
   disabled?: boolean;
 }) {
+  const { color } = useTheme();
+  const s = useBaseStyles();
   return (
     <Pressable accessibilityRole="checkbox" accessibilityState={{ checked }}
       accessibilityLabel={label} style={s.checkRow} onPress={onPress} disabled={disabled}>
@@ -282,6 +309,7 @@ export function CheckRow({ checked, label, onPress, disabled = false }: {
 
 /** Group heading inside forms; optional hint sits beneath. */
 export function Legend({ text, hint }: { text: string; hint?: string }) {
+  const s = useBaseStyles();
   return (
     <View style={s.legendBox}>
       <Text style={s.legend}>{text}</Text>
@@ -290,16 +318,19 @@ export function Legend({ text, hint }: { text: string; hint?: string }) {
   );
 }
 
-export function Note({ icon = "information-circle-outline", text, tone = color.pine, tint = color.pineTint }: {
+export function Note({ icon = "information-circle-outline", text, tone, tint }: {
   icon?: IconName;
   text: string;
   tone?: string;
   tint?: string;
 }) {
+  const { color } = useTheme();
+  const s = useBaseStyles();
+  const foreground = tone ?? color.pine;
   return (
-    <View style={[s.note, { backgroundColor: tint }]}>
-      <Ionicons name={icon} size={18} color={tone} />
-      <Text style={[s.noteText, { color: tone }]}>{text}</Text>
+    <View style={[s.note, { backgroundColor: tint ?? color.pineTint }]}>
+      <Ionicons name={icon} size={18} color={foreground} />
+      <Text style={[s.noteText, { color: foreground }]}>{text}</Text>
     </View>
   );
 }
@@ -312,6 +343,8 @@ export function MediaPreview({
   label: string;
   onRemove: () => void;
 }) {
+  const { color } = useTheme();
+  const s = useBaseStyles();
   return (
     <View style={s.media}>
       <Image
@@ -339,6 +372,8 @@ export function MediaPreview({
 }
 
 export function DraftStatus({ saved, error }: { saved: boolean; error: string }) {
+  const { color } = useTheme();
+  const s = useBaseStyles();
   return (
     <View style={s.draft}>
       <View style={[s.draftDot, { backgroundColor: error ? color.danger : saved ? color.pine : color.meal }]} />
@@ -350,6 +385,7 @@ export function DraftStatus({ saved, error }: { saved: boolean; error: string })
 }
 
 export function VideoAttachment({ uri }: { uri: string }) {
+  const s = useBaseStyles();
   const player = useVideoPlayer(uri);
   return (
     <VideoView
@@ -363,6 +399,7 @@ export function VideoAttachment({ uri }: { uri: string }) {
 }
 
 export function MarkdownText({ value }: { value: string }) {
+  const s = useBaseStyles();
   return (
     <View style={s.markdown}>
       {value
@@ -382,6 +419,8 @@ export function MarkdownText({ value }: { value: string }) {
 }
 
 export function SummaryVersions({ summaries }: { summaries: DailySummary[] }) {
+  const { color } = useTheme();
+  const s = useBaseStyles();
   const [selected, setSelected] = useState<string>();
   return (
     <View>
@@ -428,7 +467,8 @@ export function SummaryVersions({ summaries }: { summaries: DailySummary[] }) {
     </View>
   );
 }
-export const s = StyleSheet.create({
+function createBaseStyles({ color, type, shadow }: ThemeTokens) {
+  return StyleSheet.create({
   pressed: { opacity: 0.72 },
   dim: { opacity: 0.45 },
   banner: {
@@ -446,7 +486,7 @@ export const s = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth, borderColor: color.lineStrong, backgroundColor: color.paper,
   },
   sheetIcon: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
-  sheetTitle: { ...type.title, flex: 1 },
+  sheetTitle: { ...type.title, flex: 1, minWidth: 0 },
   saveButton: {
     minHeight: 38, paddingHorizontal: 18, marginRight: space.sm, borderRadius: radius.pill,
     backgroundColor: color.pine, alignItems: "center", justifyContent: "center",
@@ -458,12 +498,14 @@ export const s = StyleSheet.create({
     width: "100%", maxWidth: 680, alignSelf: "center",
     paddingHorizontal: space.lg + 4, paddingTop: space.lg, paddingBottom: space.xxxl,
   },
-  field: { flex: 1, marginBottom: space.lg },
+  field: { flex: 1, minWidth: 0, marginBottom: space.lg },
   fieldLabel: { ...type.label, marginBottom: space.sm },
+  fieldLabelRow: { flexDirection: "row", alignItems: "center", gap: space.sm, marginBottom: space.sm },
+  fieldLabelWithAccessory: { flex: 1, minWidth: 0, marginBottom: 0 },
   input: {
     minHeight: 48, paddingHorizontal: 14, paddingVertical: 12,
     backgroundColor: color.surface, borderWidth: 1, borderColor: color.line, borderRadius: radius.input,
-    fontSize: 16, color: color.ink,
+    fontSize: 16, color: color.ink, minWidth: 0,
   },
   inputFocused: { borderColor: color.pine, borderWidth: 1.5 },
   inputDisabled: { backgroundColor: color.paper, color: color.inkFaint },
@@ -473,14 +515,11 @@ export const s = StyleSheet.create({
     flexDirection: "row", backgroundColor: color.sunken, borderRadius: radius.input, padding: 3,
   },
   trackItem: {
-    flex: 1, minHeight: 40, borderRadius: radius.input - 3, alignItems: "center", justifyContent: "center", paddingHorizontal: 6,
+    flex: 1, minWidth: 0, minHeight: 40, borderRadius: radius.input - 3, alignItems: "center", justifyContent: "center", paddingHorizontal: 6,
   },
   trackItemOn: {
     backgroundColor: color.raised,
-    ...Platform.select({
-      web: { boxShadow: "0 1px 3px rgba(0,0,0,0.45)" } as object,
-      default: { elevation: 1, shadowColor: color.ink, shadowOpacity: 0.12, shadowRadius: 2, shadowOffset: { width: 0, height: 1 } },
-    }),
+    ...shadow.card,
   },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
   chip: {
@@ -493,7 +532,7 @@ export const s = StyleSheet.create({
     backgroundColor: color.surface, borderWidth: 1, borderColor: color.line,
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginBottom: space.md,
   },
-  smallButtonText: { fontSize: 14, fontWeight: "700" },
+  smallButtonText: { fontSize: 14, fontWeight: "700", flexShrink: 1 },
   primary: {
     minHeight: 54, borderRadius: radius.block, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space.sm, paddingHorizontal: space.lg,
   },
@@ -533,4 +572,12 @@ export const s = StyleSheet.create({
   versionTitle: { ...type.label },
   versionDetail: { ...type.small, marginTop: 2 },
   versionBody: { paddingLeft: space.lg, paddingBottom: space.md },
-});
+  });
+}
+
+export function useBaseStyles() {
+  return useThemedStyles(createBaseStyles);
+}
+
+/** Compatibility only; mounted components should call useBaseStyles. */
+export const s = createBaseStyles(lightTheme);

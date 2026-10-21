@@ -20,7 +20,11 @@ export type MealDraft = Omit<
   | "revisions"
   | "analyses"
 >;
-export type PhotoAnalysisResult = Pick<AnalysisVersion, "model" | "createdAt" | "stageCount" | "analysis">;
+export type PhotoAnalysisSnapshot = Pick<AnalysisVersion, "model" | "createdAt" | "stageCount" | "analysis">;
+export type PhotoAnalysisResult = PhotoAnalysisSnapshot & {
+  /** Earlier model responses and user revisions from the confirmation flow. */
+  history?: PhotoAnalysisSnapshot[];
+};
 export type TrainingDraft = Omit<
   TrainingRecord,
   "id" | "type" | "createdAt" | "updatedAt"

@@ -39,10 +39,12 @@ export function normalizeConfig(input) {
     dailyQuota: integer(input.dailyQuota ?? 10, 'INSTALLATION_DAILY_QUOTA', 1, 100_000),
     maxBodyBytes: integer(input.maxBodyBytes ?? 8 * 1024 * 1024, 'MAX_BODY_BYTES', 128, 64 * 1024 * 1024),
     maxPhotoBytes: integer(input.maxPhotoBytes ?? 3 * 1024 * 1024, 'MAX_PHOTO_BYTES', 64, 16 * 1024 * 1024),
-    maxPhotos: integer(input.maxPhotos ?? 2, 'MAX_PHOTOS', 0, 10),
+    maxPhotos: integer(input.maxPhotos ?? 4, 'MAX_PHOTOS', 0, 4),
     maxPayloadTextBytes: integer(input.maxPayloadTextBytes ?? 32 * 1024, 'MAX_PAYLOAD_TEXT_BYTES', 128, 256 * 1024),
     maxOutputTokens: integer(input.maxOutputTokens ?? 8192, 'MODEL_MAX_OUTPUT_TOKENS', 32, 8192),
-    upstreamTimeoutMs: integer(input.upstreamTimeoutMs ?? 180_000, 'UPSTREAM_TIMEOUT_MS', 50, 180_000),
+    // The product default is 120s. Keep the 180s ceiling for explicit diagnostics
+    // of historically slow providers without making normal users wait that long.
+    upstreamTimeoutMs: integer(input.upstreamTimeoutMs ?? 120_000, 'UPSTREAM_TIMEOUT_MS', 50, 180_000),
     bodyTimeoutMs: integer(input.bodyTimeoutMs ?? 10_000, 'BODY_TIMEOUT_MS', 50, 30_000),
     maxConcurrent: integer(input.maxConcurrent ?? 4, 'MAX_CONCURRENT_REQUESTS', 1, 1000),
     maxConcurrentPerInstallation: integer(input.maxConcurrentPerInstallation ?? 1, 'MAX_CONCURRENT_PER_INSTALLATION', 1, 100),

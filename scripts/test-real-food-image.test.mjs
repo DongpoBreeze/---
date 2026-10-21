@@ -21,13 +21,15 @@ const inputReport = (changes = {}) => ({ schemaVersion: 'real-food-image-report.
   result: { status: 200, analysis: referenceAnalysis(), stageCount: 1, requestCount: 1 },
   requestAttempts: [completedAttempt()], stageResults: [acceptedStage()], ...changes });
 
-test('real-photo diagnostics default to the 180-second stage timeout and allow explicit bounds', () => {
-  assert.equal(parseOptions(['node', 'test-real-food-image.mjs', '--live']).timeoutMs, 180_000);
+test('real-photo diagnostics default to the 90-second stage timeout and allow explicit slow-provider bounds', () => {
+  assert.equal(parseOptions(['node', 'test-real-food-image.mjs', '--live']).timeoutMs, 90_000);
   assert.equal(parseOptions(['node', 'test-real-food-image.mjs', '--live', '--timeout-ms=120000']).timeoutMs, 120_000);
-  const options = parseOptions(['node', 'test-real-food-image.mjs', '--live', '--stream', '--timeout-ms=180000', '--image-detail=low', '--app-copy']);
+  const options = parseOptions(['node', 'test-real-food-image.mjs', '--live', '--stream', '--timeout-ms=180000', '--image-detail=low', '--app-copy', '--reasoning-effort=medium', '--max-output-tokens=4096']);
   assert.equal(options.stream, true);
   assert.equal(options.imageDetail, 'low');
   assert.equal(options.actualAppCopy, true);
+  assert.equal(options.reasoningEffort, 'medium');
+  assert.equal(options.maxOutputTokens, 4096);
   assert.equal(parseOptions(['node', 'test-real-food-image.mjs', '--live']).stream, true);
   assert.equal(parseOptions(['node', 'test-real-food-image.mjs', '--live']).imageDetail, 'low');
   assert.throws(() => parseOptions(['node', 'test-real-food-image.mjs']), /--live/);

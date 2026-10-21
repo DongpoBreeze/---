@@ -2,6 +2,8 @@ import JSZip from 'jszip';
 import { z } from 'zod';
 import type { AppData, DailySummary } from './types';
 import { mealAnalysisSchema } from './nutrition-schema';
+import { MAX_MEAL_PHOTOS, mealAnalysisPhotoSources } from './meal-photos';
+import { mealAnalysisDraftSchema } from './meal-analysis-draft';
 
 /** The archive format is deliberately independent of any Expo or AI provider API. */
 export const BACKUP_FORMAT = 'health-compass-backup';
@@ -72,6 +74,7 @@ const iso = z.string().max(128).regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => { const date = new Date(`${value}T00:00:00Z`); return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value; }, 'invalid day');
 const timezone = z.string().min(1).max(128).refine((value) => { try { new Intl.DateTimeFormat('en-US', { timeZone: value }); return true; } catch { return false; } }, 'invalid timezone');
 const uri = z.string().min(1).max(Math.ceil(MAX_ENTRY_BYTES * 1.4));
+const beforePhotoUris = z.array(uri).max(MAX_MEAL_PHOTOS);
 const analysisVersion = z.object({ id, model: z.string().min(1), createdAt: iso, sourceVersion: z.number().int().positive(), stageCount: z.number().int().min(1).max(3).optional(), analysis: mealAnalysisSchema }).strict();
 const exerciseSet = z.object({ reps: nonnegative.int(), weight: nonnegative, unit: z.enum(['kg', 'lb']), isWarmup: z.boolean().optional() }).strict();
 const mealBase = z.object({
@@ -81,9 +84,11 @@ const mealBase = z.object({
   occurredAt: iso,
   mealType: z.enum(['早餐', '午餐', '晚餐', '加餐']),
   foodName: z.string(),
+  foodNameSource: z.enum(['analysis', 'user']).optional(),
   portion: z.string(),
   note: z.string(),
   imageUri: uri.optional(),
+  beforeImageUris: beforePhotoUris.optional(),
   imageBase64: z.string().optional(),
   afterImageUri: uri.optional(),
   remaining: z.string().optional(),
@@ -118,6 +123,17 @@ const trainingRecord = z.object({
   updatedAt: iso.optional(),
   timezone: timezone.optional(),
 }).strict();
+const exerciseTemplate = z.object({
+  id,
+  name: z.string().trim().min(1).max(80),
+  setCount: z.number().int().min(1).max(60),
+  weightUnit: z.enum(['kg', 'lb']),
+  weightBasis: z.enum(['total', 'per-hand', 'bodyweight']),
+  targetSets: nonnegative.int().optional(),
+  targetMin: nonnegative.int().optional(),
+  targetMax: nonnegative.int().optional(),
+  increment: nonnegative.optional(),
+}).strict();
 const sleepRecord = z.object({
   id,
   type: z.literal('sleep'),
@@ -126,7 +142,7 @@ const sleepRecord = z.object({
   fellAsleepAt: iso,
   wokeAt: iso,
   awakeMinutes: nonnegative.nullable(),
-  quality: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]),
+  quality: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]).optional(),
   note: z.string(),
   updatedAt: iso.optional(),
   timezone: timezone.optional(),
@@ -160,6 +176,7 @@ const appDataSchema = z.object({
   meals: z.array(mealRecord),
   trainings: z.array(trainingRecord),
   sleeps: z.array(sleepRecord),
+  exerciseTemplates: z.array(exerciseTemplate).optional(),
   summaries: z.array(summaryRecord),
   sourceVersion: z.number().int().nonnegative(),
   drafts: z.object({ meal: mealRecord.partial().optional(), training: trainingRecord.partial().optional(), sleep: sleepRecord.partial().optional() }).strict().optional(),
@@ -302,8 +319,24 @@ function visitFormMedia(value: unknown, visit: (uri: string, kind: 'image' | 'vi
   for (const [key, child] of Object.entries(value)) {
     if (['imageUri', 'afterImageUri', 'videoUri'].includes(key) && typeof child === 'string' && child) {
       visit(child, key === 'videoUri' ? 'video' : 'image', (replacement) => { (value as Record<string, unknown>)[key] = replacement; });
+    } else if (key === 'beforeImageUris' && Array.isArray(child)) {
+      child.forEach((uri, index) => {
+        if (typeof uri === 'string' && uri) visit(uri, 'image', (replacement) => { child[index] = replacement; });
+      });
     } else visitFormMedia(child, visit);
   }
+}
+
+function validatePhotoCollections(value: unknown, code: 'invalid-data' | 'invalid-draft'): void {
+  if (Array.isArray(value)) { for (const child of value) validatePhotoCollections(child, code); return; }
+  if (!value || typeof value !== 'object') return;
+  if ('beforeImageUris' in value && value.beforeImageUris !== undefined) {
+    const photos = value as { imageUri?: string; beforeImageUris?: string[]; afterImageUri?: string };
+    if (!beforePhotoUris.safeParse(photos.beforeImageUris).success) fail(code, '餐前照片列表不合法');
+    try { mealAnalysisPhotoSources(photos); }
+    catch (error) { fail(code, error instanceof Error ? error.message : '餐前照片列表不合法'); }
+  }
+  for (const child of Object.values(value)) validatePhotoCollections(child, code);
 }
 
 export function validateFormDrafts(value: unknown): Record<string, unknown> {
@@ -313,6 +346,13 @@ export function validateFormDrafts(value: unknown): Record<string, unknown> {
   let encoded: string;
   try { encoded = JSON.stringify(value); } catch { fail('invalid-draft', '草稿不是可序列化数据'); }
   if (utf8(encoded!).byteLength > MAX_TOTAL_BYTES) fail('entry-too-large', '草稿数据超过大小限制');
+  validatePhotoCollections(value, 'invalid-draft');
+  for (const [key, draft] of Object.entries(value)) {
+    if ((key === 'meal' || key.startsWith('meal-')) && draft && typeof draft === 'object' && 'analysisDraft' in draft) {
+      const parsed = mealAnalysisDraftSchema.safeParse(draft.analysisDraft);
+      if (!parsed.success) fail('invalid-draft', `餐食分析草稿校验失败：${parsed.error.issues[0]?.message ?? '字段不兼容'}`);
+    }
+  }
   return JSON.parse(encoded!) as Record<string, unknown>;
 }
 
@@ -334,6 +374,7 @@ export function validateAppData(value: unknown): AppData {
   const result = appDataSchema.safeParse(value);
   if (!result.success) fail('invalid-data', `数据校验失败：${result.error.issues[0]?.message ?? '字段不完整'}`);
   const data = result.data as AppData;
+  validatePhotoCollections(data, 'invalid-data');
   const ids = new Set<string>();
   for (const record of [...data.meals, ...data.trainings, ...data.sleeps]) {
     if (ids.has(record.id)) fail('duplicate-id', `记录 ID 重复：${record.id}`);
@@ -343,6 +384,14 @@ export function validateAppData(value: unknown): AppData {
   for (const summary of data.summaries) {
     if (summaryIds.has(summary.id)) fail('duplicate-id', `摘要 ID 重复：${summary.id}`);
     summaryIds.add(summary.id);
+  }
+  const templateIds = new Set<string>();
+  const templateNames = new Set<string>();
+  for (const template of data.exerciseTemplates ?? []) {
+    const name = template.name.trim().toLocaleLowerCase();
+    if (templateIds.has(template.id) || templateNames.has(name)) fail('duplicate-id', `动作模板重复：${template.name}`);
+    templateIds.add(template.id);
+    templateNames.add(name);
   }
   for (const meal of data.meals) {
     const analysisIds = new Set<string>();
@@ -427,14 +476,14 @@ export async function createBackupArchive(dataInput: AppData, mediaInputs: Backu
     'Meal corrections are in revisions; analyses preserve id, model, createdAt, sourceVersion and analysis. Model estimates keep nutrient min/max ranges, assumptions and an explicit estimated/unknown status. Null and unknown are not zero.', '',
     'Training weights retain kg/lb and total/per-hand/bodyweight basis. Exercise sets retain repetitions and warmup flags. Sleep timestamps include an offset; awakeMinutes=null means unknown. Timestamps retain their source text and recorded timezone.', '',
     'records.csv contains a machine-readable JSON column and readable labels. meals.csv, trainings.csv and sleeps.csv expose module fields; arrays and estimates use JSON within valid quoted CSV cells.', '',
-    'drafts.json preserves unfinished form values. AppData.drafts remains in data.json. All imageUri/afterImageUri/videoUri values point to media/ entries, including corrections and drafts. Each media entry contains original bytes; imageBase64, when present, is an analysis copy and never replaces the original file.', '',
+    'drafts.json preserves unfinished form values. AppData.drafts remains in data.json. All imageUri/beforeImageUris/afterImageUri/videoUri values point to media/ entries, including corrections and drafts. beforeImageUris contains ordered original before-meal photos; imageUri mirrors the first and legacy imageUri-only meals remain readable. Each media entry contains original bytes; imageBase64, when present, is an analysis copy and never replaces the original file.', '',
     'summaries/ contains every saved daily Markdown version, in the same order as data.json summaries. AI summaries preserve model/sourceRecordIds/inputSnapshot where present. Local summaries are derived from local rules.', '',
     'Import is a non-destructive union: identical record IDs and facts are deduplicated, differing facts/profile/drafts cause a visible conflict. Existing local summary revisions may be regenerated. Media is staged before the app commits data. Exported copies outside the app cannot be revoked by deleting local data.', '',
     'Limits: 256 MiB ZIP, 128 MiB per payload, 512 MiB expanded, 16 MiB per archive JSON, 10,000 entries. ZIP64, encrypted and multi-volume archives are unsupported.', '',
   ].join('\n'));
   const payloads: Array<{ path: string; bytes: Uint8Array }> = [
     { path: DATA_FILE, bytes: dataBytes }, { path: 'drafts.json', bytes: json(portableDrafts) }, { path: CSV_FILE, bytes: csvBytes },
-    { path: 'meals.csv', bytes: moduleCsv(portableData.meals, ['id', 'createdAt', 'updatedAt', 'occurredAt', 'timezone', 'mealType', 'foodName', 'portion', 'remaining', 'note', 'source', 'revision', 'estimateStatus', 'estimate', 'imageUri', 'afterImageUri', 'analyses', 'revisions']) },
+    { path: 'meals.csv', bytes: moduleCsv(portableData.meals, ['id', 'createdAt', 'updatedAt', 'occurredAt', 'timezone', 'mealType', 'foodName', 'foodNameSource', 'portion', 'remaining', 'note', 'source', 'revision', 'estimateStatus', 'estimate', 'imageUri', 'beforeImageUris', 'afterImageUri', 'analyses', 'revisions']) },
     { path: 'trainings.csv', bytes: moduleCsv(portableData.trainings, ['id', 'createdAt', 'updatedAt', 'occurredAt', 'timezone', 'exercise', 'mode', 'durationMinutes', 'sets', 'weightBasis', 'targetSets', 'targetMin', 'targetMax', 'increment', 'pain', 'controlled', 'rir', 'note', 'videoUri']) },
     { path: 'sleeps.csv', bytes: moduleCsv(portableData.sleeps, ['id', 'createdAt', 'updatedAt', 'occurredAt', 'timezone', 'fellAsleepAt', 'wokeAt', 'awakeMinutes', 'quality', 'note']) },
     { path: README_FILE, bytes: readmeBytes }, ...summaryFiles, ...mediaEntries.map((entry) => ({ path: entry.path, bytes: entry.bytes })),
@@ -567,10 +616,11 @@ export function remapBackupMedia(data: AppData, replacements: Map<string, string
   return replaceMediaPaths(validateAppData(data), replacements);
 }
 
-export function canonicalJson(value: unknown): string {
-  const normalize = (entry: unknown): unknown => {
-    if (Array.isArray(entry)) return entry.map(normalize);
-    if (entry && typeof entry === 'object') return Object.fromEntries(Object.entries(entry).filter(([, child]) => child !== undefined).sort(([a], [b]) => a.localeCompare(b)).map(([key, child]) => [key, normalize(child)]));
+export function canonicalJson(value: unknown, mediaAliases?: ReadonlyMap<string, string>): string {
+  const normalize = (entry: unknown, field?: string): unknown => {
+    if (Array.isArray(entry)) return entry.map((child) => normalize(child, field === 'beforeImageUris' ? 'imageUri' : undefined));
+    if (typeof entry === 'string' && mediaAliases && ['imageUri', 'afterImageUri', 'videoUri'].includes(field ?? '')) return mediaAliases.get(entry) ?? entry;
+    if (entry && typeof entry === 'object') return Object.fromEntries(Object.entries(entry).filter(([, child]) => child !== undefined).sort(([a], [b]) => a.localeCompare(b)).map(([key, child]) => [key, normalize(child, key)]));
     return entry;
   };
   return JSON.stringify(normalize(value));
@@ -619,8 +669,22 @@ export function mergeBackupData(currentInput: AppData, incomingInput: AppData, e
   const meals = mergeRecords(current.meals, incoming.meals);
   const trainings = mergeRecords(current.trainings, incoming.trainings);
   const sleeps = mergeRecords(current.sleeps, incoming.sleeps);
-  const changed = meals.length !== current.meals.length || trainings.length !== current.trainings.length || sleeps.length !== current.sleeps.length || canonicalJson(profileResult) !== canonicalJson(current.profile);
-  const mixed = changed && (current.meals.length + current.trainings.length + current.sleeps.length > 0);
+  const exerciseTemplates = [...(current.exerciseTemplates ?? [])];
+  for (const template of incoming.exerciseTemplates ?? []) {
+    const sameId = exerciseTemplates.find((item) => item.id === template.id);
+    if (sameId) {
+      if (!equals(sameId, template)) fail('import-conflict', `动作模板内容冲突：${template.name}`);
+      continue;
+    }
+    const sameName = exerciseTemplates.find((item) => item.name.trim().toLocaleLowerCase() === template.name.trim().toLocaleLowerCase());
+    if (sameName) {
+      if (!equals({ ...sameName, id: '' }, { ...template, id: '' })) fail('import-conflict', `动作模板内容冲突：${template.name}`);
+      continue;
+    }
+    exerciseTemplates.push(template);
+  }
+  const healthDataChanged = meals.length !== current.meals.length || trainings.length !== current.trainings.length || sleeps.length !== current.sleeps.length || canonicalJson(profileResult) !== canonicalJson(current.profile);
+  const mixed = healthDataChanged && (current.meals.length + current.trainings.length + current.sleeps.length > 0);
   const sourceVersion = mixed ? Math.max(current.sourceVersion, incoming.sourceVersion) + 1 : Math.max(current.sourceVersion, incoming.sourceVersion);
   return validateAppData({
     version: 1,
@@ -628,6 +692,7 @@ export function mergeBackupData(currentInput: AppData, incomingInput: AppData, e
     meals,
     trainings,
     sleeps,
+    ...(exerciseTemplates.length ? { exerciseTemplates } : {}),
     summaries: mixed ? summaries.map((summary) => summary.source === 'ai' ? { ...summary, status: 'stale' as const } : summary) : summaries,
     sourceVersion,
     ...(Object.keys(drafts).length ? { drafts } : {}),

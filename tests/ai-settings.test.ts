@@ -25,13 +25,75 @@ test('native store restores validated settings, strips unrelated fields and expo
   await reloaded.clear(); assert.equal(reloaded.get(), null); assert.equal(native.value(), null);
 });
 
-test('web store keeps only session memory and a new session requires a new Key', async () => {
-  const session = createAiSettingsStore(null);
+test('existing custom effort strings survive native reloads, edits and request snapshots unchanged', async () => {
+  const effort = 'Vendor.Ultra-2_0';
+  const native = storage(JSON.stringify({ ...settings, reasoningEffort: effort }));
+  const store = createAiSettingsStore(native);
+  assert.equal((await store.load())?.reasoningEffort, effort);
+  const request = store.beginRequest();
+  assert.equal(request.settings.reasoningEffort, effort);
+  request.dispose();
+  const next = 'x'.repeat(64);
+  await store.save({ ...settings, reasoningEffort: next });
+  assert.equal((await createAiSettingsStore(native).load())?.reasoningEffort, next);
+  assert.throws(() => store.save({ ...settings, reasoningEffort: 'bad effort' }));
+  assert.equal(store.get()?.reasoningEffort, next);
+  await store.save({ ...settings, reasoningEffort: '' });
+  assert.equal((await createAiSettingsStore(native).load())?.reasoningEffort, '');
+});
+
+test('a new store restores all saved fields and deletion survives reopening', async () => {
+  const local = storage();
+  const session = createAiSettingsStore(local);
   assert.equal(await session.load(), null);
-  await session.save(settings);
-  assert.equal((await session.load())?.apiKey, settings.apiKey);
-  assert.equal(await createAiSettingsStore(null).load(), null);
-  await session.clear(); assert.equal(session.get(), null);
+  const saved = { ...settings, baseUrl: 'https://provider.example/v1', protocol: 'chat_completions' as const, reasoningEffort: 'Vendor.Ultra-2_0' };
+  await session.save(saved);
+  assert.deepEqual(await createAiSettingsStore(local).load(), saved);
+  await session.clear();
+  assert.equal(session.get(), null);
+  assert.equal(await createAiSettingsStore(local).load(), null);
+});
+
+test('a missing storage adapter cannot report a successful save or clear', async () => {
+  const store = createAiSettingsStore(null as unknown as AiSettingsStorage);
+  await assert.rejects(store.load(), /无法读取本机/);
+  await assert.rejects(store.save(settings), /无法将 AI 设置保存到本机/);
+  assert.equal(store.get(), null);
+  await assert.rejects(store.clear(), /无法清除本机/);
+});
+
+test('empty or corrupt persisted settings are not treated as an absent configuration', async () => {
+  for (const raw of ['', '{broken', JSON.stringify({ apiKey: settings.apiKey })]) {
+    const local = storage(raw);
+    const store = createAiSettingsStore(local);
+    await assert.rejects(store.load(), /已保存的 AI 设置无效/);
+    assert.equal(local.value(), raw);
+    assert.equal(store.get(), null);
+    await assert.rejects(store.load(), /已保存的 AI 设置无效/);
+  }
+});
+
+test('a pending write is not acknowledged and an interrupted write keeps the prior saved configuration', async () => {
+  const initial = { ...settings, baseUrl: 'https://provider.example/v1' };
+  let raw = JSON.stringify(initial);
+  let rejectWrite!: (error: Error) => void;
+  const local: AiSettingsStorage = {
+    read: async () => raw,
+    write: () => new Promise((_resolve, reject) => { rejectWrite = reject; }),
+    remove: async () => { raw = ''; },
+  };
+  const store = createAiSettingsStore(local);
+  await store.load();
+  let acknowledged = false;
+  const saving = store.save({ ...settings, model: 'replacement' }).then(() => { acknowledged = true; });
+  await Promise.resolve();
+  assert.equal(acknowledged, false);
+  assert.deepEqual(store.get(), initial);
+  assert.deepEqual(await createAiSettingsStore(local).load(), initial);
+  rejectWrite(new Error('simulated interruption'));
+  await assert.rejects(saving, /原配置已保留/);
+  assert.equal(acknowledged, false);
+  assert.deepEqual(await createAiSettingsStore(local).load(), initial);
 });
 
 test('secure-storage and corrupt-setting errors are surfaced without raw credentials and are retryable', async () => {
@@ -59,7 +121,7 @@ test('a delayed initial read and concurrent writes cannot overwrite the latest c
 });
 
 test('settings changes abort requests and discard an old snapshot across photo preprocessing', async () => {
-  const store = createAiSettingsStore(null); await store.save(settings);
+  const store = createAiSettingsStore(storage()); await store.save(settings);
   const revision = store.version();
   const request = store.beginRequest(); request.assertCurrent();
   const saving = store.save({ ...settings, model: 'next' });
@@ -73,7 +135,7 @@ test('settings changes abort requests and discard an old snapshot across photo p
 });
 
 test('caller cancellation and the maximum three-stage analysis limit preserve local data', async (t) => {
-  const store = createAiSettingsStore(null); await store.save(settings);
+  const store = createAiSettingsStore(storage()); await store.save(settings);
   const controller = new AbortController(); const request = store.beginRequest(controller.signal);
   controller.abort(); assert.equal(request.signal.aborted, true); assert.throws(request.assertCurrent, /取消/); request.dispose();
   t.mock.timers.enable({ apis: ['setTimeout'] });

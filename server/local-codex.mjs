@@ -78,7 +78,7 @@ export async function prepareLocalCodex({ projectRoot = resolve('.'), configPath
     SERVER_ACCESS_TOKEN: settings.accessToken,
     MODEL_BASE_URL: provider.baseUrl, MODEL_API_PROTOCOL: 'responses', MODEL_API_KEY: provider.key,
     MODEL_NAME: provider.model, MODEL_REASONING_EFFORT: provider.reasoningEffort,
-    MODEL_MAX_OUTPUT_TOKENS: '8192', UPSTREAM_TIMEOUT_MS: '180000',
+    MODEL_MAX_OUTPUT_TOKENS: '8192', UPSTREAM_TIMEOUT_MS: '120000',
     MONTHLY_BUDGET_CNY: settings.monthlyBudgetCny, MAX_REQUEST_COST_CNY: settings.maxRequestCostCny,
     SAFETY_RESERVE_CNY: settings.safetyReserveCny, INSTALLATION_DAILY_QUOTA: settings.dailyQuota,
     CORS_ORIGINS: 'http://localhost:8082,http://127.0.0.1:8082,http://localhost:8084,http://127.0.0.1:8084',

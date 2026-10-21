@@ -1,0 +1,49 @@
+# 文档与验证索引
+
+整理日期：2026-10-21。启动、基本使用与检查命令见 [项目 README](../README.md)。
+
+## 现行约定
+
+| 阅读目的 | 文档 | 范围 |
+| --- | --- | --- |
+| 产品范围与验收 | [首版产品规格](product-spec-v0.1.md) | 三模块、数据归属、隐私、A-01～A-21 验收要求。定义目标，不表示已全部通过。 |
+| 菜品、每 100 g 营养与食用量 | [营养实现规格](nutrition-implementation.md) | 最小 JSON、默认参考量、用户修改、确认同步、旧数据与备份兼容。 |
+| AI 连接与持久化 | [用户 AI 设置](user-ai-settings.md) | 用户直连、模型与自定义强度、SecureStore / IndexedDB、保存失败及凭据边界。 |
+| 实现顺序和发布条件 | [技术路线图](technical-roadmap.md) | P0～P6 依赖、接口与阶段验收。 |
+| 餐食链路的代码落点 | [P2 技术报告](p2-meal-analysis-technical-report.md) | 多图输入、请求、校验、复核、本地换算、版本和备份。 |
+| 当前视觉方向 | [方案 A 设计约定](ui-design-a.md) | 24 格节律矩阵、四个 Tab、浅暗主题及设计参考。 |
+| 构建与设备验证 | [Android 测试说明](android-testing.md) | 最新 APK 的源码边界、构建命令、签名和限定的模拟器结果。 |
+| 开发和诊断工具 | [脚本说明](../scripts/README.md) | 脚本分类、专项检查、历史冻结及实验约束。 |
+| 本次维护发现 | [维护审查](maintenance-review.md) | 文件整理、代码检查、专项测试结果及后续建议。 |
+
+当前源码行为以这些规格和实现为准；带日期的测试记录只描述当时的快照、模型和设备。旧记录中的 55 / 90 秒等待、页面内存配置、手动采用参考量等属于历史阶段：当前普通分析每阶段上限 120 秒，Web 配置使用独立 IndexedDB，识别页在本地预填可用参考量。最新已构建 APK 停留在 2026-10-19，不能当成当前工作树的安装包。
+
+## 验证记录与原始证据
+
+下表索引已有结果，本次文档整理未重新运行这些业务测试。完整失败、修正和补跑经过保留在各自记录中；不同轮次的通过项不能相加声称为单轮全通过。
+
+| 主题 | 记录入口 | 证据与边界 |
+| --- | --- | --- |
+| 默认食用量、名称与四项营养同步 | [开发记录](development.md#estimated-portions) | 该功能集成时核心 277/277、服务端 80/80、类型检查通过。Web 的 42 个不同场景/视口组合跨 7 轮各有通过结果；[原始目录](../artifacts/meal-estimated-portion-web-20261021/) 保留初轮失败和定向补跑。 |
+| 多餐前图及配置持久化 | [开发记录](development.md#multi-photo-settings) | 多图与受影响流程的 18 个组合分轮通过；[多图证据](../artifacts/meal-before-photos-settings-web-20261021/)。设置场景、事务失败与完整关闭浏览器后恢复的证据详见 [AI 设置验证](user-ai-settings.md#verification-on-2026-10-21)。 |
+| 固定 8081 来源重开恢复 | [AI 设置复查](user-ai-settings.md#same-origin-reopen-recheck-2026-10-21) | 长预算回归一轮 2/2；[结果 JSON](../artifacts/ai-reopen-8081-20261020T180840Z/restart-verification-long.json)。早期整条用例超时保留，增加的是测试预算，App 上限未改。 |
+| 暗色模式与预览连接 | [开发记录](development.md#appearance) | 主题切换、保存、表单与分析状态的 Web 模拟验证；IPv4 排查单独保留。没有因此完成原生系统栏或用户当前预览窗口的验收。 |
+| 方案 A 初次集成 | [设计说明中的历史验证](ui-design-a.md#initial-validation) | 2026-10-18 的 Web 流程、布局及截图；已进入 10 月 19 日 APK。后续暗色和餐食交互变化另见开发记录。 |
+| 最小餐食 JSON 的真实首轮 | [开发记录](development.md#frontend-protocol) | [三图报告](../artifacts/meal-frontend-20261018-high-v1/report.md)：固定 `gpt-6.1-sol/high` 的三次首轮均完整有效；没有人工营养真值，未验证长期稳定性。 |
+| 旧提示、速度与失败诊断 | [开发历史](development.md#latency-history) | [22 次试验结论](../artifacts/meal-latency-20261018-90s-v1/conclusion.md) 使用当时的 90 秒、冻结源码及旧提示，不是现行配置的速度保证。 |
+| Android 0.1.1 | [Android 运行范围](android-testing.md#native-runtime-scope) | 一个 x86_64 模拟器、一次真实 Responses 分析、离线 150 g 换算、同 APK 覆盖安装与原生导出。原生恢复、arm64 实体手机和 iOS 未验收。 |
+
+完整开发时间线及 A-01～A-21 的实现/验证边界集中在 [开发记录](development.md)。Android 各版包身份、历史签名与设备结果集中在 [Android 测试说明](android-testing.md)。新测试应保存自己的运行结果，不改写旧冻结清单、账本或失败产物。
+
+## 历史调研与待完成评估
+
+| 文档 | 用途与时点 |
+| --- | --- |
+| [营养数据源调研](nutrition-research.md) | 2026-10-11 的 USDA、Open Food Facts、Edamam 和 LogMeal 来源/许可研究；早期方案建议不再定义新的生产协议。 |
+| [营养评估记录](nutrition-evaluation.md) | 早期 USDA 及真实照片诊断，保留当时未知值、失败和独立账本口径。 |
+| [50 餐真值集工作说明](../data/validation/README.md) | 人工配方、称重与标签采集，以及离线评估器用法；当前为空模板，准确率仍待验。 |
+| [移动测试工具调研](mobile-testing-tools-research.md) | 2026-10-11 的工具选型和建议；工具安装、ABI 与设备状态需要结合后续 Android 记录阅读。 |
+
+尚缺代表性供应商与营养真值评估、Android/iPhone 实体设备验收、原生备份恢复及大数据量验证。Web 模拟交互通过、单次真实返回和营养算式正确分别证明不同事项，均不能替代这些验收。
+
+本次维护确认的餐食分析草稿、已保存餐食重分析及训练视频删除恢复问题已修复，复现、修复和回归范围集中在 [维护审查](maintenance-review.md)。最新训练模板和可选睡眠质量的行为及验证见 [开发记录](development.md)；规格要求仍不能读作全部平台验收保证。

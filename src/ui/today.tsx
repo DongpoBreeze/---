@@ -1,28 +1,71 @@
-import React, { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from "react-native";
+import React, { useEffect, useState } from "react";
+import { AppState, Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import type { AppData } from "../types";
-import { mealCalories, summaryMarkdown } from "../domain";
-import { MarkdownText, SummaryVersions, s as base } from "./components";
-import { Dial, type DialMark as Mark } from "./dial";
-import { dateLabel, minutesInto, rangeLabel, recordDate, sleepHours, timeLabel, today } from "./format";
-import { color, moduleTone, radius, space, type } from "./theme";
+import type { AppData, MealRecord, NutrientRange } from "../types";
+import { localDate, mealCalories, summaryMarkdown } from "../domain";
+import { MarkdownText, SummaryVersions, useBaseStyles } from "./components";
+import { RhythmMatrix, type RhythmMark } from "./rhythm";
+import { dateLabel, minutesInto, recordDate, sleepHours, timeLabel } from "./format";
+import { radius, type ThemeTokens } from "./theme";
+import { useTheme, useThemedStyles } from "./theme-provider";
 import type { Kind } from "./app-types";
 
-/** One lit gauge: module hue, reading and a one-line note. */
-function Gauge({ kind, label, value, unit, note }: { kind: Kind; label: string; value: string; unit?: string; note: string }) {
+type NutrientKey = "calories" | "protein" | "carbs" | "fat";
+
+function nutrientMidpointLabel(value: NutrientRange, nutrient: NutrientKey) {
+  const digits = nutrient === "calories" ? 0 : 1;
+  const factor = 10 ** digits;
+  const midpoint = (value.min + value.max) / 2;
+  return (Math.round(midpoint * factor) / factor).toFixed(digits);
+}
+
+/** Use the same current-input and quantity gates as the saved meal calorie total. */
+function mealNutrient(meal: MealRecord, nutrient: NutrientKey): NutrientRange | null {
+  if (nutrient === "calories") return mealCalories(meal);
+  if (meal.estimate && meal.estimateStatus === "estimated") {
+    const value = meal.estimate[nutrient];
+    return Number.isFinite(value) ? { min: value, max: value } : null;
+  }
+  const version = meal.analyses?.at(-1);
+  if (!version || version.sourceVersion !== (meal.revision ?? 1)) return null;
+  const analysis = version.analysis;
+  if (analysis.status !== "estimated"
+    && !(analysis.status === "approximate" && (analysis.coverage?.counted ?? 0) > 0)) return null;
+  return analysis[nutrient];
+}
+
+function nutrientSummary(meals: MealRecord[], nutrient: NutrientKey) {
+  const values = meals.map((meal) => mealNutrient(meal, nutrient)).filter((value): value is NutrientRange => value !== null);
+  return {
+    total: values.length ? values.reduce((sum, value) => ({ min: sum.min + value.min, max: sum.max + value.max }), { min: 0, max: 0 }) : null,
+    knownMeals: values.length,
+    missingMeals: meals.length - values.length,
+  };
+}
+
+function hasIncompleteNutrition(meal: MealRecord) {
+  const version = meal.analyses?.at(-1);
+  const analysis = version?.sourceVersion === (meal.revision ?? 1) ? version.analysis : undefined;
+  return ["user-quantity-v2", "ai-per100g-v3", "reference-quantity-v1"].includes(analysis?.nutritionSource?.method ?? "")
+    && (analysis?.nutritionSource?.coverage === "incomplete"
+      || Boolean(analysis?.coverage?.missingQuantityLabels?.length)
+      || Boolean(analysis?.coverage?.unknownNutritionLabels?.length));
+}
+
+function ModuleSummary({ kind, value, unit, note }: { kind: "training" | "sleep"; value: string; unit?: string; note: string }) {
+  const { color, moduleTone } = useTheme();
+  const st = useThemedStyles(createStyles);
   const tone = moduleTone[kind];
-  const unknown = value === "未知" || value === "—";
   return (
-    <View style={[st.gauge, { borderColor: unknown ? color.line : tone.hue }]}>
-      <View style={st.gaugeHead}>
-        <View style={[st.gaugeDot, { backgroundColor: unknown ? color.inkFaint : tone.hue }]} />
-        <Text style={st.gaugeLabel} numberOfLines={1}>{label}</Text>
+    <View style={st.moduleSummary}>
+      <View style={st.moduleHead}>
+        <View style={[st.moduleDot, { backgroundColor: tone.hue }]} />
+        <Text style={st.moduleTitle}>{kind === "training" ? "训练汇总" : "估算睡眠"}</Text>
       </View>
-      <Text style={[st.gaugeValue, { color: unknown ? color.inkFaint : tone.text }]} numberOfLines={1} adjustsFontSizeToFit>
-        {value}
+      <Text style={[st.moduleValue, value === "—" && { color: color.placeholder }]} numberOfLines={1} adjustsFontSizeToFit>
+        {value}<Text style={st.moduleUnit}>{value !== "—" && unit ? " " + unit : ""}</Text>
       </Text>
-      <Text style={st.gaugeNote} numberOfLines={2}>{unknown ? note : `${unit ?? ""}${unit ? " · " : ""}${note}`}</Text>
+      <Text style={st.moduleNote}>{note}</Text>
     </View>
   );
 }
@@ -42,254 +85,299 @@ export function Today({
   onAi: () => void;
   onProfile: () => void;
 }) {
-  const { width } = useWindowDimensions();
-  const dialSize = Math.min(300, Math.max(240, Math.min(width, 760) - 80));
+  const { color, type, moduleTone } = useTheme();
+  const base = useBaseStyles();
+  const st = useThemedStyles(createStyles);
   const [showLocal, setShowLocal] = useState(false);
-  const date = today();
-  const meals = data.meals.filter((r) => recordDate(r) === date);
-  const trainings = data.trainings.filter((r) => recordDate(r) === date);
-  const sleeps = data.sleeps.filter((r) => recordDate(r) === date);
-  const known = meals
-    .map(mealCalories)
-    .filter((v): v is { min: number; max: number } => v !== null);
-  const total = known.reduce(
-    (sum, v) => ({ min: sum.min + v.min, max: sum.max + v.max }),
-    { min: 0, max: 0 },
-  );
+  const [nowDate, setNowDate] = useState(() => new Date());
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    const refresh = () => {
+      clearTimeout(timer);
+      setNowDate(new Date());
+      timer = setTimeout(refresh, 60000 - (Date.now() % 60000) + 20);
+    };
+    refresh();
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") refresh();
+    });
+    return () => { clearTimeout(timer); subscription.remove(); };
+  }, []);
+  const date = localDate(nowDate);
+  const meals = data.meals.filter((record) => recordDate(record) === date);
+  const trainings = data.trainings.filter((record) => recordDate(record) === date);
+  const sleeps = data.sleeps.filter((record) => recordDate(record) === date);
+  const count = meals.length + trainings.length + sleeps.length;
   const days = new Set([
     ...data.meals.map(recordDate),
     ...data.trainings.map(recordDate),
     ...data.sleeps.map(recordDate),
   ]).size;
-  const summary =
-    data.summaries.find((r) => r.date === date && r.source !== "ai")
-      ?.markdown ?? summaryMarkdown(data, date);
-  const count = meals.length + trainings.length + sleeps.length;
-  const marks: Mark[] = [
-    ...sleeps.map((r) => ({ kind: "sleep" as Kind, start: minutesInto(date, r.fellAsleepAt), end: minutesInto(date, r.wokeAt) })),
-    ...meals.map((r) => ({ kind: "meal" as Kind, start: minutesInto(date, r.occurredAt) })),
-    ...trainings.map((r) => {
-      const start = minutesInto(date, r.occurredAt);
-      return { kind: "training" as Kind, start, end: r.mode === "cardio" && r.durationMinutes ? start + r.durationMinutes : undefined };
+  const nutrients = {
+    calories: nutrientSummary(meals, "calories"),
+    protein: nutrientSummary(meals, "protein"),
+    carbs: nutrientSummary(meals, "carbs"),
+    fat: nutrientSummary(meals, "fat"),
+  };
+  const knownMeals = nutrients.calories.knownMeals;
+  const incompleteMeals = meals.filter(hasIncompleteNutrition).length;
+  const insufficientMeals = meals.filter((meal) => hasIncompleteNutrition(meal)
+    || (["calories", "protein", "carbs", "fat"] as const).some((nutrient) => mealNutrient(meal, nutrient) === null)).length;
+  const calories = nutrients.calories.total;
+  const summary = data.summaries.find((record) => record.date === date && record.source !== "ai")?.markdown
+    ?? summaryMarkdown(data, date);
+  const aiSummaries = data.summaries.filter((record) => record.date === date && record.source === "ai");
+  const preview = count
+    ? summary.split("\n").filter((line) => line.trim() && !line.startsWith("#") && !line.startsWith("-")).join(" ").slice(0, 180)
+    : "暂无记录，开始今天的第一笔数据记录后，可查看本地摘要或请求 AI 生成健康总结。";
+  // Include every interval intersecting this local day, including overnight sleep.
+  const marks: RhythmMark[] = [
+    ...data.sleeps.map((record) => ({ kind: "sleep" as const, start: minutesInto(date, record.fellAsleepAt), end: minutesInto(date, record.wokeAt) })),
+    ...data.meals.map((record) => ({ kind: "meal" as const, start: minutesInto(date, record.occurredAt) })),
+    ...data.trainings.map((record) => {
+      const start = minutesInto(date, record.occurredAt);
+      return { kind: "training" as const, start, end: record.mode === "cardio" && record.durationMinutes ? start + record.durationMinutes : undefined };
     }),
   ];
-  const nowDate = new Date();
   const now = nowDate.getHours() * 60 + nowDate.getMinutes();
-  const sleepValue = sleeps.length && sleepHours(sleeps[0]) !== null ? sleepHours(sleeps[0])!.toFixed(1) : "未知";
+  const workSets = trainings.reduce((sum, record) => sum + record.sets.filter((set) => !set.isWarmup).length, 0);
+  const cardio = trainings.filter((record) => record.mode === "cardio");
+  const trainingNote = !trainings.length ? "暂无训练"
+    : trainings.some((record) => record.mode !== "cardio") ? workSets + " 个工作组"
+    : cardio.every((record) => record.durationMinutes !== undefined)
+      ? cardio.reduce((sum, record) => sum + record.durationMinutes!, 0) + " 分钟有氧活动"
+      : "有氧时长未完整填写";
+  const knownSleeps = sleeps.map(sleepHours).filter((value): value is number => value !== null);
+  const sleepValue = knownSleeps.length ? knownSleeps.reduce((sum, value) => sum + value, 0).toFixed(1) : "—";
+  const sleepNote = !sleeps.length ? "暂无睡眠"
+    : knownSleeps.length < sleeps.length ? (sleeps.length - knownSleeps.length) + " 段时长未知"
+    : "已知时长合计 · 非设备测量";
   const recent = [
-    ...meals.map((r) => ({
-      kind: "meal" as Kind,
-      id: r.id,
-      title: r.foodName,
-      detail: `${r.mealType} · ${timeLabel(r.occurredAt)}`,
-      at: r.occurredAt,
+    ...meals.map((record) => ({
+      kind: "meal" as Kind, id: record.id, title: record.foodName,
+      detail: record.mealType + " · " + timeLabel(record.occurredAt), at: record.occurredAt,
     })),
-    ...trainings.map((r) => ({
-      kind: "training" as Kind,
-      id: r.id,
-      title: r.exercise,
-      detail: `${r.mode === "cardio" ? `${r.durationMinutes ?? 0} 分钟` : `${r.sets.filter((x) => !x.isWarmup).length} 工作组`} · ${timeLabel(r.occurredAt)}`,
-      at: r.occurredAt,
+    ...trainings.map((record) => ({
+      kind: "training" as Kind, id: record.id, title: record.exercise,
+      detail: (record.mode === "cardio"
+        ? record.durationMinutes === undefined ? "时长未知" : record.durationMinutes + " 分钟"
+        : record.sets.filter((set) => !set.isWarmup).length + " 工作组") + " · " + timeLabel(record.occurredAt),
+      at: record.occurredAt,
     })),
-    ...sleeps.map((r) => ({
-      kind: "sleep" as Kind,
-      id: r.id,
-      title: "睡眠记录",
-      detail: `${sleepHours(r) === null ? "时长未知" : `${sleepHours(r)!.toFixed(1)} 小时估算睡眠`} · ${dateLabel(r.wokeAt)}`,
-      at: r.wokeAt,
+    ...sleeps.map((record) => ({
+      kind: "sleep" as Kind, id: record.id, title: "睡眠记录",
+      detail: (sleepHours(record) === null ? "时长未知" : sleepHours(record)!.toFixed(1) + " 小时估算睡眠") + " · " + dateLabel(record.wokeAt),
+      at: record.wokeAt,
     })),
-  ]
-    .sort((a, b) => Date.parse(b.at) - Date.parse(a.at))
-    .slice(0, 5);
-  const preview = summary
-    .split("\n")
-    .filter((line) => line.trim() && !line.startsWith("#") && !line.startsWith("-"))
-    .join(" ")
-    .slice(0, 180);
-  const kcalValue = known.length ? rangeLabel(total) : "未知";
-  const incompleteMeals = meals.filter((meal) => {
-    const latest = meal.analyses?.at(-1);
-    return latest?.sourceVersion === (meal.revision ?? 1)
-      && ["user-quantity-v2", "ai-per100g-v3"].includes(latest.analysis.nutritionSource?.method ?? "")
-      && latest.analysis.nutritionSource?.coverage === "incomplete";
-  }).length;
-  const mealNote = !meals.length ? "暂无饮食" : incompleteMeals ? `${incompleteMeals} 餐数据不完整`
-    : known.length === meals.length ? `${meals.length} 餐有摄入估算` : `${meals.length - known.length} 餐摄入未知`;
-  const workSets = trainings.reduce((n, r) => n + r.sets.filter((x) => !x.isWarmup).length, 0);
+  ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, 5);
+
   return (
     <ScrollView contentContainerStyle={contentStyle} showsVerticalScrollIndicator={false}>
       <View style={st.head}>
-        <View style={{ flex: 1 }}>
-          <Text style={st.weekday}>{nowDate.toLocaleDateString("zh-CN", { weekday: "long" })}</Text>
-          <Text style={st.date}>{nowDate.toLocaleDateString("zh-CN", { month: "long", day: "numeric" })}</Text>
+        <View style={st.headText}>
+          <Text style={st.protocol}>DAILY PROTOCOL</Text>
+          <Text style={st.days}>已记 {days} 天</Text>
+          <Text style={st.date} numberOfLines={1} adjustsFontSizeToFit>
+            {String(nowDate.getMonth() + 1) + "月" + nowDate.getDate() + "日" + nowDate.toLocaleDateString("zh-CN", { weekday: "long" })}
+          </Text>
         </View>
-        <Pressable
-          accessibilityRole="button"
-          onPress={onProfile}
-          style={st.avatar}
-          accessibilityLabel="打开我的资料"
-        >
-          <Ionicons name="person-outline" size={19} color={color.ink} />
+        <Pressable accessibilityRole="button" accessibilityLabel="打开我的资料" onPress={onProfile} style={({ pressed }) => [st.avatar, pressed && base.pressed]}>
+          <Ionicons name="person-outline" size={23} color={color.ink} />
         </Pressable>
       </View>
-      <View
-        style={st.dialWrap}
-        accessible
-        accessibilityLabel={`今日表盘：已记下 ${count} 条，饮食 ${meals.length} 餐，训练 ${trainings.length} 次，睡眠 ${sleeps.length} 段`}
-      >
-        <Dial size={dialSize} marks={marks} now={now}>
-          <Text style={st.dialCount}>{count}</Text>
-          <Text style={st.dialLabel}>{count ? "今天已记下" : days ? "今天还没有记录" : "从第一条记录开始"}</Text>
-          <Text style={st.dialTime}>现在 {timeLabel(nowDate.toISOString())}</Text>
-        </Dial>
-        <View style={st.legend}>
-          {(["sleep", "meal", "training"] as const).map((k) => (
-            <View key={k} style={st.legendItem}>
-              <View style={[st.legendDot, { backgroundColor: moduleTone[k].hue }]} />
-              <Text style={st.legendText}>{moduleTone[k].name}</Text>
-            </View>
-          ))}
-        </View>
+
+      <View style={st.card}>
+        <Text style={st.cardTitle}>24H RHYTHM MATRIX</Text>
+        <Text style={st.cardSubtitle}>24格节律矩阵·实时映射三项生理记录</Text>
+        <RhythmMatrix marks={marks} now={now} />
       </View>
-      <View style={st.gauges}>
-        <Gauge kind="meal" label="已估算摄入" value={kcalValue} unit="kcal" note={mealNote} />
-        <Gauge kind="training" label="训练" value={trainings.length ? `${trainings.length}` : "—"} unit="次" note={trainings.length ? `${workSets} 个工作组` : "暂无训练"} />
-        <Gauge kind="sleep" label="估算睡眠" value={sleepValue} unit="小时" note={sleeps.length ? "非设备测量" : "暂无睡眠"} />
+
+      <View style={st.recordCount} accessible accessibilityLabel={"今日已记 " + count + " 条记录，饮食 " + meals.length + " 餐，训练 " + trainings.length + " 次，睡眠 " + sleeps.length + " 段"}>
+        <Text testID="today-count" style={[st.countNumber, Boolean(count) && { color: color.ink }]}>{count}</Text>
+        <Text style={st.countLabel}>条今日记录</Text>
+        <Text style={st.countHint}>
+          {count ? meals.length + " 餐饮食 · " + trainings.length + " 次训练 · " + sleeps.length + " 段睡眠" : "轻触下方按钮记录今天第一笔数据"}
+        </Text>
       </View>
+
       <View style={st.actions}>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => onOpen("meal")}
-          style={({ pressed }) => [st.capture, pressed && base.pressed]}
-        >
-          <Ionicons name="camera" size={22} color={color.onInk} />
-          <Text style={st.captureTitle}>记饮食</Text>
+        <Pressable accessibilityRole="button" onPress={() => onOpen("meal")} style={({ pressed }) => [st.action, st.capture, pressed && base.pressed]}>
+          <Ionicons name="camera" size={19} color={color.onInk} />
+          <Text style={[st.actionText, { color: color.onInk }]}>记饮食</Text>
         </Pressable>
         {(["training", "sleep"] as const).map((kind) => (
           <Pressable
             key={kind}
             accessibilityRole="button"
             onPress={() => onOpen(kind)}
-            style={({ pressed }) => [st.side, { borderColor: moduleTone[kind].hue }, pressed && base.pressed]}
+            style={({ pressed }) => [st.action, { borderWidth: 2, borderColor: moduleTone[kind].hue }, pressed && base.pressed]}
           >
-            <Ionicons name={moduleTone[kind].icon} size={20} color={moduleTone[kind].text} />
-            <Text style={[st.sideText, { color: moduleTone[kind].text }]}>{kind === "training" ? "记训练" : "记睡眠"}</Text>
+            <Ionicons name={moduleTone[kind].icon} size={19} color={moduleTone[kind].text} />
+            <Text style={[st.actionText, { color: moduleTone[kind].text }]}>{kind === "training" ? "记训练" : "记睡眠"}</Text>
           </Pressable>
         ))}
       </View>
-      <Text style={st.days}>拍照或直接写下吃了什么 · 已有 {days} 个日期留下记录</Text>
-      <View style={st.panel}>
-        <View style={st.panelHead}>
-          <Text style={st.panelTitle}>今日摘要</Text>
-          <Text style={st.panelMeta}>根据已保存记录</Text>
+
+      <View testID="today-nutrition" style={st.card}>
+        <View style={st.nutritionBody}>
+          <View style={st.nutritionHeader}>
+            <View style={st.nutritionTitle}>
+              <View style={[st.moduleDot, { backgroundColor: color.meal }]} />
+              <Text style={st.nutritionHeading}>01 / NUTRITION · 今日饮食汇总</Text>
+            </View>
+            <Text style={st.mealBadge}>已记 {meals.length} 餐</Text>
+          </View>
+          <View style={st.calorieRow}>
+            <Text style={[st.calories, !calories && { color: color.placeholder }]} numberOfLines={1} adjustsFontSizeToFit>
+              {calories ? nutrientMidpointLabel(calories, "calories") : "未知"}
+            </Text>
+            {calories && <Text style={st.calorieUnit}>kcal{nutrients.calories.missingMeals || incompleteMeals ? " · 已知小计" : " · 估算"}</Text>}
+          </View>
+          <View style={st.nutritionStatus}>
+            <Text style={st.statusText}>有营养估算 {knownMeals} 餐</Text>
+            <Text style={st.statusText}>信息不足 {insufficientMeals} 餐</Text>
+          </View>
+          {incompleteMeals > 0 && <Text style={st.nutritionHint}>{incompleteMeals} 餐数据不完整，缺少数量或有效营养参考的菜品未计入。</Text>}
+          {meals.length > 0 && knownMeals < meals.length && <Text style={st.nutritionHint}>仅汇总已有估算，未估算的餐食保持未知。</Text>}
+          <View style={st.macros}>
+            {([["protein", "蛋白质 P"], ["carbs", "碳水 C"], ["fat", "脂肪 F"]] as const).map(([nutrient, label]) => {
+              const { total: value, missingMeals } = nutrients[nutrient];
+              return (
+                <View key={nutrient} testID={"today-nutrient-" + nutrient} style={st.macro}>
+                  <Text style={st.macroLabel}>{label}</Text>
+                  <View style={st.macroValueRow}>
+                    <Text style={[st.macroValue, !value && { color: color.placeholder }]} numberOfLines={1} adjustsFontSizeToFit>
+                      {value ? nutrientMidpointLabel(value, nutrient) : "—"}
+                    </Text>
+                    {value && <Text style={st.macroUnit}>g</Text>}
+                  </View>
+                  {value && <Text style={st.macroNote}>{missingMeals || incompleteMeals ? "已知小计" : "已有估算"}</Text>}
+                  {missingMeals > 0 && <Text style={st.macroNote}>{missingMeals} 餐未知</Text>}
+                </View>
+              );
+            })}
+          </View>
         </View>
-        <Text style={st.summary}>{preview}</Text>
+      </View>
+
+      <View style={[st.card, st.summaryCard]}>
+        <View style={st.summaryHeader}>
+          <Text style={st.summaryEyebrow}>AI SYNTHESIS</Text>
+          <View style={st.summaryBadges}>
+            <Text style={[st.badge, st.badgeLocal]}>本地摘要</Text>
+            <Text style={[st.badge, st.badgeStatus]}>{!count ? "等待今日记录" : aiSummaries.length ? "含 AI 版本" : "已更新"}</Text>
+          </View>
+        </View>
+        <Text style={st.summaryTitle}>今日健康总结</Text>
+        <Text style={st.summaryText}>{preview}</Text>
         <Pressable style={st.link} accessibilityRole="button" onPress={() => setShowLocal(!showLocal)}>
-          <Ionicons name={showLocal ? "chevron-up" : "document-text-outline"} size={16} color={color.pine} />
+          <Ionicons name={showLocal ? "chevron-up" : "document-text-outline"} size={16} color={color.inkSoft} />
           <Text style={st.linkText}>{showLocal ? "收起摘要" : "查看完整摘要"}</Text>
         </Pressable>
         {showLocal && <MarkdownText value={summary} />}
-        <SummaryVersions summaries={data.summaries.filter((r) => r.date === date && r.source === "ai")} />
-        <Pressable
-          accessibilityRole="button"
-          style={({ pressed }) => [st.ai, pressed && base.pressed]}
-          onPress={onAi}
-        >
-          <Ionicons name="sparkles" size={17} color={color.pine} />
+        <SummaryVersions summaries={aiSummaries} />
+        <Pressable accessibilityRole="button" style={({ pressed }) => [st.ai, pressed && base.pressed]} onPress={onAi}>
+          <Ionicons name="sparkles" size={17} color={color.ink} />
           <Text style={st.aiText}>请求 AI 综合分析</Text>
         </Pressable>
         <Text style={st.aiNote}>发送前会询问，记录只在你同意后离开本机。</Text>
       </View>
+
+      <View style={st.moduleSummaries}>
+        <ModuleSummary kind="training" value={trainings.length ? String(trainings.length) : "—"} unit="次" note={trainingNote} />
+        <ModuleSummary kind="sleep" value={sleepValue} unit="小时" note={sleepNote} />
+      </View>
+
       <Text style={st.sectionTitle}>今日记录</Text>
       {recent.length ? (
         <View style={st.timeline}>
-          {recent.map((r, i) => (
-            <Pressable
-              accessibilityRole="button"
-              key={`${r.kind}-${r.id}`}
-              onPress={() => onEdit(r.kind, r.id)}
-              style={({ pressed }) => [st.row, pressed && base.pressed]}
-            >
+          {recent.map((record, index) => (
+            <Pressable accessibilityRole="button" key={record.kind + "-" + record.id} onPress={() => onEdit(record.kind, record.id)} style={({ pressed }) => [st.row, pressed && base.pressed]}>
               <View style={st.rail}>
-                <View style={[st.railDot, { backgroundColor: moduleTone[r.kind].hue }]} />
-                {i < recent.length - 1 && <View style={st.railLine} />}
+                <View style={[st.railDot, { backgroundColor: moduleTone[record.kind].hue }]} />
+                {index < recent.length - 1 && <View style={st.railLine} />}
               </View>
               <View style={st.rowBody}>
-                <Text style={type.label}>{r.title}</Text>
-                <Text style={type.small}>{r.detail}</Text>
+                <Text style={type.label}>{record.title}</Text>
+                <Text style={type.small}>{record.detail}</Text>
               </View>
               <Ionicons name="chevron-forward" size={17} color={color.inkFaint} style={{ alignSelf: "center" }} />
             </Pressable>
           ))}
         </View>
       ) : (
-        <View style={st.empty}>
-          <Text style={type.heading}>暂无记录</Text>
-          <Text style={[type.bodySoft, { textAlign: "center" }]}>选择上面的入口，保存第一条本地记录。</Text>
+        <View style={st.timelineEmpty}>
+          <Text style={type.small}>保存后可在这里查看今天的记录，或前往“记录”回顾其他日期。</Text>
         </View>
       )}
     </ScrollView>
   );
 }
 
-const st = StyleSheet.create({
-  head: { flexDirection: "row", alignItems: "flex-start", gap: space.md },
-  weekday: { ...type.small, color: color.pine, fontWeight: "700" },
-  date: { ...type.display, marginTop: 2 },
-  avatar: {
-    width: 44, height: 44, borderRadius: 22, backgroundColor: color.surface,
-    alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: color.lineStrong,
-  },
-  dialWrap: { alignItems: "center", marginTop: space.lg },
-  dialCount: { fontSize: 56, lineHeight: 60, fontWeight: "800", color: color.ink, ...type.numeric },
-  dialLabel: { ...type.small, color: color.inkSoft },
-  dialTime: { fontSize: 12, color: color.pine, marginTop: space.xs, fontWeight: "700", ...type.numeric },
-  legend: { flexDirection: "row", gap: space.lg, marginTop: space.md },
-  legendItem: { flexDirection: "row", alignItems: "center", gap: 6 },
-  legendDot: { width: 8, height: 8, borderRadius: 4 },
-  legendText: { ...type.small },
-  gauges: { flexDirection: "row", gap: space.sm, marginTop: space.xl },
-  gauge: {
-    flex: 1, minWidth: 0, backgroundColor: color.surface, borderRadius: radius.block, padding: space.md,
-    borderTopWidth: 3,
-  },
-  gaugeHead: { flexDirection: "row", alignItems: "center", gap: 6 },
-  gaugeDot: { width: 6, height: 6, borderRadius: 3 },
-  gaugeLabel: { ...type.small, flex: 1 },
-  gaugeValue: { fontSize: 24, lineHeight: 30, fontWeight: "800", marginTop: space.sm, ...type.numeric },
-  gaugeNote: { fontSize: 11, lineHeight: 15, color: color.inkFaint, marginTop: 2 },
-  actions: { flexDirection: "row", gap: space.sm, marginTop: space.lg },
-  capture: {
-    flex: 1.4, minHeight: 56, borderRadius: radius.pill, backgroundColor: color.meal,
-    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space.sm,
-  },
-  captureTitle: { fontSize: 17, fontWeight: "800", color: color.onInk },
-  side: {
-    flex: 1, minHeight: 56, borderRadius: radius.pill, borderWidth: 1.5, backgroundColor: color.surface,
-    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
-  },
-  sideText: { fontSize: 14, fontWeight: "800" },
-  days: { ...type.small, color: color.inkFaint, textAlign: "center", marginTop: space.sm },
-  panel: { marginTop: space.xl, backgroundColor: color.surface, borderRadius: radius.block, padding: space.lg },
-  panelHead: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", marginBottom: space.sm },
-  panelTitle: { ...type.title },
-  panelMeta: { ...type.small, color: color.inkFaint },
-  summary: { ...type.body, color: color.inkSoft },
-  link: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 44 },
-  linkText: { color: color.pine, fontWeight: "800", fontSize: 14 },
-  ai: {
-    marginTop: space.md, minHeight: 50, borderRadius: radius.pill, backgroundColor: color.pineTint,
-    borderWidth: 1, borderColor: color.pine,
-    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space.sm,
-  },
-  aiText: { color: color.pine, fontSize: 15, fontWeight: "800" },
-  aiNote: { ...type.small, color: color.inkFaint, textAlign: "center", marginTop: space.sm },
-  sectionTitle: { ...type.title, marginTop: space.xxl, marginBottom: space.md },
-  timeline: { backgroundColor: color.surface, borderRadius: radius.block, paddingHorizontal: space.md, paddingVertical: space.xs },
-  row: { flexDirection: "row", alignItems: "stretch", gap: space.md, minHeight: 64 },
+const createStyles = ({ color, type, shadow }: ThemeTokens) => StyleSheet.create({
+  head: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 24 },
+  headText: { flex: 1, minWidth: 0, gap: 4 },
+  protocol: { fontSize: 11, fontWeight: "600", color: color.inkFaint, letterSpacing: 1 },
+  days: { fontSize: 12, color: color.inkFaint },
+  date: { ...type.display, lineHeight: 39, letterSpacing: -0.6 },
+  avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: color.surface, alignItems: "center", justifyContent: "center", ...shadow.card },
+  card: { backgroundColor: color.surface, borderRadius: radius.block, padding: 20, marginBottom: 16, ...shadow.card },
+  cardTitle: { fontSize: 11, fontWeight: "700", color: color.inkFaint, letterSpacing: 0.5, marginBottom: 8 },
+  cardSubtitle: { fontSize: 13, lineHeight: 19, color: color.inkSoft, marginBottom: 16 },
+  recordCount: { alignItems: "center", paddingTop: 30, paddingBottom: 32 },
+  countNumber: { fontSize: 56, lineHeight: 60, fontWeight: "800", color: color.placeholder, marginBottom: 8, ...type.numeric },
+  countLabel: { fontSize: 14, lineHeight: 20, fontWeight: "600", color: color.placeholder },
+  countHint: { fontSize: 13, lineHeight: 19, color: color.inkFaint, marginTop: 12, textAlign: "center" },
+  actions: { flexDirection: "row", gap: 12, marginBottom: 16 },
+  action: { flex: 1, minWidth: 0, height: 56, borderRadius: radius.pill, backgroundColor: color.surface, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, ...shadow.card },
+  capture: { backgroundColor: color.ink },
+  actionText: { fontSize: 15, fontWeight: "700", flexShrink: 1 },
+  nutritionBody: { borderTopWidth: 1, borderColor: color.line, paddingTop: 16 },
+  nutritionHeader: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 16 },
+  nutritionTitle: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 1, minWidth: 0 },
+  nutritionHeading: { fontSize: 11, fontWeight: "700", color: color.inkFaint, letterSpacing: 0.3, flexShrink: 1 },
+  mealBadge: { fontSize: 11, lineHeight: 16, fontWeight: "700", color: color.mealText, backgroundColor: color.mealTint, paddingVertical: 4, paddingHorizontal: 10, borderRadius: 12, overflow: "hidden" },
+  moduleDot: { width: 6, height: 6, borderRadius: 3 },
+  calorieRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "baseline", columnGap: 8, marginBottom: 8 },
+  calories: { fontSize: 40, lineHeight: 49, fontWeight: "800", color: color.ink, flexShrink: 1, ...type.numeric },
+  calorieUnit: { fontSize: 12, color: color.inkFaint },
+  nutritionStatus: { flexDirection: "row", flexWrap: "wrap", gap: 16 },
+  statusText: { fontSize: 12, lineHeight: 18, color: color.inkFaint },
+  nutritionHint: { fontSize: 12, lineHeight: 18, color: color.inkSoft, marginTop: 8 },
+  macros: { flexDirection: "row", gap: 12, marginTop: 16 },
+  macro: { flex: 1, minWidth: 0, alignItems: "center", justifyContent: "center", backgroundColor: color.softSurface, paddingVertical: 12, paddingHorizontal: 6, borderRadius: 8 },
+  macroLabel: { fontSize: 12, color: color.inkFaint, marginBottom: 4 },
+  macroValueRow: { flexDirection: "row", alignItems: "baseline", justifyContent: "center", columnGap: 3, maxWidth: "100%" },
+  macroValue: { fontSize: 16, lineHeight: 21, fontWeight: "700", color: color.ink, textAlign: "center", flexShrink: 1, ...type.numeric },
+  macroUnit: { fontSize: 10, lineHeight: 15, color: color.inkFaint },
+  macroNote: { fontSize: 10, lineHeight: 15, color: color.inkFaint, marginTop: 3 },
+  summaryCard: { backgroundColor: color.softSurface, borderWidth: 1, borderColor: color.line },
+  summaryHeader: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 12 },
+  summaryEyebrow: { fontSize: 11, fontWeight: "700", color: color.inkFaint, letterSpacing: 0.5 },
+  summaryBadges: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  badge: { fontSize: 10, lineHeight: 14, fontWeight: "700", paddingVertical: 3, paddingHorizontal: 8, borderRadius: 4, overflow: "hidden" },
+  badgeLocal: { backgroundColor: color.empty, color: color.inkSoft },
+  badgeStatus: { backgroundColor: color.trainingTint, color: color.trainingText },
+  summaryTitle: { fontSize: 20, lineHeight: 27, fontWeight: "800", color: color.ink, marginBottom: 8 },
+  summaryText: { fontSize: 13, lineHeight: 21, color: color.inkFaint },
+  link: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 44, marginTop: 4 },
+  linkText: { color: color.inkSoft, fontWeight: "600", fontSize: 13 },
+  ai: { minHeight: 48, borderRadius: radius.pill, backgroundColor: color.surface, borderWidth: 1, borderColor: color.lineStrong, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
+  aiText: { color: color.ink, fontSize: 14, fontWeight: "700" },
+  aiNote: { fontSize: 11, lineHeight: 17, color: color.inkFaint, textAlign: "center", marginTop: 8 },
+  moduleSummaries: { flexDirection: "row", gap: 12 },
+  moduleSummary: { flex: 1, minWidth: 0, backgroundColor: color.surface, borderRadius: radius.block, padding: 16, ...shadow.card },
+  moduleHead: { flexDirection: "row", alignItems: "center", gap: 6 },
+  moduleTitle: { fontSize: 12, color: color.inkFaint },
+  moduleValue: { fontSize: 28, lineHeight: 36, fontWeight: "800", color: color.ink, marginTop: 8, ...type.numeric },
+  moduleUnit: { fontSize: 12, fontWeight: "500", color: color.inkSoft },
+  moduleNote: { fontSize: 11, lineHeight: 17, color: color.inkFaint, marginTop: 2 },
+  sectionTitle: { ...type.title, marginTop: 24, marginBottom: 12 },
+  timeline: { backgroundColor: color.surface, borderRadius: radius.block, paddingHorizontal: 16, paddingVertical: 4, ...shadow.card },
+  row: { flexDirection: "row", alignItems: "stretch", gap: 12, minHeight: 64 },
   rail: { width: 14, alignItems: "center", paddingTop: 22 },
   railDot: { width: 10, height: 10, borderRadius: 5 },
-  railLine: { flex: 1, width: 2, backgroundColor: color.lineStrong, marginTop: 4 },
-  rowBody: { flex: 1, justifyContent: "center", paddingVertical: space.md },
-  empty: { alignItems: "center", gap: 4, paddingVertical: space.xl, backgroundColor: color.surface, borderRadius: radius.block },
+  railLine: { flex: 1, width: 2, backgroundColor: color.line, marginTop: 4 },
+  rowBody: { flex: 1, minWidth: 0, justifyContent: "center", paddingVertical: 12 },
+  timelineEmpty: { backgroundColor: color.surface, borderRadius: radius.block, padding: 20, ...shadow.card },
 });

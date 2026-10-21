@@ -101,6 +101,9 @@ function compatibleDraft(reference: unknown, value: unknown): boolean {
     return Object.entries(reference).every(
       ([key, entry]) =>
         !(key in value) ||
+        // JSON draft restoration reinstates explicit media removals as own
+        // undefined aliases. Other fields retain their existing type checks.
+        ((key === "imageUri" || key === "afterImageUri") && Object.hasOwn(value, key) && (value as Record<string, unknown>)[key] === undefined) ||
         compatibleDraft(entry, (value as Record<string, unknown>)[key]),
     );
   }
@@ -111,11 +114,16 @@ export function useFormDraft<T extends object>(
   key: string,
   initial: T,
   session?: FormSession,
+  options?: { restore: (value: unknown) => Partial<T> },
 ) {
   const [form, setFormState] = useState(initial);
   const [loaded, setLoaded] = useState(false);
   const [draftError, setDraftError] = useState("");
   const [saved, setSaved] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const readFailed = useRef(false);
+  const restore = useRef(options?.restore);
+  restore.current = options?.restore;
   const current = useRef(form);
   const active = useRef(true);
   const stopped = useRef(false);
@@ -148,6 +156,7 @@ export function useFormDraft<T extends object>(
     if (!isActive() || stopped.current) return false;
     await hydration.current;
     if (!isActive() || stopped.current) return false;
+    if (readFailed.current) throw new Error("草稿读取失败，未覆盖原草稿；请先重试读取。");
     const value = current.current;
     const pending = queue.current.then(async () => {
       if (!isActive() || stopped.current) return false;
@@ -178,7 +187,8 @@ export function useFormDraft<T extends object>(
     hydration.current = loadDraft<unknown>(key)
       .then((draft) => {
         if (!live || !isActive()) return;
-        if (draft !== null && !compatibleDraft(initial, draft))
+        if (draft !== null && restore.current) draft = restore.current(draft);
+        else if (draft !== null && !compatibleDraft(initial, draft))
           throw new Error("草稿字段不兼容，当前表单保留原始记录内容");
         if (draft) {
           const next = { ...current.current };
@@ -187,10 +197,13 @@ export function useFormDraft<T extends object>(
           current.current = next;
           setFormState(next);
         }
+        readFailed.current = false;
+        setDraftError("");
         setLoaded(true);
       })
       .catch((error) => {
         if (live && isActive()) {
+          readFailed.current = true;
           setDraftError(
             `读取草稿失败：${error instanceof Error ? error.message : "请重试"}`,
           );
@@ -203,10 +216,10 @@ export function useFormDraft<T extends object>(
       stopped.current = true;
       if (timer.current) clearTimeout(timer.current);
     };
-  }, [isActive, key]);
+  }, [isActive, key, loadAttempt]);
 
   useEffect(() => {
-    if (!loaded || !isActive() || stopped.current) return;
+    if (!loaded || !isActive() || stopped.current || readFailed.current) return;
     setSaved(false);
     timer.current = setTimeout(() => {
       void persist().catch(() => undefined);
@@ -218,6 +231,7 @@ export function useFormDraft<T extends object>(
 
   const finish = useCallback(async () => {
     if (!isActive()) return false;
+    if (readFailed.current) throw new Error("草稿读取失败，未清除原草稿。");
     stopped.current = true;
     if (timer.current) clearTimeout(timer.current);
     await queue.current;
@@ -240,6 +254,8 @@ export function useFormDraft<T extends object>(
     loaded,
     draftError,
     saved,
+    readFailed: readFailed.current,
+    retryLoad: () => { setLoaded(false); setLoadAttempt((value) => value + 1); },
     persist,
     finish,
     saveBeforeClose,

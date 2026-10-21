@@ -3,7 +3,7 @@ import type { AiSettings } from './ai-provider';
 
 export type AiSettingsStorage = { read(): Promise<string | null>; write(value: string): Promise<void>; remove(): Promise<void> };
 
-export function createAiSettingsStore(storage: AiSettingsStorage | null) {
+export function createAiSettingsStore(storage: AiSettingsStorage) {
   let current: AiSettings | null = null;
   let loaded = false;
   let version = 0;
@@ -24,10 +24,10 @@ export function createAiSettingsStore(storage: AiSettingsStorage | null) {
     load: () => ordered(async () => {
       if (loaded) return snapshot();
       let raw: string | null;
-      try { raw = storage ? await storage.read() : null; }
-      catch { throw new Error('无法读取安全存储中的 AI 设置。'); }
+      try { raw = await storage.read(); }
+      catch { throw new Error('无法读取本机保存的 AI 设置，请重试。'); }
       let next: AiSettings | null;
-      try { next = raw ? validateAiSettings(JSON.parse(raw)) : null; }
+      try { next = raw === null ? null : validateAiSettings(JSON.parse(raw)); }
       catch { throw new Error('已保存的 AI 设置无效，请重新配置或清除。'); }
       current = next; loaded = true; invalidate();
       return snapshot();
@@ -36,16 +36,16 @@ export function createAiSettingsStore(storage: AiSettingsStorage | null) {
       const valid = validateAiSettings(settings);
       invalidate();
       return ordered(async () => {
-        try { await storage?.write(JSON.stringify(valid)); }
-        catch { throw new Error('无法将 AI 设置保存到安全存储。'); }
+        try { await storage.write(JSON.stringify(valid)); }
+        catch { throw new Error('无法将 AI 设置保存到本机，原配置已保留，请重试。'); }
         current = valid; loaded = true; invalidate();
       });
     },
     clear: () => {
       invalidate();
       return ordered(async () => {
-        try { await storage?.remove(); }
-        catch { throw new Error('无法从安全存储中清除 AI 设置。'); }
+        try { await storage.remove(); }
+        catch { throw new Error('无法清除本机的 AI 设置，原配置已保留，请重试。'); }
         current = null; loaded = true; invalidate();
       });
     },

@@ -1,6 +1,6 @@
 # 健康罗盘
 
-饮食、训练、睡眠的本地健康记录 App。基于 Expo React Native，Android / iOS 共用 TypeScript 代码，Web 用于开发预览。
+饮食、训练、睡眠的本地健康记录 App，使用 Expo、React Native 和 TypeScript。Android / iOS 共用客户端，Web 用于开发预览；当前界面采用方案 A。
 
 ## 本地启动
 
@@ -8,53 +8,49 @@
 
 ```powershell
 npm install
-npm run web
+npm run dev
 ```
 
-Android 测试包：
+固定打开 **http://localhost:8081/**。该地址也是本机健康记录和 AI 配置的存储来源；继续使用同一浏览器和地址，避免切换主机名或端口后进入另一份本地数据。启动命令已处理 Windows 的 IPv4 监听问题。
 
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\android-build.ps1
-```
+## 使用
 
-最新 APK：[health-compass-arm64-v8a-release-20261016-045028.apk](artifacts/health-compass-arm64-v8a-release-20261016-045028.apk)，arm64、API 24+、测试签名，SHA-256：`ceeeb9dc259352f906ceb42f283aee46dfe6180c0b0250a49c2aab1c97c6b3a5`。包签名和包内配置扫描通过；尚未连接真机安装。构建、签名和包扫描记录见 [Android 测试说明](docs/android-testing.md)。
+- 在“我的 → AI 服务设置”填写自己的 HTTPS URL 和 Key，选择 Responses 或 Chat Completions 协议，获取模型并选择模型及推理强度；支持服务默认、上游选项和自定义强度。App 直接连接所选服务，开发网关只用于诊断。默认预填 `https://api.bblabu.ai/v1`，没有内置 Key、模型或选定强度。
+- 原生配置使用 SecureStore，Web 使用独立 IndexedDB，写入提交后才提示保存成功；同一浏览器、同一来源重开后恢复。健康 ZIP 不包含 AI 连接配置或 Key。旧版仅存于内存且已丢失的配置需重新填写一次。
+- 饮食可手动记录，也可追加或一次多选餐前照片，同餐最多 4 张；旧餐后照片继续兼容。识别后在独立页面核对菜品、每 100 g 营养与食用量，确认后同步餐名和四项营养。本地默认量可修改或清空，属于一般成人参考估计，不能视为照片称重；旧餐保存量不随新资料重算。
+- “我的 → 外观”支持跟随系统、浅色和暗色，选择在本机保存。原始媒体、健康记录、分析版本与 Markdown 总结可导出恢复；外观偏好独立于健康备份。
 
-常用检查：
+未配置 AI 时仍可记录、查看本地反馈和导出。外部 AI 的费用、额度和数据保留政策由所选供应商决定。
+
+## 检查
 
 ```powershell
 npm run typecheck
 npm test
 npm run test:server
+npm run test:scripts
 ```
 
-Web 流程测试先启动 `npm run web`，再运行 `npm run test:ui`；可用 `TEST_BASE_URL` 指定预览地址。
+`test:scripts` 补充诊断、实验与评估工具的专项检查，每项上限 30 秒。最新检查为 132/132 通过；历史试验仍冻结各自的 90 秒请求参数，与当前 App 默认 120 秒相互独立。修复与验证记录见 [脚本说明](scripts/README.md) 和 [维护审查](docs/maintenance-review.md)。
 
-50 餐真实评估尚待人工采集真值；评估器及空模板用法见 [真值集工作说明](data/validation/README.md)。
-
-## AI 服务设置
-
-手机测试包默认预填 `https://api.bblabu.ai/v1` 作为 API 地址，但不内置任何 API Key、模型或推理强度。用户在“我的 → AI 服务设置”中填写自己的 Key，选择 Responses 或 Chat Completions 协议，向上游请求模型列表和模型能力，再自行选择模型及上游实际提供的推理强度。上游未提供强度元数据时使用服务默认值，不猜测或探测能力。
-
-原生 Key 使用 SecureStore 保存，不进入健康 ZIP；浏览器预览只在当前页面会话保存配置。删除 AI 配置不影响健康记录，清除本机数据会一并清除 AI 配置。外部服务可能收费，数据保留策略依供应商而定；App 与各服务的兼容性仍需逐项验证。
-
-当前测试：
+Web 流程先启动固定预览，在另一终端运行 `npm run test:ui`。模拟 AI 流程使用：
 
 ```powershell
+$env:TEST_BASE_URL = 'http://localhost:8081'
 $env:TEST_AI_MOCK = '1'
-$env:TEST_BASE_URL = 'http://localhost:8084'
 npm run test:ui
 ```
 
-## 产品与数据边界
+未设置 `TEST_AI_MOCK=1` 时运行本地记录与布局用例；设置为 `1` 时运行模拟供应商用例。既有验证结果、分轮失败与补跑证据见 [文档与验证索引](docs/README.md)，不代表本次重新执行全量 Web 或真实 AI 检查。
 
-- 饮食拍照是入口，同时提供训练、睡眠、趋势和每日 Markdown 总结。
-- 原始照片、视频、记录、分析版本和 Markdown 均可导出与恢复；AI 结果不能覆盖原始数据。
-- USDA 离线营养子集位于 `data/nutrition/usda-sr-legacy.json`，原始归档位于 `artifacts/usda/`，用于可复现导入和本地校正。
-- 历史本机 Codex 网关和真实诊断报告仅用于开发排查，不是手机 App 的默认服务，也不包含在当前用户配置流程中。历史 PNG 400 原因已记录在 [开发记录](docs/development.md)。
-- 2026-10-15 曾有一次真实餐前照片请求完整返回；2026-10-16 使用本机配置的 `gpt-6.1-sol/max` 对同一附图再次验证时，HTTP 200 后 180 秒未收到完整响应，按超时失败记录，未自动重试。本次回归不能用于准确率统计；50 餐人工真值评估仍为 pending。仍需真机验证、同条件稳定性测试及隐私保留策略核实。
+## Android 测试包
 
-产品规格见 [docs/product-spec-v0.1.md](docs/product-spec-v0.1.md)，当前用户 AI 设置约定见 [docs/user-ai-settings.md](docs/user-ai-settings.md)，开发验证见 [docs/development.md](docs/development.md)。
+最新已构建 APK：[health-compass-arm64-v8a-x86_64-release-20261019-171837.apk](artifacts/health-compass-arm64-v8a-x86_64-release-20261019-171837.apk)，版本 **0.1.1 / code 2**，支持 API 24+、arm64-v8a / x86_64。构建、签名、安装方法和模拟器验证范围见 [Android 测试说明](docs/android-testing.md)。
 
-App 前端当前为 v0.6「深夜仪表·精炼版」（夜间版）：在 v0.4 基础上深化基底色（更深的黑），保持原始模块色和 24 小时表盘核心设计。页面与表单在 `src/ui/`，设计 token 在 `src/ui/theme.ts`，截图在 `artifacts/ui-v0.6/`。设计演进：v0.3（浅色时间线）→ v0.4（深色表盘）→ v0.5（日间地图）→ v0.6（精炼表盘，作为夜间版长期使用）。历史版本备份在 `artifacts/backup/`。设计说明见 [v0.6 视觉方向](docs/redesign-vision-v0.6.md)。
+该包包含 10 月 19 日的源码快照与方案 A 初次集成，**不包含 10 月 20～21 日的独立识别页、最新表单、暗色、多图、Web 配置持久化和默认食用量等工作树更新**。Android 实体手机和 iOS 尚未验收。
 
-本地数据和导出备份可能包含敏感健康信息。不要把真实数据、Key 或备份提交到 Git。
+## 文档入口
+
+[文档与验证索引](docs/README.md) 汇总现行规格、技术说明、设计参考和历史证据。主要约定见 [产品规格](docs/product-spec-v0.1.md)、[营养实现规格](docs/nutrition-implementation.md)、[AI 服务设置](docs/user-ai-settings.md)；实现结构见 [技术路线图](docs/technical-roadmap.md) 与 [P2 技术报告](docs/p2-meal-analysis-technical-report.md)。
+
+50 餐人工营养真值仍待采集，不能用协议成功或模拟数据证明营养准确率。本地健康数据、真实 Key 和导出备份不应提交到 Git。

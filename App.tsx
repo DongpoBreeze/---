@@ -17,14 +17,16 @@ import {
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import type {
-  AppData,
-  DailySummary,
-  MealAnalysis,
-  MealRecord,
-  Profile,
-  SleepRecord,
-  TrainingRecord,
+import {
+  emptyData,
+  type AppData,
+  type DailySummary,
+  type ExerciseTemplate,
+  type MealAnalysis,
+  type MealRecord,
+  type Profile,
+  type SleepRecord,
+  type TrainingRecord,
 } from "./src/types";
 import {
   clearData,
@@ -35,18 +37,21 @@ import {
   loadData,
   saveData,
 } from "./src/storage";
-import { refreshSummaries, removeRecord, uid } from "./src/domain";
+import { recordLocalDate, refreshSummaries, removeRecord, uid } from "./src/domain";
 import {
   analyzeMeal, analyzeSummary, clearAiSettings, getAiSettingsVersion, isAiConfigured,
   loadAiSettings, saveAiSettings,
 } from "./src/ai";
-import { AI_REQUEST_TIMEOUT_MS, MAX_MEAL_ANALYSIS_STAGES, type AiSettings } from "./src/ai-provider";
+import { AI_REQUEST_TIMEOUT_MS, type AiSettings } from "./src/ai-provider";
+import { getAiSettings, onAiSettingsChanged } from "./src/ai-settings";
 import { appendNutritionCorrection } from "./src/nutrition-correction";
 import type { FormSession } from "./src/ui/useFormDraft";
 import type { Kind, MealDraft, ModalKind, PhotoAnalysisResult, SleepDraft, Tab, TrainingDraft } from "./src/ui/app-types";
 import { confirmAction, errorText, notify, today } from "./src/ui/format";
-import { color, space, type } from "./src/ui/theme";
+import { space, type ThemeTokens } from "./src/ui/theme";
+import { ThemeProvider, useTheme, useThemedStyles } from "./src/ui/theme-provider";
 import { Banner, SmallButton } from "./src/ui/components";
+import { AnalysisWaitTime } from "./src/ui/analysis-wait-time";
 import { Today } from "./src/ui/today";
 import { Records } from "./src/ui/records";
 import { Trends } from "./src/ui/trends";
@@ -56,28 +61,22 @@ import { TrainingForm } from "./src/ui/training-form";
 import { SleepForm } from "./src/ui/sleep-form";
 import { AiSettingsForm, ProfileForm } from "./src/ui/settings-forms";
 
-const blankData = (): AppData => ({
-  version: 1,
-  profile: {},
-  meals: [],
-  trainings: [],
-  sleeps: [],
-  summaries: [],
-  sourceVersion: 0,
-});
-
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <AppShell />
-    </SafeAreaProvider>
+    <ThemeProvider>
+      <SafeAreaProvider>
+        <AppShell />
+      </SafeAreaProvider>
+    </ThemeProvider>
   );
 }
 
 function AppShell() {
+  const { type, scheme, error: appearanceError } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const [data, setData] = useState<AppData>(blankData);
+  const [data, setData] = useState<AppData>(emptyData);
   const dataRef = useRef(data);
   const queue = useRef<Promise<unknown>>(Promise.resolve());
   const [ready, setReady] = useState(false);
@@ -87,22 +86,30 @@ function AppShell() {
   const sessionRef = useRef<FormSession | null>(null);
   const sessionId = useRef(0);
   const [editId, setEditId] = useState<string>();
+  const [mealAnalysisOnOpen, setMealAnalysisOnOpen] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [storageWarning, setStorageWarning] = useState("");
   const [aiBusy, setAiBusy] = useState(false);
+  const [aiStartedAt, setAiStartedAt] = useState<number | null>(null);
   const [aiSettings, setAiSettings] = useState<AiSettings | null>(null);
   const [aiSettingsReady, setAiSettingsReady] = useState(false);
+  const [aiSettingsError, setAiSettingsError] = useState("");
+  const [aiSettingsErrorDismissed, setAiSettingsErrorDismissed] = useState(false);
+  const [aiSettingsLoadAttempt, setAiSettingsLoadAttempt] = useState(0);
   const aiController = useRef<AbortController | undefined>(undefined);
   const epoch = useRef(0);
   const lastDate = useRef(today());
   const [readFailure, setReadFailure] = useState(false);
+  const aiSettingsIssue = !aiSettingsReady
+    ? "正在读取本机 AI 配置，请稍后重试。"
+    : aiSettingsError ? "AI 配置读取失败，请在“我的 → AI 服务设置”中重试读取。" : "";
   const contentStyle = useMemo(
     () => [
       styles.content,
-      { maxWidth: Math.min(width, 760), paddingBottom: 104 + insets.bottom },
+      { maxWidth: Math.min(width, tab === "today" ? 430 : 760), paddingBottom: 104 + insets.bottom },
     ],
-    [width, insets.bottom],
+    [width, insets.bottom, tab, styles.content],
   );
   useEffect(() => {
     let live = true;
@@ -134,12 +141,23 @@ function AppShell() {
   }, []);
   useEffect(() => {
     let live = true;
+    setAiSettingsReady(false);
+    const unsubscribe = onAiSettingsChanged(() => {
+      if (live) setAiSettings(getAiSettings());
+    });
     loadAiSettings()
-      .then((settings) => { if (live) setAiSettings(settings); })
-      .catch((e) => { if (live) setError(`读取 AI 设置失败：${errorText(e)}`); })
+      .then((settings) => {
+        if (live) { setAiSettings(settings); setAiSettingsError(""); }
+      })
+      .catch((e) => {
+        if (live) {
+          setAiSettingsError(`读取 AI 设置失败：${errorText(e)} 原配置未清除。`);
+          setAiSettingsErrorDismissed(false);
+        }
+      })
       .finally(() => { if (live) setAiSettingsReady(true); });
-    return () => { live = false; };
-  }, []);
+    return () => { live = false; unsubscribe(); };
+  }, [aiSettingsLoadAttempt]);
   const commit = useCallback(
     async (change: (current: AppData) => AppData, bump = true) => {
       const task = queue.current.then(async () => {
@@ -198,7 +216,8 @@ function AppShell() {
       const meal = current.meals.find((item) => item.id === mealId);
       const corrected = appendNutritionCorrection(meal, revision, baseAnalysisId, {
         id: uid(), model: analysis.nutritionSource?.method === "ai-per100g-v3"
-          ? "local/ai-per100g-v3" : "local/usda-user-quantity-v2",
+          ? "local/ai-per100g-v3" : analysis.nutritionSource?.method === "reference-quantity-v1"
+            ? "local/reference-quantity-v1" : "local/usda-user-quantity-v2",
         createdAt: new Date().toISOString(), sourceVersion: revision, analysis,
       });
       return {
@@ -214,12 +233,13 @@ function AppShell() {
     if (warning) setStorageWarning(warning);
     setModal(null);
     setEditId(undefined);
+    setMealAnalysisOnOpen(false);
     setError("");
   };
   const close = (session: FormSession) => {
     if (sessionRef.current === session) dismissForm();
   };
-  const open = (kind: Exclude<ModalKind, null>, id?: string) => {
+  const open = (kind: Exclude<ModalKind, null>, id?: string, analyze = false) => {
     const session: FormSession = {
       id: ++sessionId.current,
       epoch: epoch.current,
@@ -230,6 +250,7 @@ function AppShell() {
     setFormSession(session);
     setError("");
     setEditId(id);
+    setMealAnalysisOnOpen(kind === "meal" && analyze);
     setModal(kind);
   };
   const requireSession = (session: FormSession) => {
@@ -243,8 +264,13 @@ function AppShell() {
     id?: string,
     photoAnalysis?: PhotoAnalysisResult,
   ) => {
-    await commit((current) => {
+    const next = await commit((current) => {
       requireSession(session);
+      const photoVersions = (sourceVersion: number) => {
+        if (!photoAnalysis) return [];
+        const { history, ...latest } = photoAnalysis;
+        return [...(history ?? []), latest].map((version) => ({ id: uid(), ...version, sourceVersion }));
+      };
       if (!id) {
         const item: MealRecord = {
           ...draft,
@@ -252,16 +278,13 @@ function AppShell() {
           type: "meal",
           createdAt: new Date().toISOString(),
           revision: 1,
-          analyses: photoAnalysis ? [{ id: uid(), ...photoAnalysis, sourceVersion: 1 }] : undefined,
+          analyses: photoAnalysis ? photoVersions(1) : undefined,
         };
         return { ...current, meals: [item, ...current.meals] };
       }
       const old = current.meals.find((item) => item.id === id);
       if (!old) throw new Error("这条饮食记录已不存在");
-      const snapshot = { ...old, revisions: undefined } as Omit<
-        MealRecord,
-        "revisions"
-      >;
+      const { revisions: previousRevisions, ...snapshot } = old;
       const item: MealRecord = {
         ...old,
         ...draft,
@@ -270,9 +293,9 @@ function AppShell() {
         createdAt: old.createdAt,
         revision: (old.revision ?? 1) + 1,
         updatedAt: new Date().toISOString(),
-        revisions: [...(old.revisions ?? []), snapshot],
+        revisions: [...(previousRevisions ?? []), snapshot],
         analyses: photoAnalysis
-          ? [...(old.analyses ?? []), { id: uid(), ...photoAnalysis, sourceVersion: (old.revision ?? 1) + 1 }]
+          ? [...(old.analyses ?? []), ...photoVersions((old.revision ?? 1) + 1)]
           : old.analyses,
       };
       return {
@@ -280,6 +303,14 @@ function AppShell() {
         meals: current.meals.map((value) => (value.id === id ? item : value)),
       };
     });
+    const saved = id ? next.meals.find((item) => item.id === id) : next.meals[0];
+    if (saved) {
+      const date = recordLocalDate(saved);
+      if (date !== today()) {
+        setTab("records");
+        setMessage(`已保存到记录页：${saved.foodName}（${date}）。首页汇总当前显示今天 ${today()} 的数据。`);
+      } else setMessage(`已保存：${saved.foodName}；今日饮食汇总已更新。`);
+    }
   };
   const saveTraining = async (
     draft: TrainingDraft,
@@ -314,6 +345,26 @@ function AppShell() {
         ),
       };
     });
+  };
+  const saveTrainingTemplate = async (
+    template: Omit<ExerciseTemplate, "id">,
+    session: FormSession,
+  ) => {
+    await commit((current) => {
+      requireSession(session);
+      const templates = current.exerciseTemplates ?? [];
+      const key = template.name.trim().toLocaleLowerCase();
+      const index = templates.findIndex((item) => item.name.trim().toLocaleLowerCase() === key);
+      const saved: ExerciseTemplate = {
+        ...template,
+        name: template.name.trim(),
+        id: index < 0 ? uid() : templates[index].id,
+      };
+      const exerciseTemplates = index < 0
+        ? [...templates, saved]
+        : templates.map((item, itemIndex) => itemIndex === index ? saved : item);
+      return { ...current, exerciseTemplates };
+    }, false);
   };
   const saveSleep = async (
     draft: SleepDraft,
@@ -372,16 +423,23 @@ function AppShell() {
       true,
     );
   const saveProfile = async (profile: Profile, session: FormSession) => {
+    setMessage("");
     await commit((current) => {
       requireSession(session);
       return { ...current, profile };
     });
+    if (sessionRef.current === session) setMessage("目标与身高体重已保存到本机。");
   };
   const saveProviderSettings = async (settings: AiSettings, session: FormSession) => {
     requireSession(session);
+    setMessage("");
     aiController.current?.abort();
     await saveAiSettings(settings);
-    if (sessionRef.current === session) setAiSettings(settings);
+    if (sessionRef.current === session) {
+      setAiSettings(getAiSettings());
+      setAiSettingsError("");
+      setMessage("AI 配置已保存到本机。");
+    }
   };
 
   const analyzePhotoForMeal = async (
@@ -390,8 +448,11 @@ function AppShell() {
   ): Promise<PhotoAnalysisResult> => {
     if (signal.aborted) throw new Error("分析已取消，照片已保留。");
     if (aiController.current) throw new Error("已有分析正在进行，请等待或取消当前请求。");
+    if (aiSettingsIssue) throw new Error(aiSettingsIssue);
     if (!isAiConfigured()) throw new Error("请先在“我的 → AI 服务设置”中连接 AI。");
     const controller = new AbortController();
+    const requestEpoch = epoch.current;
+    const settingsVersion = getAiSettingsVersion();
     const abort = () => controller.abort();
     signal.addEventListener("abort", abort, { once: true });
     aiController.current = controller;
@@ -403,22 +464,33 @@ function AppShell() {
         controller.signal,
         uid(),
       );
+      if (signal.aborted || controller.signal.aborted || requestEpoch !== epoch.current
+        || settingsVersion !== getAiSettingsVersion())
+        throw new Error("餐食或 AI 设置已变更，请重新发起识别。");
       return result;
     } finally {
       signal.removeEventListener("abort", abort);
-      if (aiController.current === controller) aiController.current = undefined;
-      setAiBusy(false);
+      if (aiController.current === controller) {
+        aiController.current = undefined;
+        setAiBusy(false);
+      }
     }
   };
   const deleteProviderSettings = async (session: FormSession) => {
     requireSession(session);
+    setMessage("");
     aiController.current?.abort();
     await clearAiSettings();
-    if (sessionRef.current === session) setAiSettings(null);
+    if (sessionRef.current === session) {
+      setAiSettings(null);
+      setAiSettingsError("");
+      setMessage("AI 配置已从本机删除。");
+    }
   };
 
   const runSummary = async () => {
     if (aiController.current) return;
+    if (aiSettingsIssue) { setMessage(aiSettingsIssue); return; }
     if (!isAiConfigured()) {
       setMessage("AI 尚未配置。你仍可使用本地摘要、记录、编辑、导出和恢复。");
       return;
@@ -431,10 +503,7 @@ function AppShell() {
     aiController.current = controller;
     setAiBusy(true);
     setMessage("正在请求分析；本地记录仍已保存。");
-    const slow = setTimeout(
-      () => setMessage("分析已等待 30 秒，你可以取消；记录不会受影响。"),
-      30000,
-    );
+    setAiStartedAt(Date.now());
     const timeout = setTimeout(() => controller.abort(), AI_REQUEST_TIMEOUT_MS + 5000);
     try {
       const result = await analyzeSummary(
@@ -472,10 +541,10 @@ function AppShell() {
     } catch (e) {
       if (requestEpoch === epoch.current) setMessage(errorText(e));
     } finally {
-      clearTimeout(slow);
       clearTimeout(timeout);
       aiController.current = undefined;
       setAiBusy(false);
+      setAiStartedAt(null);
     }
   };
   const askSummary = () => {
@@ -483,6 +552,7 @@ function AppShell() {
       aiController.current?.abort();
       return;
     }
+    if (aiSettingsIssue) { setMessage(aiSettingsIssue); return; }
     if (!isAiConfigured()) {
       setMessage("AI 尚未连接，已保存记录和本地摘要仍可使用。");
       return;
@@ -503,84 +573,24 @@ function AppShell() {
     }
     const meal = dataRef.current.meals.find((item) => item.id === id);
     if (!meal) return;
+    if (aiSettingsIssue) { setMessage(aiSettingsIssue); return; }
     if (!isAiConfigured()) {
       setMessage("AI 尚未配置。饮食记录已保留，可以继续手动补充营养。");
       return;
     }
+    const requestEpoch = epoch.current;
+    const settingsVersion = getAiSettingsVersion();
     confirmAction(
       "发送这餐进行分析？",
       `本次将餐前/餐后照片、食物名称、份量、备注和必要资料直接发送至 ${aiSettings ? new URL(aiSettings.baseUrl).hostname : "所选服务"}，由该服务按其政策处理和计费。`,
       "同意并分析",
       () => {
-        void performMeal(meal);
+        const current = dataRef.current.meals.find((item) => item.id === id);
+        if (requestEpoch !== epoch.current || settingsVersion !== getAiSettingsVersion()
+          || !current || (current.revision ?? 1) !== (meal.revision ?? 1)) return;
+        open("meal", id, true);
       },
     );
-  };
-  const performMeal = async (meal: MealRecord) => {
-    if (aiController.current) return;
-    const version = dataRef.current.sourceVersion;
-    const requestEpoch = epoch.current;
-    const settingsVersion = getAiSettingsVersion();
-    const controller = new AbortController();
-    aiController.current = controller;
-    setAiBusy(true);
-    setMessage("正在分析这餐；原始记录不会被覆盖。");
-    const slow = setTimeout(
-      () => setMessage("分析已等待 30 秒，你可以取消；记录不会受影响。"),
-      30000,
-    );
-    const timeout = setTimeout(() => controller.abort(), AI_REQUEST_TIMEOUT_MS * MAX_MEAL_ANALYSIS_STAGES + 5000);
-    try {
-      const result = await analyzeMeal(
-        meal,
-        dataRef.current.profile,
-        controller.signal,
-        uid(),
-      );
-      await commit((current) => {
-        if (
-          controller.signal.aborted ||
-          requestEpoch !== epoch.current ||
-          settingsVersion !== getAiSettingsVersion() ||
-          current.sourceVersion !== version ||
-          !current.meals.some(
-            (item) =>
-              item.id === meal.id &&
-              (item.revision ?? 1) === (meal.revision ?? 1),
-          )
-        )
-          throw new Error("记录在分析期间发生变化，请重新发起分析。");
-        return {
-          ...current,
-          meals: current.meals.map((item) =>
-            item.id === meal.id
-              ? {
-                  ...item,
-                  analyses: [
-                    ...(item.analyses ?? []),
-                    {
-                      id: uid(),
-                      model: result.model,
-                      createdAt: result.createdAt,
-                      stageCount: result.stageCount,
-                      sourceVersion: item.revision ?? 1,
-                      analysis: result.analysis,
-                    },
-                  ],
-                }
-              : item,
-          ),
-        };
-      });
-      setMessage("这餐的分析已保存为独立版本。");
-    } catch (e) {
-      if (requestEpoch === epoch.current) setMessage(errorText(e));
-    } finally {
-      clearTimeout(slow);
-      clearTimeout(timeout);
-      aiController.current = undefined;
-      setAiBusy(false);
-    }
   };
   const importData = async () => {
     try {
@@ -641,8 +651,9 @@ function AppShell() {
         const task = queue.current.then(async () => {
           await clearAiSettings();
           setAiSettings(null);
+          setAiSettingsError("");
           await clearData();
-          const next = blankData();
+          const next = emptyData();
           dataRef.current = next;
           setData(next);
           setMessage("");
@@ -685,13 +696,21 @@ function AppShell() {
     );
   return (
     <SafeAreaView style={styles.root} edges={["top"]}>
-      <StatusBar style="light" />
+      {Boolean(appearanceError) && tab !== "me" && (
+        <Banner text={appearanceError} danger action="外观设置"
+          onAction={() => setTab("me")} onClose={() => setTab("me")} />
+      )}
       {Boolean(error) && (
         <Banner text={error} danger onClose={() => setError("")} />
       )}
+      {Boolean(aiSettingsError) && !aiSettingsErrorDismissed && (
+        <Banner text={aiSettingsError} danger action="重试读取 AI 设置"
+          onAction={() => { if (aiSettingsReady) setAiSettingsLoadAttempt((attempt) => attempt + 1); }}
+          onClose={() => setAiSettingsErrorDismissed(true)} />
+      )}
       {Boolean(message) && (
         <Banner
-          text={message}
+          text={<>{message}{aiBusy && aiStartedAt !== null && <>{"\n"}<AnalysisWaitTime startedAt={aiStartedAt} /></>}</>}
           onClose={() => setMessage("")}
           action={aiBusy ? "取消" : "关闭"}
           onAction={
@@ -727,9 +746,15 @@ function AppShell() {
           data={data}
           contentStyle={contentStyle}
           onProfile={() => open("profile")}
-          onAiSettings={() => { if (aiSettingsReady) open("ai-settings"); }}
+          onAiSettings={() => {
+            if (!aiSettingsReady) return;
+            if (aiSettingsError) setAiSettingsLoadAttempt((attempt) => attempt + 1);
+            else open("ai-settings");
+          }}
+          onAiReconfigure={() => { if (aiSettingsReady) open("ai-settings"); }}
           aiSettings={aiSettings}
           aiSettingsReady={aiSettingsReady}
+          aiSettingsError={aiSettingsError}
           onImport={importData}
           onExport={exportData}
           onMarkdown={exportMarkdown}
@@ -754,9 +779,15 @@ function AppShell() {
         presentationStyle="pageSheet"
         onRequestClose={() => sessionRef.current?.requestClose?.()}
       >
+        {/* A modal owns a native window, so measure its insets separately from the page. */}
+        <SafeAreaProvider style={styles.root}>
+          <SafeAreaView style={styles.root}>
+        <StatusBar style={scheme === "dark" ? "light" : "dark"} />
         {modal === "meal" && formSession && (
           <MealForm
             key={formSession.id}
+            profile={data.profile}
+            aiSettingsIssue={aiSettingsIssue}
             session={formSession}
             initial={
               editId ? data.meals.find((item) => item.id === editId) : undefined
@@ -769,15 +800,7 @@ function AppShell() {
             onAnalyzePhoto={analyzePhotoForMeal}
             onSaveCorrection={(mealId, revision, baseId, analysis) =>
               saveNutritionCorrection(formSession, mealId, revision, baseId, analysis)}
-            onAnalyze={
-              editId
-                ? () => {
-                    if (!formSession.isActive()) return;
-                    close(formSession);
-                    void runMeal(editId);
-                  }
-                : undefined
-            }
+            analyzeOnOpen={mealAnalysisOnOpen}
           />
         )}
         {modal === "training" && formSession && (
@@ -791,8 +814,10 @@ function AppShell() {
             }
             draftKey={editId ? `training-${editId}` : "training-new"}
             history={data.trainings}
+            exerciseTemplates={data.exerciseTemplates ?? []}
             onClose={() => close(formSession)}
             onSave={(draft) => saveTraining(draft, formSession, editId)}
+            onSaveTemplate={(template) => saveTrainingTemplate(template, formSession)}
           />
         )}
         {modal === "sleep" && formSession && (
@@ -823,11 +848,14 @@ function AppShell() {
             key={formSession.id}
             session={formSession}
             initial={aiSettings}
+            loadError={aiSettingsError}
             onClose={() => close(formSession)}
             onSave={(settings) => saveProviderSettings(settings, formSession)}
             onDelete={() => deleteProviderSettings(formSession)}
           />
         )}
+          </SafeAreaView>
+        </SafeAreaProvider>
       </Modal>
     </SafeAreaView>
   );
@@ -843,6 +871,8 @@ function NavItem({
   active: boolean;
   onPress: () => void;
 }) {
+  const { color } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const item = (
     {
       today: ["sunny", "sunny-outline", "今天"],
@@ -865,7 +895,8 @@ function NavItem({
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles({ color, type, shadow }: ThemeTokens) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: color.paper },
   loading: {
     flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: color.paper, padding: space.xl,
@@ -875,7 +906,7 @@ const styles = StyleSheet.create({
     width: "100%",
     alignSelf: "center",
     paddingHorizontal: space.lg + 4,
-    paddingTop: space.lg,
+    paddingTop: space.lg + 4,
   },
   navWrap: {
     position: "absolute", left: 0, right: 0, bottom: 0, alignItems: "center", paddingHorizontal: space.lg,
@@ -883,6 +914,7 @@ const styles = StyleSheet.create({
   nav: {
     width: "100%", maxWidth: 440, flexDirection: "row", padding: 6, gap: 4,
     borderRadius: 999, backgroundColor: color.surface, borderWidth: 1, borderColor: color.lineStrong,
+    ...shadow.card,
   },
   navItem: {
     flex: 1, minHeight: 50, borderRadius: 999, alignItems: "center", justifyContent: "center", gap: 2,
@@ -890,4 +922,5 @@ const styles = StyleSheet.create({
   navItemOn: { backgroundColor: color.pine },
   navLabel: { color: color.inkSoft, fontSize: 11, fontWeight: "600" },
   navActive: { color: color.onInk, fontWeight: "800" },
-});
+  });
+}

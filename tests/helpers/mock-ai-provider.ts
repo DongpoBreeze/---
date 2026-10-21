@@ -42,6 +42,7 @@ type ProviderOptions = {
   models?: Record<string, unknown>[];
   details?: Record<string, Record<string, unknown>>;
   onModels?: (route: Route, request: ProviderRequest) => Promise<void>;
+  onModel?: (route: Route, request: ProviderRequest, id: string) => Promise<void>;
   onResponse?: (route: Route, request: ProviderRequest) => Promise<void>;
 };
 
@@ -59,11 +60,46 @@ export async function fulfillProviderJson(route: Route, value: unknown, status =
 }
 
 export async function fulfillProviderResponse(route: Route, value: unknown) {
+  // Keep older UI fixtures concise while exercising the current wire contract.
+  // Callers that need to test the contract explicitly can pass an already
+  // wrapped `{ kind, data }` value; all other fixture payloads are inferred as
+  // meal data unless they only contain a summary `text` field.
+  let wrapped = value && typeof value === 'object' &&
+    ('kind' in value) && ('data' in value)
+    ? value
+    : value && typeof value === 'object' && 'text' in value && !('components' in value)
+      ? { kind: 'summary', data: value }
+      : { kind: 'meal', data: value };
+  // The current photo UI uses the intentionally small frontend wire shape.
+  // Migrate legacy fixtures in one place so older behavioural tests continue
+  // to exercise the same production parser without asserting hidden fields.
+  if (wrapped.kind === 'meal' && wrapped.data && typeof wrapped.data === 'object'
+    && Array.isArray((wrapped.data as any).components)) {
+    const data: any = wrapped.data;
+    const components = data.components.map((component: any) => {
+      const estimate = component.nutritionEstimate;
+      const nutritionEstimate = estimate === null || estimate === undefined ? null : {
+        method: estimate.method ?? 'typical_recipe',
+        per100g: estimate.per100g,
+        recipeBasis: estimate.recipeBasis ?? '按典型配方估算每 100 g 营养。',
+        assumptions: (estimate.assumptions ?? []).slice(0, 2),
+        confidence: estimate.confidence ?? 0.5,
+      };
+      return {
+        label: component.label,
+        cookingMethod: component.cookingMethod ?? component.preparation ?? null,
+        confidence: component.confidence ?? 0.5,
+        nutritionEstimate,
+        uncertainty: component.uncertainty ?? (nutritionEstimate ? [] : ['营养信息未知。']),
+      };
+    });
+    wrapped = { kind: 'meal', data: { components, uncertainty: data.uncertainty ?? data.unresolved ?? [] } };
+  }
   await fulfillProviderJson(route, {
     id: 'mock-response', object: 'response', status: 'completed',
     output: [{
       id: 'mock-message', type: 'message', role: 'assistant', status: 'completed',
-      content: [{ type: 'output_text', text: JSON.stringify(value), annotations: [] }],
+      content: [{ type: 'output_text', text: JSON.stringify(wrapped), annotations: [] }],
     }],
   });
 }
@@ -86,8 +122,11 @@ export async function installMockAiProvider(page: Page, options: ProviderOptions
       url: request.url(), method: request.method(),
       authorization: request.headers().authorization, body,
     };
+    const chatContent = body?.messages?.find((item: any) => item.role === 'user')?.content;
     const inputText = body?.input?.flatMap((item: any) => item.content ?? [])
-      .find((item: any) => item.type === 'input_text')?.text;
+      .find((item: any) => item.type === 'input_text')?.text
+      ?? (typeof chatContent === 'string' ? chatContent
+        : Array.isArray(chatContent) ? chatContent.find((item: any) => item.type === 'text')?.text : undefined);
     if (typeof inputText === 'string' && inputText.startsWith('JSON record:\n'))
       captured.record = JSON.parse(inputText.slice('JSON record:\n'.length));
     requests.push(captured);
@@ -101,10 +140,11 @@ export async function installMockAiProvider(page: Page, options: ProviderOptions
     }
     if (pathname.includes('/models/')) {
       const id = decodeURIComponent(pathname.slice(pathname.indexOf('/models/') + '/models/'.length));
-      await fulfillProviderJson(route, options.details?.[id] ?? { id });
+      if (options.onModel) await options.onModel(route, captured, id);
+      else await fulfillProviderJson(route, options.details?.[id] ?? { id });
       return;
     }
-    if (pathname.endsWith('/responses') && options.onResponse) {
+    if ((pathname.endsWith('/responses') || pathname.endsWith('/chat/completions')) && options.onResponse) {
       await options.onResponse(route, captured);
       return;
     }

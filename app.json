@@ -2,9 +2,21 @@
   "expo": {
     "name": "Health Compass",
     "slug": "health-compass",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "orientation": "portrait",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "automatic",
+    "backgroundColor": "#F8F7F5",
+    "splash": {
+      "backgroundColor": "#F8F7F5"
+    },
+    "androidStatusBar": {
+      "barStyle": "dark-content",
+      "backgroundColor": "#F8F7F5"
+    },
+    "androidNavigationBar": {
+      "barStyle": "dark-content",
+      "backgroundColor": "#F8F7F5"
+    },
     "scheme": "healthcompass",
     "newArchEnabled": true,
     "ios": {
@@ -17,8 +29,9 @@
     },
     "android": {
       "package": "com.healthcompass.app",
+      "versionCode": 2,
       "adaptiveIcon": {
-        "backgroundColor": "#0D1412"
+        "backgroundColor": "#F8F7F5"
       },
       "permissions": [
         "CAMERA",
@@ -31,6 +44,7 @@
       "expo-document-picker",
       "expo-sharing",
       "expo-status-bar",
+      "expo-system-ui",
       "expo-video",
       "expo-secure-store"
     ]

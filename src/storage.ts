@@ -8,6 +8,7 @@ import { type AppData } from './types';
 import { BackupError, type BackupMediaInput, type HashBytes, createBackupArchive, parseBackupArchive, remapBackupMedia, collectMediaReferences, collectDraftMediaReferences, canonicalJson, mergeBackupData, mergeFormDrafts, remapDraftMedia, validateAppData, MAX_ARCHIVE_BYTES, MAX_ENTRY_BYTES } from './backup';
 import { LocalRepository, DATA_KEY, parseLocalSnapshot, type LocalSnapshot } from './local-store';
 import { webSnapshotStore, putWebMedia, webMediaKeys, removeWebMedia, clearWebMedia, clearWebDownloads, downloadWebFile } from './storage-web';
+import { normalizeMealPhotoDraft } from './meal-photos';
 
 const DRAFT_KEY_PREFIX = '@health-compass/draft-';
 const MEDIA_DIR = FileSystem.documentDirectory ? `${FileSystem.documentDirectory}health-compass-media/` : '';
@@ -20,7 +21,7 @@ const stagedReferences = new Set<string>();
 let deletionEpoch = 0;
 
 const hashBytes: HashBytes = async (bytes) => {
-  const digest = await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, Uint8Array.from(bytes).buffer);
+  const digest = await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, Uint8Array.from(bytes));
   return Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, '0')).join('');
 };
 
@@ -285,8 +286,6 @@ export async function cleanupMedia(data: AppData): Promise<void> {
   await repository.run(async () => cleanupMediaImpl(validateAppData(data), (await readSnapshot()).drafts));
 }
 
-export const garbageCollectMedia = cleanupMedia;
-
 export async function exportBackup(data: AppData): Promise<string> {
   const archive = await repository.run(async () => {
     const snapshot = await readSnapshot();
@@ -339,12 +338,7 @@ export async function importBackup(current?: AppData): Promise<AppData | null> {
     for (const ref of [...collectMediaReferences(currentData), ...collectDraftMediaReferences(snapshot.drafts)]) {
       aliases.set(ref.uri, `${ref.kind}:${await hashBytes(await bytesForUri(ref.uri))}`);
     }
-    const canonical = (value: unknown): unknown => {
-      if (Array.isArray(value)) return value.map(canonical);
-      if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, ['imageUri', 'afterImageUri', 'videoUri'].includes(key) && typeof child === 'string' ? aliases.get(child) ?? child : canonical(child)]));
-      return value;
-    };
-    const equivalent = (left: unknown, right: unknown) => canonicalJson(canonical(left)) === canonicalJson(canonical(right));
+    const equivalent = (left: unknown, right: unknown) => canonicalJson(left, aliases) === canonicalJson(right, aliases);
     mergeBackupData(currentData, parsed.data, equivalent);
     mergeFormDrafts(snapshot.drafts, parsed.drafts, equivalent);
     const replacements = new Map<string, string>();
@@ -409,7 +403,10 @@ export async function saveDraft(kind: string, value: unknown): Promise<void> {
 
 export async function loadDraft<T>(kind: string): Promise<T | null> {
   if (!/^[a-zA-Z0-9_-]{1,128}$/.test(kind)) throw new Error('草稿类型不合法');
-  return repository.run(async () => (await readSnapshot()).drafts[kind] as T ?? null);
+  return repository.run(async () => {
+    const draft = (await readSnapshot()).drafts[kind] ?? null;
+    return (kind === 'meal' || kind.startsWith('meal-') ? normalizeMealPhotoDraft(draft) : draft) as T | null;
+  });
 }
 
 export async function clearDraft(kind: string): Promise<void> {

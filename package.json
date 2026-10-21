@@ -4,6 +4,7 @@
   "private": true,
   "main": "index.ts",
   "scripts": {
+    "dev": "node --dns-result-order=ipv4first node_modules/expo/bin/cli start --web --localhost --port 8081 --max-workers 2",
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
@@ -11,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
     "test:server": "node --test server/*.test.mjs",
+    "test:scripts": "node --import tsx --test --test-timeout=30000 scripts/*.test.mjs",
     "test:ui": "playwright test",
     "server": "node server/index.mjs",
     "server:codex": "node server/start-local-codex.mjs",
@@ -29,6 +31,7 @@
     "expo-secure-store": "~57.0.4",
     "expo-sharing": "~57.0.22",
     "expo-status-bar": "~57.0.1",
+    "expo-system-ui": "~57.0.4",
     "expo-video": "~57.0.5",
     "jszip": "^3.10.1",
     "react": "19.2.3",

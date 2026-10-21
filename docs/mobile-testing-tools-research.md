@@ -2,13 +2,15 @@
 
 Research date: 2026-10-11. Scope: choose practical tools for a solo developer on Windows, with Android phone testing now and iOS later. This is a research recommendation, not a completed tool integration or native test acceptance.
 
+The tool and environment observations below are dated snapshots. The later 2026-10-19 APK includes both arm64-v8a and x86_64 and has limited emulator evidence; see [Android testing](android-testing.md). No later tool installation or current device connection is inferred from this research. Current specifications and verification records are indexed in [the documentation guide](README.md).
+
 ## Recommendation
 
 Start with **Maestro CLI/MCP + ADB + scrcpy on a dedicated Android test phone**. Keep the existing unit, server and Playwright tests. Add an Android emulator for repeatable device resets and OS/viewport coverage. Introduce Appium only when a concrete system interaction cannot be tested reliably with this setup.
 
 Local Maestro, ADB, scrcpy, Android Emulator and Appium do not require a testing-service subscription. With an existing phone and suitable PC, the initial software subscription cost is zero. Hardware, hosted services and real AI inference are separate costs. Maestro MCP is not currently configured in this Codex session.
 
-## Project evidence and current gaps
+## Project evidence and gaps at the research date
 
 - `package.json`: Expo 57, React Native 0.86.3, TypeScript, existing unit tests and Playwright.
 - [Development record](development.md): 60 client tests, 50 server tests and 8 integrated Web UI cases previously passed. These historical results were not rerun for this research.

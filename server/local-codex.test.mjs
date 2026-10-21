@@ -29,7 +29,7 @@ test('local setup pins the requested model, persists only a separate client toke
     assert.equal(first.config.modelReasoningEffort, 'high');
     assert.equal(first.config.modelApiUrl, 'http://127.0.0.1:48791/v1/responses');
     assert.equal(first.config.maxOutputTokens, 8192);
-    assert.equal(first.config.upstreamTimeoutMs, 180000);
+    assert.equal(first.config.upstreamTimeoutMs, 120000);
     assert.equal(first.pricingVerified, false);
     assert.equal(first.config.maxRequestCostCny, 10);
     assert.equal(second.config.accessToken, first.config.accessToken);

@@ -2,8 +2,8 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "web",
-      "url": "http://localhost:8085"
+      "name": "方案 A App",
+      "url": "http://localhost:8081"
     }
   ]
 }

@@ -73,7 +73,7 @@ export function summaryMarkdown(data: AppData, date = localDate()): string {
   const partial = meals.filter((meal) => {
     const version = meal.analyses?.at(-1);
     const analysis = version?.sourceVersion === (meal.revision ?? 1) ? version.analysis : undefined;
-    return ['user-quantity-v2', 'ai-per100g-v3'].includes(analysis?.nutritionSource?.method ?? '')
+    return ['user-quantity-v2', 'ai-per100g-v3', 'reference-quantity-v1'].includes(analysis?.nutritionSource?.method ?? '')
       && ((analysis?.coverage?.missingQuantityLabels?.length ?? 0) > 0 || (analysis?.coverage?.unknownNutritionLabels?.length ?? 0) > 0);
   });
   const min = known.reduce((sum, r) => sum + r.min, 0);
@@ -85,14 +85,14 @@ export function summaryMarkdown(data: AppData, date = localDate()): string {
     ...meals.map((r) => {
       const version = r.analyses?.at(-1);
       const analysis = version?.sourceVersion === (r.revision ?? 1) ? version.analysis : undefined;
-      const missing = ['user-quantity-v2', 'ai-per100g-v3'].includes(analysis?.nutritionSource?.method ?? '')
+      const missing = ['user-quantity-v2', 'ai-per100g-v3', 'reference-quantity-v1'].includes(analysis?.nutritionSource?.method ?? '')
         ? [...new Set([...(analysis?.coverage?.missingQuantityLabels ?? []), ...(analysis?.coverage?.unknownNutritionLabels ?? [])])] : [];
       return `- ${r.mealType}：${r.foodName} ${r.portion}；${missing.length ? `未计入：${missing.join('、')}` : '数量记录完整或无已识别菜品'}；剩余：${r.remaining || '未知'}${r.note ? `；备注：${r.note}` : ''}`;
     }),
     '', '## 训练',
     ...(training.length ? training.map((r) => `- ${r.exercise}：${r.mode === 'cardio' ? `${r.durationMinutes} 分钟` : r.sets.map((s) => `${s.isWarmup ? '热身' : '工作组'} ${s.weight} ${s.unit} × ${s.reps} 次`).join('，')}；疼痛：${feedback[r.pain]}；动作可控：${r.controlled === 'yes' ? '是' : r.controlled === 'no' ? '否' : '未填写'}；最少剩余次数：${r.rir === 'unknown' ? '未填写' : r.rir}${r.note ? `；备注：${r.note}` : ''}\n  训练参考：${trainingAdvice(r, data.trainings)}`) : ['未记录']),
     '', '## 睡眠',
-    ...(sleep.length ? sleep.map((r) => { const s = sleepStats(r); return `- 时间区间 ${(s.intervalMinutes / 60).toFixed(1)} 小时；估算睡眠 ${s.asleepMinutes === null ? '未知' : `${(s.asleepMinutes / 60).toFixed(1)} 小时`}；主观质量 ${r.quality}/5${r.note ? `；备注：${r.note}` : ''}`; }) : ['未记录']),
+    ...(sleep.length ? sleep.map((r) => { const s = sleepStats(r); return `- 时间区间 ${(s.intervalMinutes / 60).toFixed(1)} 小时；估算睡眠 ${s.asleepMinutes === null ? '未知' : `${(s.asleepMinutes / 60).toFixed(1)} 小时`}；主观质量 ${r.quality === undefined ? '未填写' : `${r.quality}/5`}${r.note ? `；备注：${r.note}` : ''}`; }) : ['未记录']),
     '', '## 今日关注',
     training.some((r) => r.pain === 'yes') ? '训练时有疼痛，暂停增加负荷，先评估不适原因。' : meals.length + training.length + sleep.length === 0 ? '今天暂无记录。' : meals.length && !known.length ? '补充餐食份量，帮助判断实际摄入。' : !sleep.length ? '补充睡眠记录，回顾休息是否充足。' : '根据身体感受安排饮食、活动与休息。',
     '', '来源：本地记录与规则整理。',

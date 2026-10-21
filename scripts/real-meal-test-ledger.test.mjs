@@ -13,6 +13,43 @@ const accepted = (ledger, attemptId) => assert.equal(ledger.finish(attemptId, {
   outcome: 'accepted', usage: { input_tokens: 11, output_tokens: 7, total_tokens: 18, secret: 'drop-me' },
 }), true);
 
+test('explicit uncapped experiments retain read-only history beyond 75 with distinct 2/1 stage policies', async () => {
+  await withTwoLedgers(async (path, peerPath) => {
+    const firstHistory = seedFirstPasses(path, 12, 'history-a');
+    const secondHistory = seedFirstPasses(peerPath, 51, 'history-b');
+    const activePath = join(path, '..', 'experiment.sqlite');
+    const options = { relatedLedgerPaths: [path, peerPath], limits: { totalRequests: null, perMealRequests: 2, reviewMeals: 10, cohortMeals: 10 },
+      runLimits: { direct: { perMealRequests: 1, reviewMeals: 0 }, project: { perMealRequests: 2 } } };
+    const ledger = new RealMealTestLedger(activePath, options);
+    try {
+      assert.equal(ledger.coordinator, ledger.db);
+      for (let index = 0; index < 10; index += 1) {
+        for (const validationRunId of ['project', 'direct']) {
+          const whole = ledger.reserve({ ...base(`meal-${index}`, 'whole'), validationRunId });
+          accepted(ledger, whole.attemptId);
+          if (validationRunId === 'project') {
+            const review = ledger.reserve({ ...base(`meal-${index}`, 'crop_review'), validationRunId });
+            accepted(ledger, review.attemptId);
+          }
+        }
+      }
+      assert.equal(ledger.totals().totalRequests, 93);
+      assert.equal(ledger.totals().relatedRequests, 63);
+      assert.equal(ledger.totals().localRequests, 30);
+      assert.equal(ledger.totals().remainingRequests, null);
+      assert.equal(ledger.totals().budgetScope, 'related-ledgers-read-only');
+      assert.throws(() => ledger.reserve({ ...base('meal-0', 'crop_review'), validationRunId: 'direct' }), /1-request/);
+      assert.throws(() => ledger.reserve({ ...base('meal-0', 'final_merge'), validationRunId: 'project' }), /2-request/);
+      assert.throws(() => ledger.reserve({ ...base('eleventh', 'whole'), validationRunId: 'project' }), /10 first-pass/);
+    } finally { ledger.close(); }
+    const a = new RealMealTestLedger(path); const b = new RealMealTestLedger(peerPath);
+    try { assert.deepEqual(a.attempts(), firstHistory); assert.deepEqual(b.attempts(), secondHistory); }
+    finally { a.close(); b.close(); }
+    assert.throws(() => new RealMealTestLedger(activePath), /limits do not match/);
+    new RealMealTestLedger(activePath, options).close();
+  });
+});
+
 async function withLedger(run) {
   const directory = await mkdtemp(join(tmpdir(), 'real-meal-ledger-'));
   const path = join(directory, 'ledger.sqlite');

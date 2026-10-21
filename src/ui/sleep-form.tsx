@@ -2,11 +2,15 @@ import React, { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import type { SleepRecord } from "../types";
 import { sleepStats } from "../domain";
+import { buildSleepTimeline, sleepLocalTimeLabel } from "../sleep-time";
 import { type FormSession, useFormDraft, useFormSession } from "./useFormDraft";
 import { Banner, Choice, DraftStatus, Field, Sheet } from "./components";
 import { errorText, localDateTime, notify, parseDateTime } from "./format";
-import { color, radius, space, type } from "./theme";
+import { radius, space, type ThemeTokens } from "./theme";
+import { useThemedStyles } from "./theme-provider";
 import type { DraftKey, SleepDraft } from "./app-types";
+import { DateTimeField } from "./date-time-field";
+import { SleepTimeline } from "./sleep-timeline";
 
 type SleepState = {
   fell: string;
@@ -38,9 +42,11 @@ export function SleepForm({
   onClose: () => void;
   onSave: (draft: SleepDraft) => Promise<void>;
 }) {
+  const st = useThemedStyles(createStyles);
   const draft = useFormDraft(draftKey, sleepState(initial), session);
   const { form, setForm } = draft;
   const [error, setError] = useState("");
+  const [timelineReference] = useState(() => new Date());
   const lifecycle = useFormSession(session, {
     onClose,
     beforeClose: draft.persist,
@@ -61,9 +67,9 @@ export function SleepForm({
       const awake = form.awake.trim() ? Number(form.awake) : null;
       if (awake !== null && (!Number.isFinite(awake) || awake < 0))
         throw new Error("清醒时长必须是大于等于 0 的分钟数。");
-      const quality = Number(form.quality);
-      if (![1, 2, 3, 4, 5].includes(quality))
-        throw new Error("请选择主观睡眠质量。");
+      const quality = form.quality.trim() ? Number(form.quality) : undefined;
+      if (quality !== undefined && ![1, 2, 3, 4, 5].includes(quality))
+        throw new Error("主观睡眠质量需要选择 1 到 5 分。");
       sleepStats({ fellAsleepAt: fell, wokeAt: woke, awakeMinutes: awake });
       await draft.persist();
       if (!lifecycle.isActive()) return;
@@ -90,24 +96,9 @@ export function SleepForm({
       lifecycle.endOperation();
     }
   };
-  let duration = "待填写";
-  let span: { start: number; end: number } | null = null;
-  try {
-    const fellAt = Date.parse(parseDateTime(form.fell));
-    const wokeAt = Date.parse(parseDateTime(form.woke));
-    const value = (wokeAt - fellAt) / 3600000;
-    if (value > 0 && value <= 24) {
-      duration = `${value.toFixed(1)} 小时`;
-      // Position on an 18:00 → 12:00 night axis (18 hours wide).
-      const anchor = new Date(wokeAt);
-      anchor.setHours(12, 0, 0, 0);
-      const axisStart = anchor.getTime() - 18 * 3600000;
-      const clamp = (n: number) => Math.min(1, Math.max(0, n));
-      span = { start: clamp((fellAt - axisStart) / (18 * 3600000)), end: clamp((wokeAt - axisStart) / (18 * 3600000)) };
-    }
-  } catch {
-    /* save validates */
-  }
+  const timeline = buildSleepTimeline(form.fell, form.woke, timelineReference);
+  const duration = timeline.durationMinutes === null ? "待填写" : `${(timeline.durationMinutes / 60).toFixed(1)} 小时`;
+  const disabled = !draft.loaded || lifecycle.saving || lifecycle.closing;
   return (
     <Sheet
       title={initial ? "编辑睡眠" : "记录睡眠"}
@@ -127,28 +118,29 @@ export function SleepForm({
         )}
         <View style={st.night}>
           <Text style={st.nightLabel}>记录的睡眠时间区间</Text>
-          <Text style={st.nightValue}>{duration}</Text>
-          <View style={st.axis} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-            {span && (
-              <View style={[st.span, { left: `${span.start * 100}%`, width: `${Math.max(2, (span.end - span.start) * 100)}%` }]} />
-            )}
-          </View>
-          <View style={st.ticks}>
-            {["18:00", "00:00", "06:00", "12:00"].map((t) => <Text key={t} style={st.tick}>{t}</Text>)}
-          </View>
-          <Text style={st.nightNote}>时间区间来自你的输入；未填写清醒时长时，估算睡眠会保持未知，不会当作 0。</Text>
+          <Text testID="sleep-duration" style={st.nightValue}>{duration}</Text>
+          <SleepTimeline model={timeline} disabled={disabled} onChange={update} />
+          <Text style={st.nightNote}>{timeline.hasFell && timeline.hasWoke && timeline.durationMinutes === null
+            ? "当前时间区间无效，请在下方修改入睡或起床日期与时间。"
+            : "拖动两端滑块选择入睡和起床时间，每次 5 分钟；也可点击下方“选择”。清醒时长留空时，估算睡眠保持未知。"}</Text>
         </View>
-        <Field
+        <DateTimeField
           label="入睡（YYYY-MM-DD HH:mm）"
+          pickerLabel="选择入睡时间"
           value={form.fell}
           onChangeText={(value) => update({ fell: value })}
           placeholder="2026-10-09 23:30"
+          suggestedValue={sleepLocalTimeLabel(timeline.fellAt)}
+          disabled={disabled}
         />
-        <Field
+        <DateTimeField
           label="起床（YYYY-MM-DD HH:mm）"
+          pickerLabel="选择起床时间"
           value={form.woke}
           onChangeText={(value) => update({ woke: value })}
           placeholder="2026-10-10 07:00"
+          suggestedValue={sleepLocalTimeLabel(timeline.wokeAt)}
+          disabled={disabled}
         />
         <Field
           label="清醒时长（分钟，可明确填 0）"
@@ -158,7 +150,7 @@ export function SleepForm({
           keyboardType="numeric"
         />
         <Choice
-          label="主观质量"
+          label="主观质量（可选）"
           tone="sleep"
           value={form.quality}
           choices={[
@@ -182,15 +174,11 @@ export function SleepForm({
   );
 }
 
-const st = StyleSheet.create({
+const createStyles = ({ color, type }: ThemeTokens) => StyleSheet.create({
   night: {
-    backgroundColor: color.sleepTint, borderRadius: radius.block, padding: space.lg, marginBottom: space.xl, borderWidth: 1, borderColor: "#333C80",
+    backgroundColor: color.sleepTint, borderRadius: radius.block, padding: space.lg, marginBottom: space.xl, borderWidth: 1, borderColor: color.sleepBorder,
   },
   nightLabel: { color: color.sleepText, fontSize: 13 },
   nightValue: { color: color.ink, fontSize: 32, lineHeight: 38, fontWeight: "800", marginTop: 2, ...type.numeric },
-  axis: { height: 10, borderRadius: 5, backgroundColor: color.paper, marginTop: space.lg, overflow: "hidden" },
-  span: { position: "absolute", top: 0, bottom: 0, borderRadius: 5, backgroundColor: color.sleep },
-  ticks: { flexDirection: "row", justifyContent: "space-between", marginTop: 6 },
-  tick: { color: color.inkFaint, fontSize: 11, ...type.numeric },
   nightNote: { color: color.inkSoft, fontSize: 12, lineHeight: 18, marginTop: space.md },
 });

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { createAppServer } from './index.mjs';
 import { normalizeConfig, parseConfig } from './config.mjs';
+import { callModel, GatewayError } from './protocol.mjs';
 
 const recognition = { foodName: '米饭与未知配料', components: [
   { foodId: 'rice_white_long_grain_cooked', label: '熟米饭', uncertainty: ['份量未知'], confidence: 0.8,
@@ -16,6 +17,16 @@ const completed = (content = recognition) => ({ status: 'completed', output: [
   { type: 'message', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: JSON.stringify(content) }] },
 ] });
 const event = (value) => `event: ${value.type}\r\ndata: ${JSON.stringify(value)}\r\n\r\n`;
+const transportConfig = (changes = {}) => normalizeConfig({ modelApiUrl: 'https://mock.example/v1/responses',
+  modelApiProtocol: 'responses', modelStream: true, modelApiKey: 'mock-key', modelName: 'test-model', upstreamTimeoutMs: 2_000, ...changes });
+async function settlesSoon(pending) {
+  let timer;
+  try {
+    return await Promise.race([pending, new Promise((_resolve, reject) => {
+      timer = setTimeout(() => reject(new Error('gateway waited for body EOF or cancellation cleanup')), 1_000);
+    })]);
+  } finally { clearTimeout(timer); }
+}
 
 async function listen(server) {
   await new Promise((resolve, reject) => {
@@ -181,4 +192,139 @@ test('upstream 524 is safely distinguished from image format rejection', async (
     assert.deepEqual(diagnostics, [{ status: 524, category: 'upstream_gateway_timeout', fieldHints: [] }]);
     assert.equal(JSON.stringify(result).includes('PRIVATE_TEST_TEXT_73'), false);
   });
+});
+
+for (const cloned of [false, true]) {
+  test(`valid completion returns with open SSE and never-settling cleanup${cloned ? ' through a cloned response' : ''}`, async (t) => {
+    const raw = event({ type: 'response.completed', response: completed() });
+    const upstream = new Response(new ReadableStream({
+      start(controller) { controller.enqueue(new TextEncoder().encode(raw)); },
+      cancel: () => new Promise(() => {}),
+    }), { headers: { 'Content-Type': 'text/event-stream' } });
+    const sibling = cloned ? upstream.clone() : undefined;
+    t.after(() => { if (sibling) void sibling.body.cancel().catch(() => {}); });
+    let requestSignal;
+    const attempts = [];
+    const rawResponses = [];
+    t.mock.method(globalThis, 'fetch', async (_url, init) => { requestSignal = init.signal; return upstream; });
+    const result = await settlesSoon(callModel({ kind: 'meal', payload: {} }, {
+      ...transportConfig(), onUpstreamAttemptResult: (value) => attempts.push(value),
+      onRawUpstreamResponse: ({ body }) => rawResponses.push(body),
+    }, new AbortController().signal));
+    assert.equal(result.analysis.components[0].label, recognition.components[0].label);
+    assert.equal(requestSignal.aborted, false);
+    assert.equal(upstream.body.locked, false);
+    assert.equal(attempts.length, 1);
+    assert.equal(attempts[0].providerCompleted, true);
+    assert.equal(attempts[0].resultAccepted, true);
+    assert.equal(attempts[0].outcome, 'accepted');
+    assert.deepEqual(rawResponses, [Buffer.from(raw)]);
+  });
+}
+
+test('HTTP failures do not await body cancellation and still preserve diagnostic and raw callbacks', async (t) => {
+  let upstream;
+  t.mock.method(globalThis, 'fetch', async () => upstream);
+  for (const collectDiagnostic of [false, true]) {
+    const raw = JSON.stringify({ error: { message: 'PRIVATE_TEST_TEXT_73' } });
+    upstream = new Response(new ReadableStream({
+      start(controller) { if (collectDiagnostic) controller.enqueue(new TextEncoder().encode(raw)); },
+      cancel: () => new Promise(() => {}),
+    }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+    const attempts = [];
+    const diagnostics = [];
+    const rawResponses = [];
+    await assert.rejects(settlesSoon(callModel({ kind: 'meal', payload: {} }, {
+      ...transportConfig(), onUpstreamAttemptResult: (value) => attempts.push(value),
+      ...(collectDiagnostic ? { onRawUpstreamResponse: ({ body }) => rawResponses.push(body) } : {}),
+    }, new AbortController().signal, collectDiagnostic ? (value) => diagnostics.push(value) : undefined)),
+    (error) => error instanceof GatewayError && error.code === 'upstream_unavailable' && error.status === 502);
+    assert.equal(attempts[0].httpStatus, 401);
+    assert.equal(attempts[0].outcome, 'http_error');
+    assert.equal(attempts[0].providerCompleted, false);
+    assert.equal(attempts[0].resultAccepted, false);
+    if (collectDiagnostic) {
+      assert.deepEqual(diagnostics, [{ status: 401, category: 'authentication_rejected', fieldHints: [] }]);
+      assert.deepEqual(rawResponses, [Buffer.from(raw)]);
+    }
+  }
+});
+
+test('open HTTP error bodies retain their HTTP classification when diagnostic reading hits the stage deadline', async () => {
+  await fixture(async ({ api, diagnostics, setHandler }) => {
+    setHandler((response) => { response.writeHead(401, { 'Content-Type': 'application/json' }); response.flushHeaders(); });
+    const result = await api('http-error-open-body');
+    assert.equal(result.status, 502);
+    assert.equal(result.body.error.code, 'upstream_unavailable');
+    assert.deepEqual(diagnostics, [{ status: 401, category: 'authentication_rejected', fieldHints: [] }]);
+  }, 150);
+});
+
+test('completed business validation errors and partial stream failures stay distinct from cleanup timeouts', async (t) => {
+  const cases = [
+    { raw: event({ type: 'response.completed', response: completed({ invalid: true }) }), code: 'invalid_model_response', outcome: 'format_error', providerCompleted: true },
+    { raw: event({ type: 'response.output_text.delta', delta: 'PRIVATE_TEST_TEXT_73' })
+      + event({ type: 'response.failed', response: { error: { code: 'server_error', message: 'PRIVATE_TEST_TEXT_73' } } }),
+    code: 'upstream_unavailable', outcome: 'upstream_error', providerCompleted: false },
+  ];
+  let upstream;
+  t.mock.method(globalThis, 'fetch', async () => upstream);
+  for (const { raw, code, outcome, providerCompleted } of cases) {
+    const attempts = [];
+    upstream = new Response(new ReadableStream({
+      start(controller) { controller.enqueue(new TextEncoder().encode(raw)); }, cancel: () => new Promise(() => {}),
+    }), { headers: { 'Content-Type': 'text/event-stream' } });
+    await assert.rejects(settlesSoon(callModel({ kind: 'meal', payload: {} }, {
+      ...transportConfig(), onUpstreamAttemptResult: (value) => attempts.push(value),
+    }, new AbortController().signal)), (error) => error instanceof GatewayError && error.code === code && !error.message.includes('PRIVATE'));
+    assert.equal(attempts[0].outcome, outcome);
+    assert.equal(attempts[0].providerCompleted, providerCompleted);
+    assert.equal(attempts[0].resultAccepted, false);
+  }
+});
+
+test('buffered content limits fail before nonsettling cancellation can turn them into timeouts', async (t) => {
+  let upstream;
+  t.mock.method(globalThis, 'fetch', async () => upstream);
+  for (const declared of [false, true]) {
+    upstream = new Response(new ReadableStream({
+      start(controller) { if (!declared) controller.enqueue(new Uint8Array(129 * 1024)); },
+      cancel: () => new Promise(() => {}),
+    }), { headers: { ...(declared ? { 'Content-Length': String(129 * 1024) } : {}), 'Content-Type': 'application/json' } });
+    const attempts = [];
+    await assert.rejects(settlesSoon(callModel({ kind: 'meal', payload: {} }, {
+      ...transportConfig({ modelStream: false }), onUpstreamAttemptResult: (value) => attempts.push(value),
+    }, new AbortController().signal)), (error) => error instanceof GatewayError && error.code === 'invalid_model_response');
+    assert.equal(attempts[0].outcome, 'format_error');
+    assert.equal(upstream.body.locked, false);
+  }
+});
+
+test('abort closes an open reader even when its cancellation never settles and late bodies remain rejected', async (t) => {
+  const controller = new AbortController();
+  const attempts = [];
+  let cancelled = 0;
+  const upstream = new Response(new ReadableStream({
+    start(source) { source.enqueue(new TextEncoder().encode(': heartbeat\n\n')); },
+    cancel() { cancelled += 1; return new Promise(() => {}); },
+  }), { headers: { 'Content-Type': 'text/event-stream' } });
+  let fetchResult = async () => upstream;
+  t.mock.method(globalThis, 'fetch', (...args) => fetchResult(...args));
+  const pending = callModel({ kind: 'meal', payload: {} }, {
+    ...transportConfig(), onUpstreamAttemptResult: (value) => attempts.push(value),
+  }, controller.signal);
+  await new Promise((resolve) => setImmediate(resolve));
+  controller.abort();
+  await assert.rejects(settlesSoon(pending), (error) => error instanceof GatewayError && error.code === 'request_cancelled');
+  assert.equal(cancelled, 1);
+  assert.equal(upstream.body.locked, false);
+  assert.equal(attempts[0].resultAccepted, false);
+
+  let finishFetch;
+  const lateController = new AbortController();
+  fetchResult = () => new Promise((resolve) => { finishFetch = resolve; });
+  const late = callModel({ kind: 'meal', payload: {} }, transportConfig(), lateController.signal);
+  lateController.abort();
+  finishFetch(new Response(event({ type: 'response.completed', response: completed() }), { headers: { 'Content-Type': 'text/event-stream' } }));
+  await assert.rejects(settlesSoon(late), (error) => error instanceof GatewayError && error.code === 'request_cancelled');
 });

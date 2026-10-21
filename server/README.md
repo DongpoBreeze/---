@@ -17,7 +17,7 @@ node server/index.mjs
 
 使用本机 Codex 的活动供应商可运行 `npm run server:codex`，固定模型 `gpt-6.1-sol`、思考强度 `max`，供应商凭据仅保留在进程内存。专用开发令牌与临时预算设置保存在忽略的 `server/data/local-codex.json`，客户端仅得到这个开发令牌；不支持把 Codex 的登录态或全局凭据直接交给客户端。当前支持活动供应商的 `env_key` 或 `experimental_bearer_token`。
 
-该启动器固定监听本机，输出上限 8192 token；每个上游分析阶段最多等待 180 秒，每餐最多 3 个阶段。客户端保留约 545 秒的整餐分析生命周期，以容纳三个阶段和收尾余量。供应商价格未核实时，默认每次 10 元只是临时记账预留，不是账单保证。当前模型的合成 PNG、JPEG 均已有成功调用。此前图片 HTTP 400 是 JSON 模式输入标记缺失：供应商没有将 `instructions` 中的 JSON 算入输入校验，网关现已在实际 `input_text` 中添加 `JSON record:\n`。App 分析副本采用 JPEG，原媒体仍独立保存；合成成功不代表营养质量或延迟稳定性通过。
+该启动器固定监听本机，输出上限 8192 token；每个上游分析阶段默认等待 120 秒，每餐最多 3 个阶段，客户端整餐生命周期约 365 秒。服务端可显式设置 `UPSTREAM_TIMEOUT_MS=180000` 排查历史慢供应商，但不会改变客户端默认。供应商价格未核实时，默认每次 10 元只是临时记账预留，不是账单保证。当前模型的合成 PNG、JPEG 均已有成功调用。此前图片 HTTP 400 是 JSON 模式输入标记缺失：供应商没有将 `instructions` 中的 JSON 算入输入校验，网关现已在实际 `input_text` 中添加 `JSON record:\n`。App 分析副本采用 JPEG，原媒体仍独立保存；合成成功不代表营养质量或延迟稳定性通过。
 
 相同 128×128 PNG/JPEG 在修复前均复现同一校验错误，旧 JPEG 成功不能证明格式差异。修复后的 356 字节原 PNG 在一次 120 秒诊断上限下于 19.705 秒成功，此前一次默认 55 秒请求超时；新增同尺寸 JPEG 在默认 55 秒上限下于 17.975 秒成功。两次成功均返回 `unknown`、四营养字段 `null`。上述合成诊断阶段共 9 次调用；后续真实餐食照片及账本记录见 [开发记录](../docs/development.md)，不能沿用合成阶段次数作为当前总数。
 
@@ -44,7 +44,7 @@ node server/index.mjs
 | `MAX_BODY_BYTES` | `8388608` | 请求体上限，包含内嵌图片 data URL。 |
 | `MAX_PHOTO_BYTES` | `3145728` | 单张图片解码后大小上限。 |
 | `MAX_PHOTOS` | `2` | 一次饮食分析最多照片数。 |
-| `UPSTREAM_TIMEOUT_MS` | `180000` | 每个上游分析阶段的超时上限；单餐最多三个阶段。仅在收到完整响应并通过校验后回填结果。 |
+| `UPSTREAM_TIMEOUT_MS` | `120000` | 每个上游分析阶段的默认超时上限；范围允许显式提高到 180000，单餐最多三个阶段。仅在收到完整响应并通过校验后回填结果。 |
 | `BUDGET_TIMEZONE` | `Asia/Shanghai` | 每日/每月额度结算时区。 |
 | `RESULT_CACHE_TTL_MS` | `600000` | 成功结果仅在内存中短暂缓存，重启后不恢复正文。 |
 | `HEALTH_DB_PATH` | `server/health-compass.sqlite` | SQLite 额度账本路径。 |
@@ -101,7 +101,7 @@ Responses 使用 `instructions`、`input_text/input_image`、`reasoning.effort`�
 
 `json_mode_input_missing` 专门表示上游要求输入包含“json”的 JSON 模式校验错误，不将其归因于图片编码。`upstream_gateway_timeout` 用于上游 HTTP 504/524，区别于本地计时器触发的 `upstream_timeout`。`scripts/diagnose-image.mjs` 使用合成灰色图片单独诊断；它不读取或上传用户照片，真实调用仍计入已有 SQLite 预算账本。
 
-`scripts/test-real-food-image.mjs --app-copy --stream --live --timeout-ms=180000` 使用指定真实照片的 App Web 压缩副本进行一次诊断。`--live` 是显式调用开关，`--stream` 是受控流式对照，延长等待只影响诊断进程；本机 App 的默认超时和 Codex 全局配置不会改变。报告只保存图片大小、哈希、上游状态/时间与最终分析，不记录图片 base64 或凭据。
+`scripts/test-real-food-image.mjs --app-copy --stream --live --timeout-ms=90000` 使用指定真实照片的 App Web 压缩副本进行一次诊断。`--live` 是显式调用开关，`--stream` 是受控流式对照；如需复现历史慢请求，可显式传 `--timeout-ms=180000`。脚本只读当前 Codex 配置，默认使用活动模型/强度；本机 App 的默认超时和 Codex 全局配置不会被脚本改写。报告只保存图片大小、哈希、上游状态/时间与最终分析，不记录图片 base64 或凭据。
 
 成功响应的 `analysis` 严格按类型区分。新餐食协议使用 `ai-per100g-v3`，以下简略示例省略组件与来源明细：
 
