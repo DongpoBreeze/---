@@ -19,6 +19,10 @@ type ImportState = { drafts: Record<string, unknown>; epoch: number; committed: 
 type ImportedData = AppData & { [IMPORT_STATE]?: ImportState };
 const stagedReferences = new Set<string>();
 let deletionEpoch = 0;
+// Legacy AsyncStorage keys are migrated once per launch; nothing writes them afterwards.
+let legacyMigrated = false;
+// Web media keys derived from data URIs. Hashing every photo on each save was the main save cost.
+const webMediaKeyCache = new Map<string, string>();
 
 const hashBytes: HashBytes = async (bytes) => {
   const digest = await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, Uint8Array.from(bytes));
@@ -156,6 +160,7 @@ async function writeDurableMedia(bytes: Uint8Array, kind: 'image' | 'video', ext
 }
 
 async function readSnapshot(): Promise<LocalSnapshot> {
+  if (legacyMigrated) return repository.read();
   if (Platform.OS === 'web' && await webSnapshotStore.getItem(DATA_KEY) === null) {
     const legacy = await AsyncStorage.getItem(DATA_KEY);
     if (legacy !== null) {
@@ -180,6 +185,7 @@ async function readSnapshot(): Promise<LocalSnapshot> {
     await repository.commit(snapshot);
     await AsyncStorage.multiRemove(legacyDraftKeys);
   }
+  legacyMigrated = true;
   return snapshot;
 }
 
@@ -226,6 +232,7 @@ export async function clearData(): Promise<void> {
   deletionEpoch++;
   await repository.run(async () => {
     stagedReferences.clear();
+    webMediaKeyCache.clear();
     if (Platform.OS === 'web') { await clearWebMedia(); clearWebDownloads(); }
     else {
       if (MEDIA_DIR) await FileSystem.deleteAsync(MEDIA_DIR, { idempotent: true });
@@ -266,11 +273,18 @@ async function cleanupMediaImpl(data: AppData, drafts: Record<string, unknown>):
   if (Platform.OS === 'web') {
     const keepKeys = new Set<string>();
     for (const uri of referenced) {
-      const kind = uri.startsWith('data:video/') ? 'video' : 'image';
-      const bytes = parseDataUri(uri);
-      if (bytes) keepKeys.add(`${kind}-${await hashBytes(bytes)}.${extensionFor(uri, kind)}`);
+      let key = webMediaKeyCache.get(uri);
+      if (!key) {
+        const kind = uri.startsWith('data:video/') ? 'video' : 'image';
+        const bytes = parseDataUri(uri);
+        if (!bytes) continue;
+        key = `${kind}-${await hashBytes(bytes)}.${extensionFor(uri, kind)}`;
+        webMediaKeyCache.set(uri, key);
+      }
+      keepKeys.add(key);
     }
     for (const key of await webMediaKeys()) if (!keepKeys.has(key)) await removeWebMedia(key);
+    for (const uri of webMediaKeyCache.keys()) if (!referenced.has(uri)) webMediaKeyCache.delete(uri);
     return;
   }
   if (!MEDIA_DIR) return;
