@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { nutritionInput } from './helpers/meal-nutrition';
 import { readFile } from 'node:fs/promises';
 import { APPEARANCE_KEY } from '../src/appearance';
 import { parseBackupArchive } from '../src/backup';
@@ -80,7 +81,7 @@ test('暗色设置覆盖四个Tab和全部表单，手填营养保存且刷新�
   await page.getByText('记饮食', { exact: true }).click();
   await page.getByLabel('食物名称', { exact: true }).fill('暗色手工餐');
   for (const [field, value] of [['热量 kcal', '650'], ['蛋白质 g', '40'], ['碳水 g', '80'], ['脂肪 g', '18']]) {
-    const input = page.getByLabel(field, { exact: true });
+    const input = (await nutritionInput(page, field));
     await input.fill(value);
     await expectReadableInput(input);
   }
@@ -115,8 +116,8 @@ test('暗色设置覆盖四个Tab和全部表单，手填营养保存且刷新�
   await page.getByRole('tab', { name: '我的', exact: true }).click();
   await page.getByRole('button', { name: '全部记录', exact: true }).click();
   await page.getByText('暗色手工餐', { exact: true }).click();
-  await expect(page.getByLabel('热量 kcal', { exact: true })).toHaveValue('650');
-  await expect(page.getByLabel('蛋白质 g', { exact: true })).toHaveValue('40');
+  await expect((await nutritionInput(page, '热量 kcal'))).toHaveValue('650');
+  await expect((await nutritionInput(page, '蛋白质 g'))).toHaveValue('40');
   await closeSheet(page);
   await page.getByRole('tab', { name: '设置', exact: true }).click();
   await page.getByRole('radio', { name: '浅色模式', exact: true }).click();
@@ -134,12 +135,12 @@ test('跟随系统即时切换并保留表单内容，固定浅色和暗色不�
   await expectScheme(page, 'light');
   await page.getByText('记饮食', { exact: true }).click();
   await page.getByLabel('食物名称', { exact: true }).fill('切换主题后保留');
-  await page.getByLabel('热量 kcal', { exact: true }).fill('450～550');
+  await (await nutritionInput(page, '热量 kcal')).fill('450～550');
   await page.emulateMedia({ colorScheme: 'dark' });
   await expectScheme(page, 'dark');
   await expect(page.getByLabel('食物名称', { exact: true })).toHaveValue('切换主题后保留');
-  await expect(page.getByLabel('热量 kcal', { exact: true })).toHaveValue('450～550');
-  await expectReadableInput(page.getByLabel('热量 kcal', { exact: true }));
+  await expect((await nutritionInput(page, '热量 kcal'))).toHaveValue('450～550');
+  await expectReadableInput((await nutritionInput(page, '热量 kcal')));
   await page.screenshot({ path: info.outputPath('system-change-keeps-open-form.png'), fullPage: true });
   await closeSheet(page);
   await page.getByRole('tab', { name: '设置', exact: true }).click();
@@ -162,7 +163,7 @@ test('跟随系统即时切换并保留表单内容，固定浅色和暗色不�
   await page.getByRole('tab', { name: '今天', exact: true }).click();
   await page.getByText('记饮食', { exact: true }).click();
   await expect(page.getByLabel('食物名称', { exact: true })).toHaveValue('切换主题后保留');
-  await expect(page.getByLabel('热量 kcal', { exact: true })).toHaveValue('450～550');
+  await expect((await nutritionInput(page, '热量 kcal'))).toHaveValue('450～550');
   await expectNoOverflow(page);
   expect(errors).toEqual([]);
 });
@@ -194,7 +195,7 @@ test('照片请求中切换系统主题不会取消分析，暗色识别页编�
   await expectNoOverflow(page);
   await page.screenshot({ path: info.outputPath('dark-ai-review.png'), fullPage: true });
   await page.getByRole('button', { name: '确认填入', exact: true }).click();
-  await expect(page.getByLabel('热量 kcal', { exact: true })).toHaveValue('130～150');
+  await expect((await nutritionInput(page, '热量 kcal'))).toHaveValue('130～150');
   await page.getByRole('dialog').getByRole('button', { name: '保存', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await page.getByRole('tab', { name: '我的', exact: true }).click();
@@ -204,7 +205,7 @@ test('照片请求中切换系统主题不会取消分析，暗色识别页编�
   await expectReadableInput(page.getByLabel('菜品 1 食用量', { exact: true }));
   await page.getByLabel('菜品 1 食用量', { exact: true }).fill('200');
   await page.getByRole('button', { name: '保存营养校正', exact: true }).click();
-  await expect(page.getByLabel('热量 kcal', { exact: true })).toHaveValue('260～300');
+  await expect((await nutritionInput(page, '热量 kcal'))).toHaveValue('260～300');
   await page.getByRole('dialog').getByRole('button', { name: '保存', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await page.getByRole('tab', { name: '设置', exact: true }).click();

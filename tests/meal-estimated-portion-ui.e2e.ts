@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { nutritionInput } from './helpers/meal-nutrition';
 import type { MealRecord } from '../src/types';
 import {
   configureMockAi, fulfillProviderJson, fulfillProviderResponse, installMockAiProvider, MOCK_AI_MODEL,
@@ -361,7 +362,7 @@ test('默认估计量确认后可手填整餐四营养，保存重开和 ZIP 保
   await confirmPortionReview(page);
   await expectPortionFormula(page, [{ grams, per100g: pointRanges() }]);
   const manual = pointRanges(740, 40, 80, 21);
-  for (const [key, , label] of portionNutrients) await page.getByLabel(label, { exact: true }).fill(String(manual[key].min));
+  for (const [key, , label] of portionNutrients) await (await nutritionInput(page, label)).fill(String(manual[key].min));
   await page.getByLabel('食物名称', { exact: true }).fill('整餐人工覆盖');
   await savePortionMeal(page);
   await page.reload();

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { nutritionInput } from './helpers/meal-nutrition';
 import { readFile } from 'node:fs/promises';
 import { parseBackupArchive } from '../src/backup';
 import { configureMockAi, fulfillProviderResponse, installMockAiProvider } from './helpers/mock-ai-provider';
@@ -43,8 +44,8 @@ test('生产餐食入口在识别页本地计算数量，确认后回填精简�
   await expect(page.getByLabel('食物名称', { exact: true })).toHaveValue('米饭、红色饮品');
   await expect(page.getByTestId('meal-edit-portions')).toBeEnabled();
   await expect(page.getByText('菜品与营养', { exact: true })).toHaveCount(0);
-  await expect(page.getByLabel('热量 kcal', { exact: true })).toHaveValue('');
-  await expect(page.getByLabel('热量 kcal', { exact: true })).toBeEditable();
+  await expect((await nutritionInput(page, '热量 kcal'))).toHaveValue('');
+  await expect((await nutritionInput(page, '热量 kcal'))).toBeEditable();
   await expect(page.getByText(/识别到：|识别置信度|查看估算依据|配方依据：|估算假设：|识别候选：|照片区域：/)).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(false);
   await page.screenshot({ path: testInfo.outputPath('confirmed-nutrition-inputs.png'), fullPage: true });
@@ -134,7 +135,7 @@ test('新餐食估计数量可清空并切换家用份数，多道菜连续输�
   await firstQuantity.fill('100');
   await secondQuantity.fill('200');
   await page.getByRole('button', { name: '确认填入', exact: true }).click();
-  await expect(page.getByLabel('热量 kcal', { exact: true })).toHaveValue('285～345');
+  await expect((await nutritionInput(page, '热量 kcal'))).toHaveValue('285～345');
   await page.getByRole('dialog').getByRole('button', { name: '保存', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await page.getByRole('button', { name: /熟米饭、玉米 午餐/ }).click();
