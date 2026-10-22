@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { existsSync } from 'node:fs';
 import { importUsda, LEGACY_MANIFEST, EXTENDED_MANIFEST, MANIFEST, NUTRIENTS } from '../scripts/import-usda.mjs';
 
 const root = process.cwd();
@@ -66,7 +67,8 @@ test('raw and cooked identities are retained explicitly', async () => {
   assert.match(find('egg_hard_boiled').preparation, /熟/);
 });
 
-test('rerunning against the archive is byte-for-byte reproducible', async () => {
+// The USDA archive is a large local download (artifacts/ is gitignored); fresh clones skip this check.
+test('rerunning against the archive is byte-for-byte reproducible', { skip: !existsSync(archive) && 'USDA archive not downloaded' }, async () => {
   const temporary = path.join(root, 'artifacts/usda/usda-test-output.json');
   try {
     const first = await importUsda({ archive, output: temporary });
