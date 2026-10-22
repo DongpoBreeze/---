@@ -1,6 +1,7 @@
 import { analyseRecognition, nutritionCatalog, nutritionDataset } from './nutrition.mjs';
 import { adaptFrontendMealRecognition, frontendMealInput, frontendMealRecognitionSnapshot, hasMealIdentityConflict, mealRecognitionInstructions, preservesMealComponents, validateMealRecognition } from '../shared/nutrition.mjs';
 import { createParser } from 'eventsource-parser';
+import { decideMealReview } from '../shared/meal-review.mjs';
 
 export class GatewayError extends Error {
   constructor(status, code, message, retryable = false) {
@@ -91,80 +92,7 @@ function canCropSourcePhotos(payload) {
     && payload.photoRoles.filter((role) => role === 'after').length === 1;
 }
 
-function normalizedLabel(value) {
-  return typeof value === 'string' ? value.normalize('NFKC').toLocaleLowerCase().replace(/[\s\p{P}\p{S}]+/gu, '') : '';
-}
-function components(value) { return Array.isArray(value?.components) ? value.components : []; }
-function overlap(left, right) {
-  if (!left || !right || !['x', 'y', 'width', 'height'].every((key) => Number.isFinite(left[key]) && Number.isFinite(right[key]))) return 0;
-  const width = Math.max(0, Math.min(left.x + left.width, right.x + right.width) - Math.max(left.x, right.x));
-  const height = Math.max(0, Math.min(left.y + left.height, right.y + right.height) - Math.max(left.y, right.y));
-  const intersection = width * height;
-  const union = left.width * left.height + right.width * right.height - intersection;
-  return union > 0 ? intersection / union : 0;
-}
-function reviewReasons(value) {
-  if (!object(value)) return [];
-  const result = new Set(); const rows = components(value);
-  const confidence = [value.confidence, ...rows.map((item) => item?.confidence)].filter((item) => Number.isFinite(item) && item >= 0 && item <= 1);
-  if (confidence.some((item) => item < 0.65)) result.add('low_confidence');
-  const unresolved = Array.isArray(value.unresolved) ? value.unresolved.filter((item) => typeof item === 'string') : [];
-  if (unresolved.some((item) => /重复|身份(?:待确认|不明|不确定|冲突|无法确认)|(?:菜品|食材|菜名|种类).*(?:无法识别|无法确认|无法辨认|待确认|不明|不确定|冲突|疑似|看不清)|无法(?:识别|辨认).*(?:菜品|食材)|duplicate|identity|(?:dish|food|ingredient).*(?:ambiguous|conflict|uncertain)/i.test(item))) result.add('critical_unresolved');
-  if (rows.some(hasMealIdentityConflict)) result.add('identity_conflict');
-  for (let i = 0; i < rows.length; i += 1) for (let j = i + 1; j < rows.length; j += 1) {
-    const left = rows[i], right = rows[j];
-    if (normalizedLabel(left?.label) && normalizedLabel(left?.label) === normalizedLabel(right?.label)) result.add('duplicate_components');
-    if (overlap(left?.region, right?.region) >= 0.65 && left?.foodId && right?.foodId && left.foodId !== right.foodId) result.add('overlapping_conflict');
-    if (left?.foodId && left.foodId === right?.foodId && overlap(left?.region, right?.region) >= 0.35) result.add('duplicate_components');
-  }
-  return [...result];
-}
-function reviewIndices(value) {
-  const rows = components(value); const indices = new Set();
-  rows.forEach((item, index) => {
-    if ((Number.isFinite(item?.confidence) && item.confidence < 0.65) || hasMealIdentityConflict(item)) indices.add(index);
-    rows.forEach((other, otherIndex) => {
-      if (otherIndex !== index && normalizedLabel(item?.label) && normalizedLabel(item?.label) === normalizedLabel(other?.label)) indices.add(index);
-      if (otherIndex !== index && overlap(item?.region, other?.region) >= 0.65) indices.add(index);
-    });
-  });
-  if (!indices.size) rows.forEach((item, index) => { if (item?.region) indices.add(index); });
-  return [...indices].slice(0, 4);
-}
-function reviewRegions(value, indices) {
-  return indices.map((index) => value?.components?.[index]?.region).filter((region) => region && ['x', 'y', 'width', 'height'].every((key) => Number.isFinite(region[key]))).map((region) => ({ x: region.x, y: region.y, width: region.width, height: region.height }));
-}
-function materiallyConflicts(initial, review, allowUncertainIdentityChanges = false) {
-  if (!preservesMealComponents(initial, review, { allowUncertainIdentityChanges })) return true;
-  const first = components(initial), second = components(review);
-  for (const left of first) {
-    const right = second.find((item) => overlap(left?.region, item?.region) >= 0.35 || normalizedLabel(left?.label) === normalizedLabel(item?.label) || left?.foodId && left.foodId === item?.foodId);
-    if (!right) continue;
-    // A review can rewrite an ambiguous label while keeping the same visual
-    // dish. Only two different resolved IDs require another merge pass.
-    const identityDiffers = Boolean(left?.foodId && right?.foodId && left.foodId !== right.foodId);
-    const confidenceGap = Math.abs((left?.confidence ?? 0.5) - (right?.confidence ?? 0.5));
-    if (identityDiffers && confidenceGap < 0.25) return true;
-  }
-  return Math.abs(first.length - second.length) >= 2;
-}
-
-/** Pure decision function shared by the gateway tests and adaptive call loop. */
-export function decideMealReview(initial, review, hasPhotos = true, allowUncertainIdentityChanges = false) {
-  if (!hasPhotos) return null;
-  if (review === undefined) {
-    const reasons = reviewReasons(initial);
-    if (!reasons.length) return null;
-    const componentIndices = reviewIndices(initial);
-    return { stage: 'crop_review', reasons, componentIndices, regions: reviewRegions(initial, componentIndices) };
-  }
-  const reasons = reviewReasons(review);
-  const conflict = materiallyConflicts(initial, review, allowUncertainIdentityChanges);
-  if (!conflict) return null;
-  reasons.push('review_conflict');
-  const componentIndices = reviewIndices(review);
-  return { stage: 'final_merge', reasons: [...new Set(reasons)], componentIndices, regions: reviewRegions(review, componentIndices) };
-}
+export { decideMealReview };
 
 export function normaliseAnalysis(content, kind = 'meal', provenance, promptProfile = 'current') {
   if (typeof content !== 'string') throw modelError();
