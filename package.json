@@ -14,6 +14,7 @@
     "ios:unsigned": "node scripts/ios-unsigned.mjs",
     "web": "expo start --web --max-workers 2",
     "typecheck": "tsc --noEmit",
+    "test:all": "npm run typecheck && npm test && npm run test:server && npm run test:scripts",
     "test": "tsx --test tests/*.test.ts",
     "test:server": "node --test server/*.test.mjs",
     "test:scripts": "node --import tsx --test --test-timeout=30000 scripts/*.test.mjs",
