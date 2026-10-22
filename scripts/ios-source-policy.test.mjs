@@ -12,7 +12,7 @@ import YAML from 'yaml';
 import { minimatch } from 'minimatch';
 import { emptyData } from '../src/types.ts';
 import { canonicalSourcePath, copySafeSource, createSourceArchive, expectedEasIgnore, inspectSource, IOS_SOURCE_FILES, iosBuildEnvironment, isAllowedSourcePath, listRegularFiles } from './ios-source-policy.mjs';
-import { assertUnsignedAppMetadata, auditUnsignedIpa, unsignedXcodeArguments, validateUnsignedToolchain } from './ios-unsigned.mjs';
+import { assertUnsignedAppMetadata, auditUnsignedIpa, readIosSwiftRequirements, swiftToolsMinimum, unsignedXcodeArguments, validateUnsignedToolchain } from './ios-unsigned.mjs';
 import { sha256 } from './ios-source-policy.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -151,10 +151,12 @@ test('private runtime configuration and prefilled body measurements fail closed'
 });
 
 test('the unsigned native build requires a compatible Xcode/SDK and uses device Release signing exclusions', () => {
-  assert.deepEqual(validateUnsignedToolchain({ xcodeVersion: '16.4', sdkVersion: '18.5', minimumXcode: '16.1', minimumIos: '16.4' }), { xcodeVersion: '16.4', sdkVersion: '18.5', minimumXcode: '16.1', minimumIos: '16.4' });
-  assert.throws(() => validateUnsignedToolchain({ xcodeVersion: '15.4', sdkVersion: '17.5', minimumXcode: '16.1', minimumIos: '16.4' }), /older than/);
-  assert.throws(() => validateUnsignedToolchain({ xcodeVersion: '16.4', sdkVersion: '15.5', minimumXcode: '16.1', minimumIos: '16.4' }), /cannot build/);
-  assert.throws(() => validateUnsignedToolchain({ xcodeVersion: 'unknown', sdkVersion: '18.5', minimumXcode: '16.1', minimumIos: '16.4' }), /Cannot determine/);
+  const compatible = { xcodeVersion: '26.3', sdkVersion: '26.2', swiftVersion: '6.2.3', minimumXcode: '16.1', minimumIos: '16.4', minimumSwift: '6.2' };
+  assert.deepEqual(validateUnsignedToolchain(compatible), compatible);
+  assert.throws(() => validateUnsignedToolchain({ ...compatible, xcodeVersion: '15.4' }), /older than/);
+  assert.throws(() => validateUnsignedToolchain({ ...compatible, sdkVersion: '15.5' }), /cannot build/);
+  assert.throws(() => validateUnsignedToolchain({ ...compatible, xcodeVersion: 'unknown' }), /Cannot determine/);
+  assert.throws(() => validateUnsignedToolchain({ ...compatible, swiftVersion: undefined }), /Cannot determine/);
   const args = unsignedXcodeArguments({ workspace: '/tmp/YouJie.xcworkspace', scheme: 'YouJie', derivedData: '/tmp/derived' });
   assert.ok(args.includes('Release'));
   assert.ok(args.includes('iphoneos'));
@@ -162,6 +164,25 @@ test('the unsigned native build requires a compatible Xcode/SDK and uses device 
   assert.ok(args.includes('CODE_SIGNING_ALLOWED=NO'));
   assert.ok(args.includes('CODE_SIGNING_REQUIRED=NO'));
   assert.equal(args.some((argument) => argument === '-allowProvisioningUpdates' || argument === '-allowProvisioningDeviceRegistration'), false);
+});
+
+test('the locked Apple Swift packages reject Xcode 16.4 despite meeting React Native\'s minimum Xcode', async () => {
+  assert.equal(swiftToolsMinimum('// swift-tools-version: 6.2\nimport PackageDescription\n'), '6.2');
+  assert.equal(swiftToolsMinimum('// swift-tools-version: 6.2.1\r\n'), '6.2.1');
+  assert.throws(() => swiftToolsMinimum('import PackageDescription\n'), /Cannot determine/);
+  const requirements = await readIosSwiftRequirements(root);
+  const lock = JSON.parse(await fs.readFile(path.join(root, 'package-lock.json'), 'utf8'));
+  assert.equal(requirements.minimumSwift, '6.2');
+  assert.equal(requirements.manifests.length, 3);
+  for (const entry of requirements.manifests) {
+    assert.equal(entry.version, lock.packages[`node_modules/${entry.package}`].version);
+    assert.match(entry.sha256, /^[0-9a-f]{64}$/);
+  }
+  for (const name of ['expo-modules-jsi', '@expo/expo-modules-macros-plugin']) assert.equal(requirements.manifests.find((entry) => entry.package === name).minimumSwift, '6.2');
+  const failingRunner = { xcodeVersion: '16.4', sdkVersion: '18.5', swiftVersion: '6.1.0', minimumXcode: '16.1', minimumIos: '16.4', minimumSwift: requirements.minimumSwift };
+  assert.throws(() => validateUnsignedToolchain(failingRunner), /Swift 6\.1\.0.*require Swift tools 6\.2/);
+  assert.equal(validateUnsignedToolchain({ ...failingRunner, xcodeVersion: '26.3', sdkVersion: '26.2', swiftVersion: '6.2.3' }).minimumSwift, '6.2');
+  assert.throws(() => validateUnsignedToolchain({ ...failingRunner, xcodeVersion: '26.3' }), /provides Swift 6\.1\.0/);
 });
 
 test('the cloud workflow builds only on explicit dispatch or the dedicated unsigned branch and stages exact reviewed files', async () => {
@@ -194,6 +215,11 @@ test('the cloud workflow builds only on explicit dispatch or the dedicated unsig
   assert.equal(steps[stage]['working-directory'], 'reviewed-client');
   assert.equal(workflow.jobs.build.env.EXPO_NO_DOTENV, '1');
   assert.equal(workflow.jobs.build.env.EXPO_NO_CLIENT_ENV_VARS, '1');
+  const select = steps.findIndex((step) => step.run?.includes('sudo xcode-select --switch'));
+  assert.ok(select > install && select < build);
+  assert.match(steps[select].run, /xcode_developer=\/Applications\/Xcode_26\.3\.app\/Contents\/Developer/);
+  assert.match(steps[select].run, /if \[\[ ! -d "\$xcode_developer" \]\]/);
+  for (const command of ['xcode-select --print-path', 'xcodebuild -version', 'xcrun --sdk iphoneos --show-sdk-version', 'xcrun swift --version']) assert.ok(steps[select].run.includes(command));
   const uploads = steps.filter((step) => step.uses?.startsWith('actions/upload-artifact@'));
   assert.equal(uploads.length, 2);
   for (const upload of uploads) {

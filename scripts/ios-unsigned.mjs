@@ -16,13 +16,43 @@ const atLeast = (actual, minimum) => {
   return true;
 };
 
-export function validateUnsignedToolchain({ xcodeVersion, sdkVersion, minimumXcode, minimumIos }) {
-  for (const value of [xcodeVersion, sdkVersion, minimumXcode, minimumIos]) {
-    if (!/^\d+(?:\.\d+)*$/.test(value ?? '')) throw new Error('Cannot determine the installed Xcode/SDK or dependency minimum versions.');
+export function swiftToolsMinimum(manifest, label = 'Package.swift') {
+  const version = /^\uFEFF?\/\/\s*swift-tools-version:\s*(\d+\.\d+(?:\.\d+)?)\s*(?:\r?\n|$)/.exec(manifest)?.[1];
+  if (!version) throw new Error(`Cannot determine the Swift tools requirement in ${label}.`);
+  return version;
+}
+
+export async function readIosSwiftRequirements(projectRoot) {
+  const projectRequire = createRequire(path.join(path.resolve(projectRoot), 'package.json'));
+  const lock = JSON.parse(await fs.readFile(path.join(projectRoot, 'package-lock.json'), 'utf8'));
+  // These are the Apple SwiftPM manifests shipped by the locked native modules.
+  // ExpoModulesJSI's pod invokes its Package.swift during the device build; its
+  // Swift tools requirement is independent of RN's minimum Xcode helper value.
+  const packages = [
+    ['expo-modules-jsi', 'apple/Package.swift'],
+    ['@expo/expo-modules-macros-plugin', 'apple/Package.swift'],
+    ['react-native', 'Libraries/ReactNativeDependencies/Package.swift'],
+  ];
+  const manifests = [];
+  for (const [name, relative] of packages) {
+    const packageJsonPath = projectRequire.resolve(`${name}/package.json`);
+    const packageJson = JSON.parse(await fs.readFile(packageJsonPath, 'utf8'));
+    if (lock.packages?.[`node_modules/${name}`]?.version !== packageJson.version) throw new Error(`The installed ${name} version differs from package-lock.json. Run npm ci before checking the Swift toolchain.`);
+    const bytes = await fs.readFile(path.join(path.dirname(packageJsonPath), relative));
+    const file = `node_modules/${name}/${relative}`;
+    manifests.push({ package: name, version: packageJson.version, path: file, minimumSwift: swiftToolsMinimum(bytes.toString('utf8'), file), sha256: sha256(bytes) });
+  }
+  return { minimumSwift: manifests.map((entry) => entry.minimumSwift).reduce((maximum, version) => atLeast(version, maximum) ? version : maximum), manifests };
+}
+
+export function validateUnsignedToolchain({ xcodeVersion, sdkVersion, swiftVersion, minimumXcode, minimumIos, minimumSwift }) {
+  for (const value of [xcodeVersion, sdkVersion, swiftVersion, minimumXcode, minimumIos, minimumSwift]) {
+    if (!/^\d+(?:\.\d+)*$/.test(value ?? '')) throw new Error('Cannot determine the installed Xcode/SDK/Swift or dependency minimum versions.');
   }
   if (!atLeast(xcodeVersion, minimumXcode)) throw new Error(`The installed Xcode ${xcodeVersion} is older than React Native's required ${minimumXcode}. Select a newer Xcode.`);
   if (!atLeast(sdkVersion, minimumIos)) throw new Error(`The iPhoneOS SDK ${sdkVersion} cannot build the required iOS ${minimumIos} deployment target.`);
-  return { xcodeVersion, sdkVersion, minimumXcode, minimumIos };
+  if (!atLeast(swiftVersion, minimumSwift)) throw new Error(`The selected Xcode ${xcodeVersion} provides Swift ${swiftVersion}, but the locked Apple Package.swift manifests require Swift tools ${minimumSwift} or newer. Select a compatible Xcode before CocoaPods/native compilation.`);
+  return { xcodeVersion, sdkVersion, swiftVersion, minimumXcode, minimumIos, minimumSwift };
 }
 
 export function unsignedXcodeArguments({ workspace, scheme, derivedData }) {
@@ -128,6 +158,8 @@ async function buildUnsignedIpa() {
     await fs.symlink(await fs.realpath(path.join(root, 'node_modules')), path.join(stage, 'node_modules'), 'dir');
     const xcode = await run('xcode-version', 'xcodebuild', ['-version'], stage);
     const sdk = await run('iphoneos-sdk', 'xcrun', ['--sdk', 'iphoneos', '--show-sdk-version'], stage);
+    const swift = await run('swift-version', 'xcrun', ['swift', '--version'], stage);
+    report.swiftRequirements = await readIosSwiftRequirements(stage);
     await run('cocoapods-version', 'pod', ['--version'], stage);
     const expoCli = path.join(stage, 'node_modules/expo/bin/cli');
     await run('expo-prebuild-ios', process.execPath, [expoCli, 'prebuild', '--platform', 'ios', '--no-install', '--no-clean', '--skip-dependency-update', 'react,react-native', '--template', path.join(stage, 'node_modules/expo/template.tgz')], stage);
@@ -137,7 +169,13 @@ async function buildUnsignedIpa() {
     const helpers = await fs.readFile(path.join(stage, 'node_modules/react-native/scripts/cocoapods/helpers.rb'), 'utf8');
     const minimumXcode = /def self\.min_xcode_version_supported\s+return\s+'([^']+)'/.exec(helpers)?.[1];
     const minimumIos = properties['ios.deploymentTarget'] ?? /platform :ios,.*?\|\|\s*'([^']+)'/.exec(podfile)?.[1];
-    report.toolchain = validateUnsignedToolchain({ xcodeVersion: /Xcode\s+(\d+(?:\.\d+)*)/.exec(xcode.stdout)?.[1], sdkVersion: sdk.stdout.trim(), minimumXcode, minimumIos });
+    report.toolchain = {
+      xcodeVersion: /Xcode\s+(\d+(?:\.\d+)*)/.exec(xcode.stdout)?.[1],
+      sdkVersion: sdk.stdout.trim(),
+      swiftVersion: /\bSwift version\s+(\d+(?:\.\d+)+)/i.exec(swift.stdout + '\n' + swift.stderr)?.[1],
+      minimumXcode, minimumIos, minimumSwift: report.swiftRequirements.minimumSwift,
+    };
+    validateUnsignedToolchain(report.toolchain);
     await save();
     // CocoaPods aggregates the installed modules' real privacy manifests. Do not
     // synthesize a list of required-reason APIs from documentation guesses.
@@ -223,7 +261,7 @@ async function buildUnsignedIpa() {
       signingStatus: 'UNSIGNED', directlyInstallable: false, requiresResigning: true,
       provisioningProfileIncluded: false, appleCredentialsUsed: false,
       app: metadata, architecture: 'arm64', ipa: ipaName, bytes: bytes.length, sha256: sha256(bytes),
-      sourceFileCount: source.entries.length, toolchain: report.toolchain, privacyManifests: privacy,
+      sourceFileCount: source.entries.length, toolchain: report.toolchain, swiftRequirements: report.swiftRequirements, privacyManifests: privacy,
       javascript: report.javascript, archiveAudit: audit,
       instructions: 'Re-sign on the owner\'s Windows computer using their own Apple account and an appropriate sideloading tool. This unsigned IPA cannot be installed directly, and no device test has been performed.',
     };

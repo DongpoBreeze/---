@@ -73,6 +73,22 @@ jobs:
           npm run test:ios
           npm run typecheck
 
+      # The locked ExpoModulesJSI and macros Package.swift files require Swift
+      # tools 6.2; the image's default Xcode 16.4 ships Swift 6.1.
+      - name: Select Xcode 26.3 for the locked Swift packages
+        shell: bash
+        run: |
+          xcode_developer=/Applications/Xcode_26.3.app/Contents/Developer
+          if [[ ! -d "$xcode_developer" ]]; then
+            echo "Required Xcode 26.3 is missing from this runner image."
+            exit 1
+          fi
+          sudo xcode-select --switch "$xcode_developer"
+          xcode-select --print-path
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+          xcrun swift --version
+
       - name: Compile the Release arm64 app without signing
         working-directory: ${{ runner.temp }}/health-compass-ios-client
         shell: bash
