@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { nutritionInput } from './helpers/meal-nutrition';
 import { readFile } from 'node:fs/promises';
 import { createBackupArchive, parseBackupArchive } from '../src/backup';
 import { emptyData, type MealRecord } from '../src/types';
@@ -126,7 +127,7 @@ test('完整响应进入独立确认页，确认后只回填可编辑营养值�
   await expect(review).toHaveCount(0);
   await expect(page.getByLabel('食物名称', { exact: true })).toHaveValue('原始午餐');
   await expect(page.getByLabel('备注（可选）', { exact: true })).toHaveValue('需要保留的备注');
-  await expect(page.getByLabel('热量 kcal', { exact: true })).toHaveValue('');
+  await expect((await nutritionInput(page, '热量 kcal'))).toHaveValue('');
   await expect(page.getByText('菜品与营养', { exact: true })).toHaveCount(0);
   await expect(page.getByText('照片识别完成，请核对。', { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: '查看识别结果', exact: true }).click();
@@ -139,9 +140,9 @@ test('完整响应进入独立确认页，确认后只回填可编辑营养值�
   await expect(page.getByTestId('meal-nutrition-calories')).toContainText('估算范围 260～300 kcal');
   await expect(page.getByLabel('热量 kcal', { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: '修改营养值', exact: true }).click();
-  await expect(page.getByLabel('热量 kcal', { exact: true })).toHaveValue('260～300');
+  await expect((await nutritionInput(page, '热量 kcal'))).toHaveValue('260～300');
   for (const field of ['热量 kcal', '蛋白质 g', '碳水 g', '脂肪 g'])
-    await expect(page.getByLabel(field, { exact: true })).toBeEditable();
+    await expect((await nutritionInput(page, field))).toBeEditable();
   await expect(page.getByTestId('confirmed-meal-table')).toHaveCount(0);
   await expect(page.getByText('菜品与营养', { exact: true })).toHaveCount(0);
   await expect(page.getByLabel('实际食用量（g）', { exact: true })).toHaveCount(0);
@@ -197,7 +198,7 @@ test('修正菜名和做法清空旧营养，AI复核发送修正并用新范围
   await page.screenshot({ path: info.outputPath('ai-review-refreshed-nutrition.png'), fullPage: true });
   await confirmReview(page);
   await expect(page.getByLabel('食物名称', { exact: true })).toHaveValue('少油蛋炒饭');
-  await expect(page.getByLabel('热量 kcal', { exact: true })).toHaveValue('300～360');
+  await expect((await nutritionInput(page, '热量 kcal'))).toHaveValue('300～360');
   const archive = await saveAndExport(page);
   const history = archive.data.meals[0].analyses!;
   expect(history.length).toBeGreaterThanOrEqual(3);
@@ -238,7 +239,7 @@ test('人工修改每100g四项范围并增删菜品可直接确认，不追加A
   await confirmReview(page);
   await expect(page.getByLabel('食物名称', { exact: true })).toHaveValue('手工校正菜、清蒸南瓜');
   await expect(page.getByText('应删除菜', { exact: true })).toHaveCount(0);
-  await expect(page.getByLabel('热量 kcal', { exact: true })).toHaveValue('310～410');
+  await expect((await nutritionInput(page, '热量 kcal'))).toHaveValue('310～410');
   const archive = await saveAndExport(page);
   const history = archive.data.meals[0].analyses!;
   expect(history.length).toBeGreaterThanOrEqual(2);
@@ -287,7 +288,7 @@ test('未确认复核和编辑不覆盖已确认营养值，保存保留每次�
   await page.getByRole('button', { name: '返回饮食', exact: true }).click();
   await expect(page.getByLabel('食物名称', { exact: true })).toHaveValue('熟米饭');
   await expect(page.getByText('尚未确认的新菜品', { exact: true })).toHaveCount(0);
-  await expect(page.getByLabel('热量 kcal', { exact: true })).toHaveValue('260～300');
+  await expect((await nutritionInput(page, '热量 kcal'))).toHaveValue('260～300');
   const archive = await saveAndExport(page);
   const versions = archive.data.meals[0].analyses!;
   expect(versions.filter((version) => version.model === MOCK_AI_MODEL)).toHaveLength(2);
@@ -319,10 +320,10 @@ test('确认页家用份数按本地换算，改做法清空旧参考和份数�
   await expect(page.getByLabel('菜品 1 食用量', { exact: true })).toHaveValue('');
   await page.getByLabel('菜品 1 食用量', { exact: true }).fill('100');
   await confirmReview(page);
-  await expect(page.getByLabel('热量 kcal', { exact: true })).toHaveValue('180～220');
-  await expect(page.getByLabel('蛋白质 g', { exact: true })).toHaveValue('8～12');
-  await expect(page.getByLabel('碳水 g', { exact: true })).toHaveValue('20～30');
-  await expect(page.getByLabel('脂肪 g', { exact: true })).toHaveValue('4～6');
+  await expect((await nutritionInput(page, '热量 kcal'))).toHaveValue('180～220');
+  await expect((await nutritionInput(page, '蛋白质 g'))).toHaveValue('8～12');
+  await expect((await nutritionInput(page, '碳水 g'))).toHaveValue('20～30');
+  await expect((await nutritionInput(page, '脂肪 g'))).toHaveValue('4～6');
   await expect(page.getByRole('button', { name: '家用份数', exact: true })).toHaveCount(0);
   const archive = await saveAndExport(page);
   const final = archive.data.meals[0].analyses!.at(-1)!.analysis;
@@ -392,7 +393,7 @@ test('复核失败、取消和返回均保留编辑，迟到结果不能覆盖�
   await confirmReview(page);
   await expect(page.getByLabel('食物名称', { exact: true })).toHaveValue('保留编辑');
   await expect(page.getByText('迟到结果不得填入', { exact: true })).toHaveCount(0);
-  await expect(page.getByLabel('热量 kcal', { exact: true })).toHaveValue('200～225');
+  await expect((await nutritionInput(page, '热量 kcal'))).toHaveValue('200～225');
   expect(provider.responses()).toHaveLength(4);
   expect(errors).toEqual([]);
 });
@@ -404,16 +405,16 @@ test('确认后可手改整餐数值和区间，保存重开及摘要采用修�
   await uploadPhoto(page);
   await page.getByLabel('菜品 1 食用量', { exact: true }).fill('200');
   await confirmReview(page);
-  const calories = page.getByLabel('热量 kcal', { exact: true });
+  const calories = (await nutritionInput(page, '热量 kcal'));
   await expect(calories).toHaveValue('260～300');
   await calories.fill('300～200');
   await page.getByRole('dialog').getByRole('button', { name: '保存', exact: true }).click();
   await expect(page.getByText(/热量请填写完整的非负数字或从小到大的区间/)).toBeVisible();
   await expect(page.getByRole('dialog')).toBeVisible();
   await calories.fill('280');
-  await page.getByLabel('蛋白质 g', { exact: true }).fill('4.5～5.5');
-  await page.getByLabel('碳水 g', { exact: true }).fill('60');
-  await page.getByLabel('脂肪 g', { exact: true }).fill('0.8~1.5');
+  await (await nutritionInput(page, '蛋白质 g')).fill('4.5～5.5');
+  await (await nutritionInput(page, '碳水 g')).fill('60');
+  await (await nutritionInput(page, '脂肪 g')).fill('0.8~1.5');
   await expectNoOverflow(page);
   await page.getByText('营养值（可选）', { exact: true }).scrollIntoViewIfNeeded();
   await page.screenshot({ path: info.outputPath('editable-whole-meal-nutrition.png'), fullPage: true });
@@ -433,9 +434,9 @@ test('确认后可手改整餐数值和区间，保存重开及摘要采用修�
   await page.getByRole('tab', { name: '我的', exact: true }).click();
   await page.getByRole('button', { name: '全部记录', exact: true }).click();
   await page.getByText(meal.foodName, { exact: true }).click();
-  await expect(page.getByLabel('热量 kcal', { exact: true })).toHaveValue('280');
-  await expect(page.getByLabel('蛋白质 g', { exact: true })).toHaveValue('4.5～5.5');
-  await expect(page.getByLabel('脂肪 g', { exact: true })).toHaveValue('0.8～1.5');
+  await expect((await nutritionInput(page, '热量 kcal'))).toHaveValue('280');
+  await expect((await nutritionInput(page, '蛋白质 g'))).toHaveValue('4.5～5.5');
+  await expect((await nutritionInput(page, '脂肪 g'))).toHaveValue('0.8～1.5');
   await expect(page.getByTestId('meal-nutrition-header').getByText('营养值（可选）', { exact: true })).toBeVisible();
   await page.getByLabel('备注（可选）', { exact: true }).fill('重开后仅修改备注');
   const savedAgain = await saveAndExport(page);
@@ -457,7 +458,7 @@ test('手动清空全部营养后保存为未知，重新打开不恢复旧AI总
   await page.getByLabel('菜品 1 食用量', { exact: true }).fill('200');
   await confirmReview(page);
   for (const field of ['热量 kcal', '蛋白质 g', '碳水 g', '脂肪 g'])
-    await page.getByLabel(field, { exact: true }).fill('');
+    await (await nutritionInput(page, field)).fill('');
   const archive = await saveAndExport(page);
   const meal = archive.data.meals[0];
   expect(meal.estimate).toBeUndefined();
@@ -470,7 +471,7 @@ test('手动清空全部营养后保存为未知，重新打开不恢复旧AI总
   await page.getByRole('button', { name: '全部记录', exact: true }).click();
   await page.getByText(meal.foodName, { exact: true }).click();
   for (const field of ['热量 kcal', '蛋白质 g', '碳水 g', '脂肪 g'])
-    await expect(page.getByLabel(field, { exact: true })).toHaveValue('');
+    await expect((await nutritionInput(page, field))).toHaveValue('');
   expect(provider.responses()).toHaveLength(1);
   expect(errors).toEqual([]);
 });
@@ -498,11 +499,11 @@ test('旧记录隐藏份量和剩余量后仍保留原数据，无需AI也可手
   await page.getByText(originalMeal.foodName, { exact: true }).click();
   await expect(page.getByLabel('份量或参考物（可选）', { exact: true })).toHaveCount(0);
   await expect(page.getByLabel('剩余量（可选）', { exact: true })).toHaveCount(0);
-  await expect(page.getByLabel('热量 kcal', { exact: true })).toHaveValue('400');
-  await page.getByLabel('热量 kcal', { exact: true }).fill('450');
-  await page.getByLabel('蛋白质 g', { exact: true }).fill('20');
-  await page.getByLabel('碳水 g', { exact: true }).fill('60');
-  await page.getByLabel('脂肪 g', { exact: true }).fill('15');
+  await expect((await nutritionInput(page, '热量 kcal'))).toHaveValue('400');
+  await (await nutritionInput(page, '热量 kcal')).fill('450');
+  await (await nutritionInput(page, '蛋白质 g')).fill('20');
+  await (await nutritionInput(page, '碳水 g')).fill('60');
+  await (await nutritionInput(page, '脂肪 g')).fill('15');
   const archive = await saveAndExport(page);
   expect(archive.data.meals[0]).toMatchObject({
     foodName: originalMeal.foodName, portion: originalMeal.portion, remaining: originalMeal.remaining,
@@ -519,21 +520,21 @@ test('手动整餐营养之后可按原AI参考重新填写数量，新计算可
   await uploadPhoto(page);
   await page.getByLabel('菜品 1 食用量', { exact: true }).fill('200');
   await confirmReview(page);
-  await page.getByLabel('热量 kcal', { exact: true }).fill('280');
-  await page.getByLabel('蛋白质 g', { exact: true }).fill('5');
-  await page.getByLabel('碳水 g', { exact: true }).fill('60');
-  await page.getByLabel('脂肪 g', { exact: true }).fill('1');
+  await (await nutritionInput(page, '热量 kcal')).fill('280');
+  await (await nutritionInput(page, '蛋白质 g')).fill('5');
+  await (await nutritionInput(page, '碳水 g')).fill('60');
+  await (await nutritionInput(page, '脂肪 g')).fill('1');
   const first = await saveAndExport(page);
   await page.getByRole('tab', { name: '我的', exact: true }).click();
   await page.getByRole('button', { name: '全部记录', exact: true }).click();
   await page.getByText(first.data.meals[0].foodName, { exact: true }).click();
-  await expect(page.getByLabel('热量 kcal', { exact: true })).toHaveValue('280');
+  await expect((await nutritionInput(page, '热量 kcal'))).toHaveValue('280');
   await page.getByRole('button', { name: '填写菜品数量', exact: true }).click();
   await expect(page.getByRole('button', { name: '选择 USDA 食材', exact: true })).toHaveCount(0);
   await page.getByLabel('菜品 1 食用量', { exact: true }).fill('150');
   await page.getByRole('button', { name: '保存营养校正', exact: true }).click();
   await expect(page.getByTestId('current-meal-analysis').getByText(/热量 约 195～225 kcal/)).toBeVisible();
-  await expect(page.getByLabel('热量 kcal', { exact: true })).toHaveValue('195～225');
+  await expect((await nutritionInput(page, '热量 kcal'))).toHaveValue('195～225');
   const final = await saveAndExport(page);
   const meal = final.data.meals[0];
   expect(meal.estimate).toBeUndefined();
@@ -564,7 +565,7 @@ for (const keepPhoto of [true, false]) {
     await page.getByRole('button', { name: '修改识别结果', exact: true }).click();
     await page.getByLabel('菜品 1 食用量', { exact: true }).fill('200');
     await confirmReview(page);
-    await expect(page.getByLabel('热量 kcal', { exact: true })).toHaveValue('260～300');
+    await expect((await nutritionInput(page, '热量 kcal'))).toHaveValue('260～300');
     await expect(page.getByRole('button', { name: '填写菜品数量', exact: true })).toHaveCount(0);
     await expect(page.getByTestId('current-meal-analysis')).toHaveCount(0);
     await page.getByRole('button', { name: '查看识别结果', exact: true }).click();
@@ -575,13 +576,13 @@ for (const keepPhoto of [true, false]) {
     await page.getByRole('tab', { name: '我的', exact: true }).click();
     await page.getByRole('button', { name: '全部记录', exact: true }).click();
     await page.getByText(foodName, { exact: true }).click();
-    await expect(page.getByLabel('热量 kcal', { exact: true })).toHaveValue('260～300');
+    await expect((await nutritionInput(page, '热量 kcal'))).toHaveValue('260～300');
     await page.getByRole('button', { name: '填写菜品数量', exact: true }).click();
     await expect(page.getByLabel('菜品 1 食用量', { exact: true })).toHaveValue('200');
     await page.getByLabel('菜品 1 食用量', { exact: true }).fill('300');
     await page.getByRole('button', { name: '保存营养校正', exact: true }).click();
     await expect(page.getByTestId('current-meal-analysis').getByText(/热量 约 390～450 kcal/)).toBeVisible();
-    await expect(page.getByLabel('热量 kcal', { exact: true })).toHaveValue('390～450');
+    await expect((await nutritionInput(page, '热量 kcal'))).toHaveValue('390～450');
     const final = await saveAndExport(page);
     const meal = final.data.meals[0];
     expect(meal.analyses!.at(-1)!.analysis).toMatchObject({ calories: { min: 390, max: 450 },
@@ -607,13 +608,16 @@ test('后台AI完整响应不会覆盖打开表单中的手动营养，保存保
   await page.getByRole('button', { name: '全部记录', exact: true }).click();
   await page.getByLabel('请求饮食分析', { exact: true }).click();
   await expect.poll(() => Boolean(release)).toBe(true);
-  await page.getByText('后台响应测试餐食', { exact: true }).click();
+  // The analysis entry now opens the meal form itself while the request runs.
+  await expect(page.getByRole('dialog').getByLabel('食物名称', { exact: true })).toHaveValue('后台响应测试餐食');
   const values = [['热量 kcal', '650'], ['蛋白质 g', '40'], ['碳水 g', '80'], ['脂肪 g', '18']] as const;
-  for (const [field, value] of values) await page.getByLabel(field, { exact: true }).fill(value);
+  for (const [field, value] of values) await (await nutritionInput(page, field)).fill(value);
   await release!();
-  await expect(page.getByTestId('current-meal-analysis')).toBeVisible();
-  for (const [field, value] of values) await expect(page.getByLabel(field, { exact: true })).toHaveValue(value);
+  // The result opens the review page; leaving it without confirming must keep the hand-entered values.
+  await expect(page.getByTestId('ai-meal-review')).toBeVisible();
+  await page.getByRole('button', { name: '返回饮食', exact: true }).click();
   await expect(page.getByTestId('ai-meal-review')).toHaveCount(0);
+  for (const [field, value] of values) await expect((await nutritionInput(page, field))).toHaveValue(value);
   const archive = await saveAndExport(page);
   const meal = archive.data.meals[0];
   expect(meal.analyses!.at(-1)).toMatchObject({ model: 'local/manual-nutrition', analysis: {

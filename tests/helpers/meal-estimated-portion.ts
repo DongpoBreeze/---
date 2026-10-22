@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page } from '@playwright/test';
+import { nutritionInput } from './meal-nutrition';
 import { readFile } from 'node:fs/promises';
 import { createBackupArchive, parseBackupArchive } from '../../src/backup';
 import { emptyData, type MealRecord, type NutrientRanges, type Profile } from '../../src/types';
@@ -149,7 +150,7 @@ export function latestPortionAnalysis(meal: MealRecord) {
 export async function expectPortionTotals(page: Page, ranges: NutrientRanges | null) {
   for (const [key, , label] of portionNutrients) {
     const expected = ranges ? ranges[key].min === ranges[key].max ? String(ranges[key].min) : `${ranges[key].min}～${ranges[key].max}` : '';
-    await expect(page.getByLabel(label, { exact: true })).toHaveValue(expected);
+    await expect((await nutritionInput(page, label))).toHaveValue(expected);
   }
 }
 
@@ -159,7 +160,7 @@ export async function expectPortionFormula(page: Page, dishes: Array<{ grams: nu
   for (const [key, , label] of portionNutrients) {
     const min = dishes.reduce((total, dish) => total + dish.per100g[key].min * dish.grams / 100, 0);
     const max = dishes.reduce((total, dish) => total + dish.per100g[key].max * dish.grams / 100, 0);
-    const text = await page.getByLabel(label, { exact: true }).inputValue();
+    const text = await (await nutritionInput(page, label)).inputValue();
     expect(text, label).toMatch(/^\d+(?:\.\d+)?(?:～\d+(?:\.\d+)?)?$/);
     const [actualMin, actualMax = actualMin] = text.split('～').map(Number);
     const precision = key === 'calories' ? 1 : 0.1;
