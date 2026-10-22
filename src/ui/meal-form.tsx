@@ -264,7 +264,7 @@ export function MealForm({
     }
     if (!isAiConfigured()) {
       if (reviewedInput) setReviewError("请先连接 AI 服务以更新菜品营养，或自行填写每 100 g 四项营养后确认。");
-      else setPhotoStatus("请先在“我的 → AI 服务设置”中连接 AI；照片已保存。");
+      else setPhotoStatus("请先在“设置 → AI 服务设置”中连接 AI；照片已保存。");
       return;
     }
     const previousAnalysis = reviewedInput ?? snapshot.analysisDraft.confirmed?.analysis ?? latestAnalysis?.analysis;
@@ -656,7 +656,7 @@ export function MealForm({
                   void pick(true);
                 }}
               >
-                <Ionicons name="camera" size={18} color={color.onInk} />
+                <Ionicons name="camera" size={18} color={color.onMeal} />
                 <Text style={st.captureMainText}>拍照</Text>
               </Pressable>
               <Pressable
@@ -736,7 +736,7 @@ export function MealForm({
           placeholder="2026-10-10 12:30"
         />
         {recordDateText.length === 10 && !isTodayRecord && <View testID="meal-date-scope-hint" style={st.dateHintRow}>
-          <Text style={st.dateHintText}>记录日期为 {recordDateText}；保存后会出现在“记录”页，不计入今天（{today()}）的首页汇总。</Text>
+          <Text style={st.dateHintText}>记录日期为 {recordDateText}；保存后可在“我的 → 全部记录”查看，不计入今天（{today()}）的首页汇总。</Text>
           <Pressable accessibilityRole="button" accessibilityLabel="把记录时间改为现在" onPress={() => update({ occurredAt: localDateTime(new Date().toISOString()) })}
             style={({ pressed }) => [st.dateHintAction, pressed && base.pressed]}>
             <Text style={st.dateHintActionText}>改为现在</Text>
@@ -820,26 +820,26 @@ export function MealForm({
 
 const createStyles = ({ color, type }: ThemeTokens) => StyleSheet.create({
   capture: {
-    backgroundColor: color.mealTint, borderRadius: radius.block, padding: space.xl, borderWidth: 1, borderColor: color.mealBorder,
+    backgroundColor: color.mealTint, borderRadius: radius.block, padding: space.xl, borderWidth: 1, borderColor: color.mealBorder, borderTopWidth: 3, borderTopColor: color.meal,
     alignItems: "center", marginBottom: space.xl,
   },
   captureIcon: {
-    width: 56, height: 56, borderRadius: 28, backgroundColor: color.paper,
+    width: 52, height: 52, borderRadius: 26, backgroundColor: color.surface,
     alignItems: "center", justifyContent: "center", marginBottom: space.md,
   },
-  captureTitle: { ...type.title },
+  captureTitle: { ...type.heading, fontSize: 18, lineHeight: 24 },
   captureText: { ...type.bodySoft, textAlign: "center", marginTop: space.xs, maxWidth: 300 },
   captureRow: { flexDirection: "row", gap: space.sm, marginTop: space.lg, alignSelf: "stretch" },
   captureMain: {
-    flex: 1, minHeight: 50, borderRadius: radius.pill, backgroundColor: color.ink,
+    flex: 1.4, minHeight: 48, borderRadius: radius.pill, backgroundColor: color.meal,
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
   },
-  captureMainText: { color: color.onInk, fontSize: 15, fontWeight: "800" },
+  captureMainText: { color: color.onMeal, fontSize: 14.5, fontWeight: "800" },
   captureAlt: {
-    flex: 1, minHeight: 50, borderRadius: radius.pill, backgroundColor: color.surface, borderWidth: 1, borderColor: color.meal,
+    flex: 1, minHeight: 48, borderRadius: radius.pill, backgroundColor: "transparent", borderWidth: 1.5, borderColor: color.meal,
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
   },
-  captureAltText: { color: color.mealText, fontSize: 15, fontWeight: "800" },
+  captureAltText: { color: color.ink, fontSize: 14.5, fontWeight: "800" },
   photoTools: { flexDirection: "row", flexWrap: "wrap", columnGap: space.sm },
   photoPanel: {
     borderLeftWidth: 3, borderColor: color.meal, paddingLeft: space.md, marginBottom: space.xl,
@@ -850,7 +850,7 @@ const createStyles = ({ color, type }: ThemeTokens) => StyleSheet.create({
   photoText: { ...type.bodySoft, marginBottom: 4 },
   two: { flexDirection: "row", gap: space.md },
   manual: {
-    marginTop: space.sm, paddingTop: space.sm, borderTopWidth: StyleSheet.hairlineWidth, borderColor: color.lineStrong,
+    marginTop: space.sm, paddingTop: space.sm, borderTopWidth: 1, borderColor: color.line,
   },
   nutritionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.sm, marginBottom: space.xs },
   nutritionActions: { flexDirection: "row", alignItems: "center", gap: space.xs, flexShrink: 0 },
@@ -859,9 +859,9 @@ const createStyles = ({ color, type }: ThemeTokens) => StyleSheet.create({
   nutritionActionText: { ...type.small, color: color.mealText, fontWeight: "700" },
   nutritionHelp: { ...type.small, marginBottom: space.lg },
   nutritionSummary: { flexDirection: "row", flexWrap: "wrap", gap: space.sm, marginBottom: space.lg },
-  nutritionSummaryItem: { width: "48%", minWidth: 130, flexGrow: 1, borderRadius: radius.input, padding: space.md, backgroundColor: color.sunken },
-  nutritionSummaryLabel: { ...type.small, color: color.inkSoft },
-  nutritionSummaryValue: { ...type.title, color: color.ink, marginTop: 2 },
+  nutritionSummaryItem: { width: "48%", minWidth: 130, flexGrow: 1, borderRadius: 10, padding: space.md, backgroundColor: color.sunken },
+  nutritionSummaryLabel: { fontSize: 10.5, lineHeight: 14, fontWeight: "700", color: color.inkSoft },
+  nutritionSummaryValue: { ...type.title, ...type.mono, color: color.ink, marginTop: 4 },
   nutritionSummaryUnit: { ...type.small, color: color.inkSoft },
   nutritionSummaryRange: { ...type.small, color: color.inkFaint, marginTop: 2 },
   nutritionIncomplete: { ...type.small, color: color.danger, marginBottom: space.sm },

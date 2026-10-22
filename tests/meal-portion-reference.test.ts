@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { estimateMealPortion, hasIncompleteMealRecognition } from '../src/meal-portion-reference';
+import { applyEstimatedMealQuantities, buildMealReviewAnalysis, createMealReviewRows, updateMealReviewRow } from '../src/meal-review';
 import type { MealAnalysis, MealComponent, MealRecord, NutrientRange, NutrientRanges, Profile } from '../src/types';
 
 const nutrients = (min = 120, max = 160): NutrientRanges => ({
@@ -58,6 +59,54 @@ test('an absent valid weight uses a visible 60 kg general adult fallback even wi
     assert.deepEqual(result.dailyCalories, { min: 1500, max: 2100 });
     assert.deepEqual(result.mealCalories, { min: 525, max: 735 });
     assert.match(result.assumptions.join(' '), /尚无有效体重.*一般成人 60 kg/);
+  }
+});
+
+test('unknown age retains the existing adult portion arithmetic and adult sex or age do not personalize it', () => {
+  for (const profile of [{}, { weightKg: 70 }, { calorieTarget: 2000 }]) {
+    const previous = ready(profile);
+    assert.match(previous.assumptions.join(' '), /年龄未填写 · 成人参考/);
+    for (const ageYears of [18, 30, 64]) for (const sex of ['male', 'female'] as const) {
+      const current = ready({ ...profile, sex, ageYears });
+      assert.deepEqual(current.dailyCalories, previous.dailyCalories);
+      assert.deepEqual(current.totalGrams, previous.totalGrams);
+      assert.deepEqual(current.dishes, previous.dishes);
+      assert.match(current.assumptions.join(' '), /年龄仅用于判断适用范围.*公式未按年龄、性别/);
+    }
+  }
+});
+
+test('minor, older-adult and invalid age block adult portions before any target, body-weight or 60 kg fallback', () => {
+  for (const ageYears of [1, 17, 65, 120, 0, -1, 17.5, 121, NaN, Infinity, '18', null]) {
+    for (const facts of [{}, { weightKg: 70 }, { calorieTarget: 2000, weightKg: 70 }]) {
+      const profile = { ...facts, ageYears } as unknown as Profile;
+      const result = unavailable(profile, meal(), /未成年|老年|年龄/);
+      assert.equal(result.dailyCalories, null);
+      assert.equal(result.mealCalories, null);
+      assert.equal(result.weightKg, undefined);
+      assert.equal(result.basis, undefined);
+      assert.match(result.reason!, /逐菜填写食用量/);
+    }
+  }
+});
+
+test('inapplicable age never fills new dish quantities and leaves saved or manual quantities and local nutrition usable', () => {
+  const analysis = freezeDeep(meal([dish(), dish({ label: '原已填写菜', userQuantity: { amount: 125, unit: 'g', origin: 'user' } })], {
+    advice: '按实际情况填写食用量。', unresolved: [],
+  }));
+  const original = structuredClone(analysis);
+  for (const ageYears of [17, 65, NaN]) {
+    const rows = createMealReviewRows(analysis);
+    const blocked = applyEstimatedMealQuantities({ ageYears, calorieTarget: 2100 }, '午餐', analysis, rows);
+    assert.equal(blocked[0].quantity, '');
+    assert.equal(blocked[1].quantity, '125');
+    const filled = [updateMealReviewRow(blocked[0], { quantity: '100' }), blocked[1]];
+    const local = buildMealReviewAnalysis(analysis, filled);
+    assert.equal(local.components![0].userQuantity!.amount, 100);
+    assert.equal(local.components![0].userQuantity!.origin, 'user');
+    assert.equal(local.components![1].userQuantity!.amount, 125);
+    assert.deepEqual(local.calories, { min: 270, max: 360 });
+    assert.deepEqual(analysis, original);
   }
 });
 

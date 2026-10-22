@@ -75,7 +75,7 @@ test('生产餐食入口在识别页本地计算数量，确认后回填精简�
   await expect(page.getByTestId('current-meal-analysis').getByText(/旧参考已失效/)).toHaveCount(0);
   expect(provider.responses()).toHaveLength(2);
   await page.getByRole('dialog').getByLabel('关闭', { exact: true }).click();
-  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('tab', { name: '设置', exact: true }).click();
   const downloadEvent = page.waitForEvent('download');
   await page.getByText('导出完整备份', { exact: true }).click();
   const archive = await parseBackupArchive(new Uint8Array(await readFile((await (await downloadEvent).path())!)));
@@ -142,7 +142,7 @@ test('新餐食估计数量可清空并切换家用份数，多道菜连续输�
   await page.getByTestId('current-meal-analysis').scrollIntoViewIfNeeded();
   await page.screenshot({ path: testInfo.outputPath('saved-dish-subtotal.png'), fullPage: true });
   await page.getByRole('dialog').getByLabel('关闭', { exact: true }).click();
-  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('tab', { name: '设置', exact: true }).click();
   const downloadEvent = page.waitForEvent('download');
   await page.getByText('导出完整备份', { exact: true }).click();
   const archive = await parseBackupArchive(new Uint8Array(await readFile((await (await downloadEvent).path())!)));

@@ -503,3 +503,38 @@ test('local snapshots preserve multi-photo arrays atomically and reject corrupt 
   await assert.rejects(repository.commit({ storageVersion: 1, data: f.data, drafts: { 'meal-new': { beforeImageUris: [null] } } }), isCode('invalid-draft'));
   assert.equal(values.get(DATA_KEY), committed);
 });
+
+test('multi-exercise sessions and workout templates round-trip, merge idempotently and reject conflicts', async () => {
+  const data = fixture();
+  const pushDay = { id: 'workout-push', name: '推日', exercises: [
+    { name: '卧推', setCount: 3, weightUnit: 'kg' as const, weightBasis: 'total' as const },
+    { name: '肩推', setCount: 2, weightUnit: 'lb' as const, weightBasis: 'per-hand' as const },
+  ] };
+  data.workoutTemplates = [pushDay];
+  const bench = [{ reps: 8, weight: 40, unit: 'kg' as const }, { reps: 8, weight: 40, unit: 'kg' as const }];
+  const press = [{ reps: 10, weight: 15, unit: 'lb' as const }];
+  data.trainings.push({ id: 'training-2', type: 'training', createdAt: now, occurredAt: now, exercise: '推日', mode: 'strength',
+    exercises: [{ name: '卧推', sets: bench }, { name: '肩推', sets: press }], sets: [...bench, ...press],
+    note: '', pain: 'unknown', controlled: 'unknown', rir: 'unknown', weightBasis: 'total' });
+  const parsed = await parseBackupArchive(await createBackupArchive(data, media, now));
+  assert.deepEqual(parsed.data.workoutTemplates, [pushDay]);
+  assert.deepEqual(parsed.data.trainings[1].exercises?.map((item) => [item.name, item.sets.length]), [['卧推', 2], ['肩推', 1]]);
+  assert.equal(parsed.data.trainings[1].sets.length, 3);
+
+  const merged = mergeBackupData(fixture(), data);
+  assert.deepEqual(merged.workoutTemplates, [pushDay]);
+  assert.equal(canonicalJson(mergeBackupData(merged, data)), canonicalJson(merged));
+  const renamedId = { ...data, workoutTemplates: [{ ...pushDay, id: 'workout-push-other-device' }] };
+  assert.deepEqual(mergeBackupData(merged, renamedId).workoutTemplates, [pushDay], 'same name and content merges by name');
+  const changed = { ...data, workoutTemplates: [{ ...pushDay, exercises: [pushDay.exercises[0]] }] };
+  assert.throws(() => mergeBackupData(merged, changed), isCode('import-conflict'));
+});
+
+test('workout templates reject duplicate names, empty exercise lists and invalid set counts', () => {
+  const template = { id: 'workout-legs', name: '腿日', exercises: [{ name: '深蹲', setCount: 3, weightUnit: 'kg' as const, weightBasis: 'total' as const }] };
+  const withTemplates = (workoutTemplates: unknown[]) => ({ ...fixture(), workoutTemplates }) as AppData;
+  assert.deepEqual(validateAppData(withTemplates([template])).workoutTemplates, [template]);
+  assert.throws(() => validateAppData(withTemplates([template, { ...template, id: 'workout-legs-2', name: ' 腿日 ' }])), isCode('duplicate-id'));
+  assert.throws(() => validateAppData(withTemplates([{ ...template, exercises: [] }])), isCode('invalid-data'));
+  assert.throws(() => validateAppData(withTemplates([{ ...template, exercises: [{ ...template.exercises[0], setCount: 0 }] }])), isCode('invalid-data'));
+});

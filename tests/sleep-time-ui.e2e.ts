@@ -91,7 +91,8 @@ test('sleep slider controls both endpoints, updates local times and saves withou
   expect(records[0].awakeMinutes).toBeNull();
   expect(records[0].quality).toBeUndefined();
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.getByRole('tab', { name: /记录$/ }).click();
+  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('button', { name: '全部记录', exact: true }).click();
   await page.getByText('时长未知', { exact: true }).click();
   await expect(fell).toHaveValue(`${formattedNext} 22:15`);
   await expect(woke).toHaveValue(`${formattedWokeDate} 09:00`);

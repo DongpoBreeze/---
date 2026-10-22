@@ -1,10 +1,58 @@
 # Android phone test build
 
-Updated: 2026-10-21. This file identifies built APKs and their observed device scope. Current-source features and other verification records are indexed in [the documentation guide](README.md).
+Updated: 2026-10-22. This file identifies built APKs and their observed device scope. Current-source features and other verification records are indexed in [the documentation guide](README.md).
 
-## Latest integrated build (2026-10-19)
+## Latest integrated build (2026-10-22)
 
-This is the latest **built** package, frozen on 2026-10-19. It includes the initial design A integration, custom effort and native fixes. It does not include the 2026-10-20/21 independent recognition page, later meal-form changes, dark mode, multiple before-meal photos, Web settings persistence, default portions or the current 120-second waiting UI. Those changes are in the working tree and require a new build and device validation.
+This standalone test APK includes BMI classification and its current/target scale, stage weight advice and adjustable daily-calorie starting recommendations. It preserves the user's latest app name “有节” and icon assets, together with the current local UI changes. It is based on commit `2bffb6f` plus the uncommitted working tree; it has not been pushed to GitHub.
+
+- APK: [health-compass-0.1.3-code4-arm64-v8a-x86_64.apk](../artifacts/android-package-20261022-140633/health-compass-0.1.3-code4-arm64-v8a-x86_64.apk), 54,021,275 bytes.
+- SHA-256: `1395ce7bbd09a588cb5de09bbbfe078c45a2a530159db24260cfafd4266e6cd9`.
+- Package: `com.healthcompass.app`, versionName `0.1.3`, versionCode `4`, minSdk `24`, targetSdk `36`, ABIs `arm64-v8a` and `x86_64`. Release is nondebuggable and disallows cleartext traffic.
+- APK Signature Scheme v2 verified. Signing-certificate SHA-256 is `fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c`, matching the previous test APK. The existing test signing identity supports compatible updates; it is not a store-release key.
+- The fresh embedded Hermes bundle matches the generated output. Source-map contents match all 21 checked runtime source files, including the shared boundary-safe BMI formatter. The native label, embedded Expo config and generated launcher/adaptive/monochrome icon resources match the current app config and assets. The icon check did not alter the user's source assets.
+- All 1,540 APK entries and extracted Hermes strings were checked for common provider-key patterns, known local development endpoints, compiled AI environment names and private configuration files; none matched. Native SecureStore backup exclusions are present. Actual user credentials were not read for the scan, so this does not claim comparison against every local secret.
+- Package evidence: [verification.json](../artifacts/android-package-20261022-140633/verification.json). Name/icon evidence: [name-icon-verification.json](../artifacts/android-package-20261022-140633/name-icon-verification.json).
+- The body-reference Web flows passed 6/6 in their first full run. After a display-only BMI boundary fix, the targeted unit tests passed 16/16 and mobile/desktop layout tests passed 2/2. See [body-reference acceptance](development.md#profile-health); these Web checks do not establish native device behavior.
+- The APK passed an isolated, offline Android 15/API 35 x86_64 smoke test. At 170 cm / 65 kg with “保持健康”, the live result, saved result and cold-restarted result each showed BMI 22.5 / 正常, a 65.0 kg stage target and 1950 kcal/day. Reopened inputs and automatic recommendation mode persisted; cold launch took 486 ms and no fatal runtime error was observed. No credentials were read or entered, and no AI request was sent. See [native verification](../artifacts/android-package-20261022-140633/native-verification.json). Earlier automation failures remain in `native-attempt1/2/3`; the successful test used its isolated emulator, which was shut down afterward.
+
+This package was completed before the subsequent screenshot-inspired BMI layout revision and optional sex/age fields. Those later changes are being verified on Web only at the user's request; the APK above does not include them.
+
+Physical arm64 Android devices, current native real AI, camera capture, full native backup/restore and iOS remain outside this packaging acceptance. A first-time installation requires configuring AI on the phone; browser configuration and health records are not embedded in the APK.
+
+## Personal data isolation recheck (2026-10-22)
+
+The exact 0.1.3 / code 4 APK above was retained without rebuilding; its SHA-256 remains `1395ce7bbd09a588cb5de09bbbfe078c45a2a530159db24260cfafd4266e6cd9`. No embedded saved personal health data, meal media, profile values or private AI configuration was found.
+
+- The actual APK's 1,540 entries passed the data scan. All 392 raster images were traced to generated branding/splash resources (25) or resolved build dependencies (367); missing precompiled AAR origins were checked against the resolved dependency images, with Nine-patch guide borders and transparent RGB normalization explicitly recorded. No personal snapshot, database, nested backup ZIP, video or private configuration payload was found.
+- The embedded Hermes bundle and its build-bound source map confirm empty initial profile/health records and a null AI configuration, with no fixed height/weight or inline user media. Public food-reference data and the public default API address remain application resources. Actual user secrets and browser health stores were not read for exact-value comparison.
+- A separate offline Android 15 / API 35 x86_64 installation passed the required first-launch checks. Before installation, the package, retained uninstalled package and app data directory were absent, and device backup restore was disabled. The installed `base.apk` hash matched the delivered file. Meals/training/sleep were 0/0/0; height, weight, goal and calorie target were unset; Key was empty, model and effort unconfigured, with no SecureStore configuration or saved user media. The URL field alone retained the public default. No AI or model-discovery requests were made.
+- First launch generates local summaries for empty inputs. These runtime derived summaries are not embedded personal history; the initial source state contains no saved summaries. Replacing an existing installation can retain that phone's own data and does not imply that the APK contains the computer's records.
+
+Evidence: [scoped acceptance](../artifacts/apk-data-isolation-20261022/verification.json), [readable report](../artifacts/apk-data-isolation-20261022/report.md), [static audit](../artifacts/apk-data-isolation-20261022/apk-data-audit.json) and [original native run](../artifacts/apk-data-isolation-20261022/fresh-install-verification.json). The native run's `freshInstallPassed` is true; its original overall `passed:false` remains because a separate, optional replacement-install UI step timed out before saving synthetic profile data. That extra step is not claimed as passed. Earlier helper failures and the restored emulator bootstrap image are documented in the readable report; the persistent original qcow2 was not changed. The emulator was shut down, and no phone or browser store was cleared.
+
+This data audit does not add the later Web-only BMI layout or optional sex/age features to the unchanged APK, nor extend its physical-device, iOS or full-function verification scope.
+
+## Earlier UI build (2026-10-22, 0.1.2)
+
+This standalone test APK includes the current local UI changes on top of commit `2bffb6f`, together with the independent meal review screen, nutrition and quantity confirmation, multiple before-meal photos, appearance settings, persistent AI configuration, sleep time selection and exercise templates. The APK includes the local UI changes even though those changes are not yet committed to GitHub.
+
+- APK: [health-compass-arm64-v8a-x86_64-release-20261022-130458.apk](../artifacts/health-compass-arm64-v8a-x86_64-release-20261022-130458.apk), 54,029,845 bytes.
+- SHA-256: `500814b1c021dda2c17425fe4bc389b677682b376deb349446171258c1b9e61a`.
+- Package: `com.healthcompass.app`, versionName `0.1.2`, versionCode `3`, targetSdk `36`; supports arm64-v8a phones and x86_64 emulators, Android 7.0/API 24 and newer. Release is nondebuggable and disallows cleartext traffic.
+- APK Signature Scheme v2 verified. Signing-certificate SHA-256 is `fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c`, matching the previous test APK. This is the existing test signing identity, not a store-release key.
+- In an isolated x86_64 emulator, installation over 0.1.1 succeeded and the new UI cold-started successfully (`am start -W`: 727 ms). A manually saved meal from the previous APK remained readable after the upgrade. This checks one seeded record, not all historical user data.
+- A new manual meal retained 500 kcal, 20 g protein, 60 g carbs and 15 g fat after process restart and reopening. Training and sleep forms opened, and startup in system dark mode completed without a fatal runtime error. The emulator had no active default network. Full native training/sleep save workflows were not exercised.
+- All 1,528 APK entries and extracted Hermes strings were checked against known local credentials, developer endpoints, compiled AI environment names and common provider-key patterns; no matches were found. SecureStore and backup exclusions are present. The embedded bundle matches the generated output, and source-map contents match all 16 modified UI files plus the four checked runtime modules.
+- No real AI request or personal-device installation was performed. First-time installation requires setting up AI on the phone; browser configuration and local health records are not embedded in the package.
+- Current-client tests passed **304/304**. Current Web confirmation/save/reopen flows passed **6/6** across mobile and desktop viewports (meal, sleep and training). An additional legacy meal test failed in both viewports because it expects always-visible nutrition inputs; the current UI requires clicking “修改营养值”. These two failures remain recorded and are not counted as passes. This was not a full Web suite run.
+- Build, signature and source/package evidence: [package verification](../artifacts/android-package-20261022-050456/verification.json). Native installation, screenshots and limitations: [native verification](../artifacts/android-package-20261022-050456/native-verification.json). Web results and retained failure traces: [Web verification](../artifacts/android-package-web-20261022/verification.json).
+
+Physical arm64 Android devices, camera capture, current native AI analysis, full native backup/restore and iOS remain outside this packaging acceptance. Historical real-provider and backup checks below belong to their original APKs.
+
+## Previous integrated build (2026-10-19)
+
+This historical package was frozen on 2026-10-19. It includes the initial design A integration, custom effort and native fixes. It does not include the 2026-10-20/21 independent recognition page, later meal-form changes, dark mode, multiple before-meal photos, Web settings persistence, default portions or the current 120-second waiting UI. Those updates are now included in the 2026-10-22 package above; its native verification scope is recorded separately.
 
 - APK: [health-compass-arm64-v8a-x86_64-release-20261019-171837.apk](../artifacts/health-compass-arm64-v8a-x86_64-release-20261019-171837.apk), 53,890,469 bytes.
 - SHA-256: `22aa4e8d51ed79e322d57db5640d6f9355a1b63019431fcac492c8fb1dab866c`.

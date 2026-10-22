@@ -62,10 +62,11 @@ test('offline records and original photo survive restart, export and restore', a
   await expect(page.getByLabel(/入睡（/)).toHaveCount(0);
   await expect(page.getByText('记饮食', { exact: true })).toBeVisible();
   await page.reload();
-  await page.getByRole('tab', { name: /记录$/ }).click();
+  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('button', { name: '全部记录', exact: true }).click();
   await expect(page.getByText('测试午餐', { exact: true })).toBeVisible();
   await page.screenshot({ path: `artifacts/${testInfo.project.name}-records.png`, fullPage: true });
-  await page.getByRole('tab', { name: /我的$/ }).click();
+  await page.getByRole('tab', { name: '设置', exact: true }).click();
   const downloadEvent = page.waitForEvent('download');
   await page.getByText('导出完整备份', { exact: true }).click();
   const download = await downloadEvent;
@@ -81,9 +82,10 @@ test('offline records and original photo survive restart, export and restore', a
   expect(Buffer.from(backup.media.find((item) => item.kind === 'image')!.bytes)).toEqual(photo);
   expect(Buffer.from(backup.media.find((item) => item.kind === 'video')!.bytes)).toEqual(video);
   await page.getByText('删除本机数据', { exact: true }).click();
-  await page.getByRole('tab', { name: /记录$/ }).click();
+  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('button', { name: '全部记录', exact: true }).click();
   await expect(page.getByText('测试午餐', { exact: true })).toHaveCount(0);
-  await page.getByRole('tab', { name: /我的$/ }).click();
+  await page.getByRole('tab', { name: '设置', exact: true }).click();
   for (let i = 0; i < 2; i++) {
     const restored = page.waitForEvent('dialog', { predicate: (dialog) => dialog.message().includes('恢复完成') });
     const picker = page.waitForEvent('filechooser');
@@ -91,17 +93,19 @@ test('offline records and original photo survive restart, export and restore', a
     await (await picker).setFiles({ name: 'backup.zip', mimeType: 'application/zip', buffer: await readFile(zipPath!) });
     await restored;
   }
-  await page.getByRole('tab', { name: /记录$/ }).click();
+  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('button', { name: '全部记录', exact: true }).click();
   await expect(page.getByText('测试午餐', { exact: true })).toHaveCount(1);
   await page.reload();
-  await page.getByRole('tab', { name: /记录$/ }).click();
+  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('button', { name: '全部记录', exact: true }).click();
   await expect(page.getByText('测试午餐', { exact: true })).toBeVisible();
   await page.getByText('快走测试', { exact: true }).click();
   await expect.poll(() => page.locator('video').evaluate((element: HTMLVideoElement) => element.readyState)).toBeGreaterThanOrEqual(2);
   await page.getByLabel('关闭', { exact: true }).click();
   await page.getByLabel('删除记录', { exact: true }).first().click();
   await expect(page.getByText('测试午餐', { exact: true })).toHaveCount(0);
-  await page.getByRole('tab', { name: /我的$/ }).click();
+  await page.getByRole('tab', { name: '设置', exact: true }).click();
   const afterDeleteDownload = page.waitForEvent('download');
   await page.getByText('导出完整备份', { exact: true }).click();
   const afterDelete = await afterDeleteDownload;

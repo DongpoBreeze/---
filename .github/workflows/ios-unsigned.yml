@@ -1,0 +1,117 @@
+name: iOS unsigned device build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'codex/ios-unsigned-*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-unsigned-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 75
+    env:
+      EXPO_NO_DOTENV: '1'
+      EXPO_NO_CLIENT_ENV_VARS: '1'
+      EXPO_NO_TELEMETRY: '1'
+    steps:
+      - name: Bootstrap only the source policy
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /scripts/ios-source-policy.mjs
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.18.0'
+
+      - name: Read the reviewed checkout paths
+        id: source-policy
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE' >> "$GITHUB_OUTPUT"
+          import { IOS_SOURCE_FILES } from './scripts/ios-source-policy.mjs';
+          console.log('paths<<HEALTH_COMPASS_IOS_SOURCE_PATHS');
+          for (const file of IOS_SOURCE_FILES) console.log('/' + file);
+          console.log('HEALTH_COMPASS_IOS_SOURCE_PATHS');
+          NODE
+
+      # A partial clone may need to fetch blobs while expanding sparse checkout.
+      # Keep that operation inside checkout's authenticated action lifecycle;
+      # credentials are removed before the staging/build scripts run.
+      - name: Checkout only reviewed client files
+        uses: actions/checkout@v4
+        with:
+          path: reviewed-client
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: ${{ steps.source-policy.outputs.paths }}
+
+      - name: Stage the isolated client source allowlist
+        working-directory: reviewed-client
+        shell: bash
+        run: node scripts/ios-source-policy.mjs --stage "$RUNNER_TEMP/health-compass-ios-client"
+
+      - name: Install locked client dependencies
+        working-directory: ${{ runner.temp }}/health-compass-ios-client
+        run: npm ci --no-audit --no-fund
+
+      - name: Check the client and privacy source policy
+        working-directory: ${{ runner.temp }}/health-compass-ios-client
+        run: |
+          npm run ios:check
+          npm run test:ios
+          npm run typecheck
+
+      # The locked ExpoModulesJSI and macros Package.swift files require Swift
+      # tools 6.2; the image's default Xcode 16.4 ships Swift 6.1.
+      - name: Select Xcode 26.3 for the locked Swift packages
+        shell: bash
+        run: |
+          xcode_developer=/Applications/Xcode_26.3.app/Contents/Developer
+          if [[ ! -d "$xcode_developer" ]]; then
+            echo "Required Xcode 26.3 is missing from this runner image."
+            exit 1
+          fi
+          sudo xcode-select --switch "$xcode_developer"
+          xcode-select --print-path
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+          xcrun swift --version
+
+      - name: Compile the Release arm64 app without signing
+        working-directory: ${{ runner.temp }}/health-compass-ios-client
+        shell: bash
+        run: node scripts/ios-unsigned.mjs --output "$RUNNER_TEMP/ios-unsigned-build"
+
+      - name: Upload the unsigned IPA and its manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: youjie-ios-arm64-UNSIGNED
+          if-no-files-found: error
+          retention-days: 7
+          path: |
+            ${{ runner.temp }}/ios-unsigned-build/*-UNSIGNED.ipa
+            ${{ runner.temp }}/ios-unsigned-build/*-UNSIGNED.ipa.sha256
+            ${{ runner.temp }}/ios-unsigned-build/unsigned-ipa-manifest.json
+
+      - name: Preserve build evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: youjie-ios-build-evidence
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
+            ${{ runner.temp }}/ios-unsigned-build/build-summary.json
+            ${{ runner.temp }}/ios-unsigned-build/logs/*.log

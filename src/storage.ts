@@ -306,7 +306,7 @@ export async function exportBackup(data: AppData): Promise<string> {
   await ensureCacheDirectory();
   const uri = `${CACHE_DIR}${name}`;
   await FileSystem.writeAsStringAsync(uri, bytesToBase64(archive), { encoding: FileSystem.EncodingType.Base64 });
-  if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri, { mimeType: 'application/zip', dialogTitle: '导出健康罗盘备份' });
+  if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri, { mimeType: 'application/zip', dialogTitle: '导出有节备份' });
   return uri;
 }
 

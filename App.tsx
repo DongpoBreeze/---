@@ -6,13 +6,18 @@ import React, {
   useState,
 } from "react";
 import {
+  Animated,
   AppState,
+  BackHandler,
+  Easing,
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
   useWindowDimensions,
   View,
+  type ViewStyle,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
@@ -21,12 +26,12 @@ import {
   emptyData,
   type AppData,
   type DailySummary,
-  type ExerciseTemplate,
   type MealAnalysis,
   type MealRecord,
   type Profile,
   type SleepRecord,
   type TrainingRecord,
+  type WorkoutTemplate,
 } from "./src/types";
 import {
   clearData,
@@ -51,11 +56,13 @@ import { confirmAction, errorText, notify, today } from "./src/ui/format";
 import { space, type ThemeTokens } from "./src/ui/theme";
 import { ThemeProvider, useTheme, useThemedStyles } from "./src/ui/theme-provider";
 import { Banner, SmallButton } from "./src/ui/components";
+import { useSpring } from "./src/ui/motion";
 import { AnalysisWaitTime } from "./src/ui/analysis-wait-time";
 import { Today } from "./src/ui/today";
 import { Records } from "./src/ui/records";
 import { Trends } from "./src/ui/trends";
 import { Me } from "./src/ui/me";
+import { Settings } from "./src/ui/settings-page";
 import { MealForm } from "./src/ui/meal-form";
 import { TrainingForm } from "./src/ui/training-form";
 import { SleepForm } from "./src/ui/sleep-form";
@@ -80,7 +87,50 @@ function AppShell() {
   const dataRef = useRef(data);
   const queue = useRef<Promise<unknown>>(Promise.resolve());
   const [ready, setReady] = useState(false);
-  const [tab, setTab] = useState<Tab>("today");
+  const [tab, setTabState] = useState<Tab>("today");
+  // Records is a sub-page pushed over a tab (normally 我的); the tab bar keeps the tab it came from.
+  const [recordsOpen, setRecordsOpen] = useState(false);
+  const setTab = useCallback((next: Tab) => {
+    setRecordsOpen(false);
+    setTabState(next);
+  }, []);
+  const openRecords = useCallback(() => setRecordsOpen(true), []);
+  const closeRecords = useCallback(() => setRecordsOpen(false), []);
+  useEffect(() => {
+    if (!recordsOpen || Platform.OS !== "android") return;
+    // Hardware back pops the records sub-page before it leaves the app; open sheets handle their own back.
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      setRecordsOpen(false);
+      return true;
+    });
+    return () => sub.remove();
+  }, [recordsOpen]);
+  const enter = useRef(new Animated.Value(1)).current;
+  const firstTab = useRef(true);
+  const tabIndex = TABS.indexOf(tab);
+  const lastTabIndex = useRef(tabIndex);
+  const lastRecordsOpen = useRef(recordsOpen);
+  const [tabDirection, setTabDirection] = useState(1);
+  useEffect(() => {
+    if (firstTab.current) { firstTab.current = false; return; }
+    // Every page remounts at its scroll top. Tabs slide in from the side the user moved towards;
+    // the records sub-page pushes in from the right and pops back to the left.
+    if (lastRecordsOpen.current !== recordsOpen) setTabDirection(recordsOpen ? 1 : -1);
+    else setTabDirection(tabIndex >= lastTabIndex.current ? 1 : -1);
+    lastTabIndex.current = tabIndex;
+    lastRecordsOpen.current = recordsOpen;
+    enter.setValue(0);
+    const animation = Animated.timing(enter, {
+      toValue: 1,
+      duration: 280,
+      easing: Easing.bezier(0.2, 0.8, 0.2, 1),
+      useNativeDriver: Platform.OS !== "web",
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [tab, tabIndex, recordsOpen, enter]);
+  const [navWidth, setNavWidth] = useState(0);
+  const navOffset = useSpring(tabIndex);
   const [modal, setModal] = useState<ModalKind>(null);
   const [formSession, setFormSession] = useState<FormSession | null>(null);
   const sessionRef = useRef<FormSession | null>(null);
@@ -103,13 +153,13 @@ function AppShell() {
   const [readFailure, setReadFailure] = useState(false);
   const aiSettingsIssue = !aiSettingsReady
     ? "正在读取本机 AI 配置，请稍后重试。"
-    : aiSettingsError ? "AI 配置读取失败，请在“我的 → AI 服务设置”中重试读取。" : "";
+    : aiSettingsError ? "AI 配置读取失败，请在“设置 → AI 服务设置”中重试读取。" : "";
   const contentStyle = useMemo(
     () => [
       styles.content,
-      { maxWidth: Math.min(width, tab === "today" ? 430 : 760), paddingBottom: 104 + insets.bottom },
+      { maxWidth: Math.min(width, tab === "today" && !recordsOpen ? 430 : 760), paddingBottom: 110 + insets.bottom },
     ],
-    [width, insets.bottom, tab, styles.content],
+    [width, insets.bottom, tab, recordsOpen, styles.content],
   );
   useEffect(() => {
     let live = true;
@@ -307,8 +357,8 @@ function AppShell() {
     if (saved) {
       const date = recordLocalDate(saved);
       if (date !== today()) {
-        setTab("records");
-        setMessage(`已保存到记录页：${saved.foodName}（${date}）。首页汇总当前显示今天 ${today()} 的数据。`);
+        openRecords();
+        setMessage(`已保存到全部记录：${saved.foodName}（${date}）。首页汇总当前显示今天 ${today()} 的数据。`);
       } else setMessage(`已保存：${saved.foodName}；今日饮食汇总已更新。`);
     }
   };
@@ -346,24 +396,25 @@ function AppShell() {
       };
     });
   };
-  const saveTrainingTemplate = async (
-    template: Omit<ExerciseTemplate, "id">,
+  const saveWorkoutTemplate = async (
+    template: Omit<WorkoutTemplate, "id">,
     session: FormSession,
   ) => {
     await commit((current) => {
       requireSession(session);
-      const templates = current.exerciseTemplates ?? [];
+      const templates = current.workoutTemplates ?? [];
       const key = template.name.trim().toLocaleLowerCase();
       const index = templates.findIndex((item) => item.name.trim().toLocaleLowerCase() === key);
-      const saved: ExerciseTemplate = {
+      const saved: WorkoutTemplate = {
         ...template,
         name: template.name.trim(),
+        exercises: template.exercises.map((item) => ({ ...item, name: item.name.trim() })),
         id: index < 0 ? uid() : templates[index].id,
       };
-      const exerciseTemplates = index < 0
+      const workoutTemplates = index < 0
         ? [...templates, saved]
         : templates.map((item, itemIndex) => itemIndex === index ? saved : item);
-      return { ...current, exerciseTemplates };
+      return { ...current, workoutTemplates };
     }, false);
   };
   const saveSleep = async (
@@ -449,7 +500,7 @@ function AppShell() {
     if (signal.aborted) throw new Error("分析已取消，照片已保留。");
     if (aiController.current) throw new Error("已有分析正在进行，请等待或取消当前请求。");
     if (aiSettingsIssue) throw new Error(aiSettingsIssue);
-    if (!isAiConfigured()) throw new Error("请先在“我的 → AI 服务设置”中连接 AI。");
+    if (!isAiConfigured()) throw new Error("请先在“设置 → AI 服务设置”中连接 AI。");
     const controller = new AbortController();
     const requestEpoch = epoch.current;
     const settingsVersion = getAiSettingsVersion();
@@ -696,9 +747,9 @@ function AppShell() {
     );
   return (
     <SafeAreaView style={styles.root} edges={["top"]}>
-      {Boolean(appearanceError) && tab !== "me" && (
+      {Boolean(appearanceError) && (tab !== "settings" || recordsOpen) && (
         <Banner text={appearanceError} danger action="外观设置"
-          onAction={() => setTab("me")} onClose={() => setTab("me")} />
+          onAction={() => setTab("settings")} onClose={() => setTab("settings")} />
       )}
       {Boolean(error) && (
         <Banner text={error} danger onClose={() => setError("")} />
@@ -721,6 +772,23 @@ function AppShell() {
       {Boolean(storageWarning) && (
         <Banner text={storageWarning} onClose={() => setStorageWarning("")} />
       )}
+      <Animated.View
+        style={[styles.page, {
+          opacity: enter,
+          transform: [{ translateX: enter.interpolate({ inputRange: [0, 1], outputRange: [tabDirection * 24, 0] }) }],
+        }]}
+      >
+      {recordsOpen ? (
+        <Records
+          data={data}
+          contentStyle={contentStyle}
+          onEdit={open}
+          onDelete={deleteOne}
+          onAi={runMeal}
+          onBack={closeRecords}
+          backLabel={TAB_LABELS[tab]}
+        />
+      ) : <>
       {tab === "today" && (
         <Today
           data={data}
@@ -729,15 +797,7 @@ function AppShell() {
           onEdit={open}
           onAi={askSummary}
           onProfile={() => open("profile")}
-        />
-      )}
-      {tab === "records" && (
-        <Records
-          data={data}
-          contentStyle={contentStyle}
-          onEdit={open}
-          onDelete={deleteOne}
-          onAi={runMeal}
+          onAllRecords={openRecords}
         />
       )}
       {tab === "trends" && <Trends data={data} contentStyle={contentStyle} />}
@@ -746,6 +806,13 @@ function AppShell() {
           data={data}
           contentStyle={contentStyle}
           onProfile={() => open("profile")}
+          onRecords={openRecords}
+        />
+      )}
+      {tab === "settings" && (
+        <Settings
+          data={data}
+          contentStyle={contentStyle}
           onAiSettings={() => {
             if (!aiSettingsReady) return;
             if (aiSettingsError) setAiSettingsLoadAttempt((attempt) => attempt + 1);
@@ -761,9 +828,21 @@ function AppShell() {
           onDelete={deleteAll}
         />
       )}
-      <View style={[styles.navWrap, { paddingBottom: Math.max(insets.bottom, space.md) }]} pointerEvents="box-none">
-        <View style={styles.nav} accessibilityRole="tablist">
-          {(["today", "records", "trends", "me"] as Tab[]).map((item) => (
+      </>}
+      </Animated.View>
+      <View style={[styles.fade, { height: 110 + insets.bottom }]} pointerEvents="none" />
+      <View style={[styles.navWrap, { bottom: 18 + insets.bottom }]} pointerEvents="box-none">
+        <View style={styles.nav} accessibilityRole="tablist" onLayout={(event) => setNavWidth(event.nativeEvent.layout.width)}>
+          {navWidth > 0 && (
+            <Animated.View
+              pointerEvents="none"
+              style={[styles.navIndicator, {
+                width: (navWidth - NAV_PAD * 2) / TABS.length,
+                transform: [{ translateX: navOffset.interpolate({ inputRange: [0, 1], outputRange: [0, (navWidth - NAV_PAD * 2) / TABS.length] }) }],
+              }]}
+            />
+          )}
+          {TABS.map((item) => (
             <NavItem
               key={item}
               tab={item}
@@ -814,10 +893,11 @@ function AppShell() {
             }
             draftKey={editId ? `training-${editId}` : "training-new"}
             history={data.trainings}
+            workoutTemplates={data.workoutTemplates ?? []}
             exerciseTemplates={data.exerciseTemplates ?? []}
             onClose={() => close(formSession)}
             onSave={(draft) => saveTraining(draft, formSession, editId)}
-            onSaveTemplate={(template) => saveTrainingTemplate(template, formSession)}
+            onSaveTemplate={(template) => saveWorkoutTemplate(template, formSession)}
           />
         )}
         {modal === "sleep" && formSession && (
@@ -862,6 +942,10 @@ function AppShell() {
 }
 
 
+const TABS: Tab[] = ["today", "trends", "me", "settings"];
+const TAB_LABELS: Record<Tab, string> = { today: "今天", trends: "趋势", me: "我的", settings: "设置" };
+const NAV_PAD = 6;
+
 function NavItem({
   tab,
   active,
@@ -875,29 +959,31 @@ function NavItem({
   const styles = useThemedStyles(createStyles);
   const item = (
     {
-      today: ["sunny", "sunny-outline", "今天"],
-      records: ["list", "list-outline", "记录"],
+      today: ["today", "today-outline", "今天"],
       trends: ["stats-chart", "stats-chart-outline", "趋势"],
       me: ["person", "person-outline", "我的"],
+      settings: ["settings", "settings-outline", "设置"],
     } as const
   )[tab];
   return (
     <Pressable
       onPress={onPress}
-      style={[styles.navItem, active && styles.navItemOn]}
+      style={({ pressed }) => [styles.navItem, pressed && !active && { opacity: 0.6 }]}
       accessibilityRole="tab"
       accessibilityLabel={item[2]}
       accessibilityState={{ selected: active }}
     >
-      <Ionicons name={active ? item[0] : item[1]} size={20} color={active ? color.onInk : color.inkSoft} />
+      <Ionicons name={active ? item[0] : item[1]} size={18} color={active ? color.paper : color.inkFaint} />
       <Text style={[styles.navLabel, active && styles.navActive]}>{item[2]}</Text>
     </Pressable>
   );
 }
 
-function createStyles({ color, type, shadow }: ThemeTokens) {
+function createStyles({ color, type }: ThemeTokens) {
   return StyleSheet.create({
-  root: { flex: 1, backgroundColor: color.paper },
+  // Clip the tab slide-in offset so the page never scrolls sideways mid-transition.
+  root: { flex: 1, backgroundColor: color.paper, overflow: "hidden" },
+  page: { flex: 1 },
   loading: {
     flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: color.paper, padding: space.xl,
   },
@@ -905,22 +991,30 @@ function createStyles({ color, type, shadow }: ThemeTokens) {
   content: {
     width: "100%",
     alignSelf: "center",
-    paddingHorizontal: space.lg + 4,
-    paddingTop: space.lg + 4,
+    paddingHorizontal: 18,
+    paddingTop: space.xl,
   },
+  fade: {
+    position: "absolute", left: 0, right: 0, bottom: 0,
+    ...(Platform.OS === "web"
+      ? { backgroundImage: `linear-gradient(to bottom, transparent, ${color.paper} 55%)` }
+      : { backgroundColor: "transparent" }),
+  } as ViewStyle,
   navWrap: {
-    position: "absolute", left: 0, right: 0, bottom: 0, alignItems: "center", paddingHorizontal: space.lg,
+    position: "absolute", left: 14, right: 14, alignItems: "center",
   },
   nav: {
-    width: "100%", maxWidth: 440, flexDirection: "row", padding: 6, gap: 4,
-    borderRadius: 999, backgroundColor: color.surface, borderWidth: 1, borderColor: color.lineStrong,
-    ...shadow.card,
-  },
+    width: "100%", maxWidth: 440, height: 64, flexDirection: "row", alignItems: "center",
+    padding: NAV_PAD, borderRadius: 24, backgroundColor: color.navBg, borderWidth: 1, borderColor: color.line,
+    ...(Platform.OS === "web" ? { backdropFilter: "blur(12px)" } : {}),
+  } as ViewStyle,
   navItem: {
-    flex: 1, minHeight: 50, borderRadius: 999, alignItems: "center", justifyContent: "center", gap: 2,
+    flex: 1, height: "100%", alignItems: "center", justifyContent: "center", gap: 2,
   },
-  navItemOn: { backgroundColor: color.pine },
-  navLabel: { color: color.inkSoft, fontSize: 11, fontWeight: "600" },
-  navActive: { color: color.onInk, fontWeight: "800" },
+  navIndicator: {
+    position: "absolute", left: NAV_PAD, top: NAV_PAD, bottom: NAV_PAD, borderRadius: 18, backgroundColor: color.ink,
+  },
+  navLabel: { color: color.inkFaint, fontSize: 10, lineHeight: 13, fontWeight: "700" },
+  navActive: { color: color.paper },
   });
 }

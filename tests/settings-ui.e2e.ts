@@ -26,7 +26,7 @@ test('user selects upstream model and effort, sends directly and keeps credentia
     } });
   });
   await page.goto('/');
-  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('tab', { name: '设置', exact: true }).click();
   await page.getByText('AI 服务设置', { exact: true }).click();
   await page.getByLabel('API 地址', { exact: true }).fill(base);
   await page.getByLabel('API Key', { exact: true }).fill(key);
@@ -53,7 +53,7 @@ test('user selects upstream model and effort, sends directly and keeps credentia
   expect(calls[0].url).toBe(`${base}/responses`);
   expect(calls[0].body).toMatchObject({ model: 'vision-test', reasoning: { effort: 'max' } });
   expect(JSON.stringify(calls[0].body)).not.toContain(key);
-  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('tab', { name: '设置', exact: true }).click();
   const downloadPromise = page.waitForEvent('download');
   await page.getByText('导出完整备份', { exact: true }).click();
   const download = await downloadPromise;
@@ -65,7 +65,8 @@ test('user selects upstream model and effort, sends directly and keeps credentia
   await page.getByText('删除 AI 配置', { exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.getByText('尚未配置', { exact: true })).toBeVisible();
-  await page.getByRole('tab', { name: '记录', exact: true }).click();
+  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('button', { name: '全部记录', exact: true }).click();
   await expect(page.getByText('用户配置测试餐', { exact: true })).toBeVisible();
   expect(errors).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(false);
@@ -83,7 +84,7 @@ test('missing capability metadata uses default and stale discovery cannot restor
     else await respond();
   });
   await page.goto('/');
-  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('tab', { name: '设置', exact: true }).click();
   await page.getByText('AI 服务设置', { exact: true }).click();
   await page.getByLabel('API 地址', { exact: true }).fill(base);
   await page.getByLabel('API Key', { exact: true }).fill(key);

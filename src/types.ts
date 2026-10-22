@@ -160,13 +160,32 @@ export type ExerciseTemplate = {
   increment?: number;
 };
 
+/** One exercise inside a strength session; `sets` holds that exercise's sets only. */
+export type TrainingExercise = { name: string; sets: ExerciseSet[] };
+
+/** A whole-session template: the ordered exercise list with planned set counts. */
+export type WorkoutTemplate = {
+  id: string;
+  name: string;
+  exercises: Array<{
+    name: string;
+    setCount: number;
+    weightUnit: 'kg' | 'lb';
+    weightBasis: 'total' | 'per-hand' | 'bodyweight';
+  }>;
+};
+
 export type TrainingRecord = {
   id: string;
   type: 'training';
   createdAt: string;
   occurredAt: string;
+  /** Session title. Multi-exercise sessions store a training name or the joined exercise names. */
   exercise: string;
+  /** All sets of the session, flattened in exercise order so legacy readers keep working. */
   sets: ExerciseSet[];
+  /** Per-exercise breakdown for multi-exercise sessions; absent on legacy single-exercise records. */
+  exercises?: TrainingExercise[];
   note: string;
   pain: 'yes' | 'no' | 'unknown';
   controlled: 'yes' | 'no' | 'unknown';
@@ -215,7 +234,17 @@ export type DailySummary = {
   };
 };
 
-export type Profile = { goal?: Goal; heightCm?: number; weightKg?: number; calorieTarget?: number };
+export type Profile = {
+  goal?: Goal;
+  sex?: 'male' | 'female';
+  /** Optional completed years of age. Applicability groups are derived, never stored. */
+  ageYears?: number;
+  heightCm?: number;
+  weightKg?: number;
+  calorieTarget?: number;
+  /** Manual numeric targets keep the legacy shape; manual marks an explicitly empty target. */
+  calorieTargetSource?: 'recommended' | 'manual';
+};
 
 export type AppData = {
   version: 1;
@@ -224,6 +253,7 @@ export type AppData = {
   trainings: TrainingRecord[];
   sleeps: SleepRecord[];
   exerciseTemplates?: ExerciseTemplate[];
+  workoutTemplates?: WorkoutTemplate[];
   summaries: DailySummary[];
   sourceVersion: number;
   drafts?: { meal?: Partial<MealRecord>; training?: Partial<TrainingRecord>; sleep?: Partial<SleepRecord> };
@@ -236,6 +266,7 @@ export const emptyData = (): AppData => ({
   trainings: [],
   sleeps: [],
   exerciseTemplates: [],
+  workoutTemplates: [],
   summaries: [],
   sourceVersion: 0,
 });

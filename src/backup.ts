@@ -108,6 +108,7 @@ const trainingRecord = z.object({
   occurredAt: iso,
   exercise: z.string(),
   sets: z.array(exerciseSet),
+  exercises: z.array(z.object({ name: z.string().trim().min(1).max(80), sets: z.array(exerciseSet) }).strict()).max(60).optional(),
   note: z.string(),
   pain: z.enum(['yes', 'no', 'unknown']),
   controlled: z.enum(['yes', 'no', 'unknown']),
@@ -134,6 +135,16 @@ const exerciseTemplate = z.object({
   targetMax: nonnegative.int().optional(),
   increment: nonnegative.optional(),
 }).strict();
+const workoutTemplate = z.object({
+  id,
+  name: z.string().trim().min(1).max(80),
+  exercises: z.array(z.object({
+    name: z.string().trim().min(1).max(80),
+    setCount: z.number().int().min(1).max(60),
+    weightUnit: z.enum(['kg', 'lb']),
+    weightBasis: z.enum(['total', 'per-hand', 'bodyweight']),
+  }).strict()).min(1).max(60),
+}).strict();
 const sleepRecord = z.object({
   id,
   type: z.literal('sleep'),
@@ -147,6 +158,15 @@ const sleepRecord = z.object({
   updatedAt: iso.optional(),
   timezone: timezone.optional(),
 }).strict();
+const profile = z.object({
+  goal: z.enum(['health', 'fat-loss', 'muscle-gain']).optional(),
+  sex: z.enum(['male', 'female']).optional(),
+  ageYears: finite.int().min(1).max(120).optional(),
+  heightCm: nonnegative.optional(),
+  weightKg: nonnegative.optional(),
+  calorieTarget: nonnegative.optional(),
+  calorieTargetSource: z.enum(['recommended', 'manual']).optional(),
+}).strict();
 const summaryRecord = z.object({
   id,
   date: day,
@@ -159,16 +179,10 @@ const summaryRecord = z.object({
   sourceRecordIds: z.array(id).optional(),
   inputSnapshot: z.object({
     date: day,
-    profile: z.object({ goal: z.enum(['health', 'fat-loss', 'muscle-gain']).optional(), heightCm: nonnegative.optional(), weightKg: nonnegative.optional(), calorieTarget: nonnegative.optional() }).strict(),
+    profile,
     summary: z.string(),
     recordVersions: z.array(z.object({ id, version: z.string() }).strict()),
   }).strict().optional(),
-}).strict();
-const profile = z.object({
-  goal: z.enum(['health', 'fat-loss', 'muscle-gain']).optional(),
-  heightCm: nonnegative.optional(),
-  weightKg: nonnegative.optional(),
-  calorieTarget: nonnegative.optional(),
 }).strict();
 const appDataSchema = z.object({
   version: z.literal(1),
@@ -177,6 +191,7 @@ const appDataSchema = z.object({
   trainings: z.array(trainingRecord),
   sleeps: z.array(sleepRecord),
   exerciseTemplates: z.array(exerciseTemplate).optional(),
+  workoutTemplates: z.array(workoutTemplate).optional(),
   summaries: z.array(summaryRecord),
   sourceVersion: z.number().int().nonnegative(),
   drafts: z.object({ meal: mealRecord.partial().optional(), training: trainingRecord.partial().optional(), sleep: sleepRecord.partial().optional() }).strict().optional(),
@@ -393,6 +408,14 @@ export function validateAppData(value: unknown): AppData {
     templateIds.add(template.id);
     templateNames.add(name);
   }
+  const workoutIds = new Set<string>();
+  const workoutNames = new Set<string>();
+  for (const template of data.workoutTemplates ?? []) {
+    const name = template.name.trim().toLocaleLowerCase();
+    if (workoutIds.has(template.id) || workoutNames.has(name)) fail('duplicate-id', `训练模板重复：${template.name}`);
+    workoutIds.add(template.id);
+    workoutNames.add(name);
+  }
   for (const meal of data.meals) {
     const analysisIds = new Set<string>();
     for (const analysis of meal.analyses ?? []) {
@@ -472,9 +495,9 @@ export async function createBackupArchive(dataInput: AppData, mediaInputs: Backu
   const readmeBytes = utf8([
     '# Health Compass Backup v1', '',
     'manifest.json describes every payload with its byte length and SHA-256 of the original bytes. Checksums detect corruption; this backup is not encrypted or digitally signed.', '',
-    'data.json is the canonical UTF-8 data model. version=1; profile contains optional goal, heightCm, weightKg and calorieTarget. meals, trainings and sleeps have stable id/type/createdAt/occurredAt fields. Unknown fields and unsupported versions are rejected during restoration.', '',
+    'data.json is the canonical UTF-8 data model. version=1; profile contains optional goal, sex ("male" or "female"), ageYears (integer completed years, 1–120), heightCm, weightKg, calorieTarget and calorieTargetSource. The same optional profile fields are supported in summaries[].inputSnapshot.profile. Age applicability groups are derived locally (unknown, 1–17 minor, 18–64 adult, 65–120 older adult) and are not stored; these are product applicability groups, not clinical thresholds. Missing age retains the adult reference. Known minor/older-adult or invalid age suppresses adult BMI classification, weight/calorie suggestions and automatic meal portions, while manual targets and recorded intake remain available. calorieTargetSource="recommended" marks automatic starting estimates; "manual" preserves an explicitly empty manual target, while manual numeric targets retain the legacy shape without this field. Missing source with an existing target always preserves that target as manual. BMI and stage weight references are derived locally and are not historical measurements. meals, trainings and sleeps have stable id/type/createdAt/occurredAt fields. Unknown fields and unsupported versions are rejected during restoration.', '',
     'Meal corrections are in revisions; analyses preserve id, model, createdAt, sourceVersion and analysis. Model estimates keep nutrient min/max ranges, assumptions and an explicit estimated/unknown status. Null and unknown are not zero.', '',
-    'Training weights retain kg/lb and total/per-hand/bodyweight basis. Exercise sets retain repetitions and warmup flags. Sleep timestamps include an offset; awakeMinutes=null means unknown. Timestamps retain their source text and recorded timezone.', '',
+    'Training weights retain kg/lb and total/per-hand/bodyweight basis. Exercise sets retain repetitions and warmup flags. Multi-exercise strength sessions keep exercises[] (name plus the sets of that exercise); sets mirrors all sets in exercise order and exercise holds the session title. Legacy records without exercises[] are one-exercise sessions. workoutTemplates[] stores whole-session templates (name plus ordered exercises with setCount, weightUnit and weightBasis); exerciseTemplates[] are legacy single-exercise templates. Sleep timestamps include an offset; awakeMinutes=null means unknown. Timestamps retain their source text and recorded timezone.', '',
     'records.csv contains a machine-readable JSON column and readable labels. meals.csv, trainings.csv and sleeps.csv expose module fields; arrays and estimates use JSON within valid quoted CSV cells.', '',
     'drafts.json preserves unfinished form values. AppData.drafts remains in data.json. All imageUri/beforeImageUris/afterImageUri/videoUri values point to media/ entries, including corrections and drafts. beforeImageUris contains ordered original before-meal photos; imageUri mirrors the first and legacy imageUri-only meals remain readable. Each media entry contains original bytes; imageBase64, when present, is an analysis copy and never replaces the original file.', '',
     'summaries/ contains every saved daily Markdown version, in the same order as data.json summaries. AI summaries preserve model/sourceRecordIds/inputSnapshot where present. Local summaries are derived from local rules.', '',
@@ -484,7 +507,7 @@ export async function createBackupArchive(dataInput: AppData, mediaInputs: Backu
   const payloads: Array<{ path: string; bytes: Uint8Array }> = [
     { path: DATA_FILE, bytes: dataBytes }, { path: 'drafts.json', bytes: json(portableDrafts) }, { path: CSV_FILE, bytes: csvBytes },
     { path: 'meals.csv', bytes: moduleCsv(portableData.meals, ['id', 'createdAt', 'updatedAt', 'occurredAt', 'timezone', 'mealType', 'foodName', 'foodNameSource', 'portion', 'remaining', 'note', 'source', 'revision', 'estimateStatus', 'estimate', 'imageUri', 'beforeImageUris', 'afterImageUri', 'analyses', 'revisions']) },
-    { path: 'trainings.csv', bytes: moduleCsv(portableData.trainings, ['id', 'createdAt', 'updatedAt', 'occurredAt', 'timezone', 'exercise', 'mode', 'durationMinutes', 'sets', 'weightBasis', 'targetSets', 'targetMin', 'targetMax', 'increment', 'pain', 'controlled', 'rir', 'note', 'videoUri']) },
+    { path: 'trainings.csv', bytes: moduleCsv(portableData.trainings, ['id', 'createdAt', 'updatedAt', 'occurredAt', 'timezone', 'exercise', 'mode', 'durationMinutes', 'exercises', 'sets', 'weightBasis', 'targetSets', 'targetMin', 'targetMax', 'increment', 'pain', 'controlled', 'rir', 'note', 'videoUri']) },
     { path: 'sleeps.csv', bytes: moduleCsv(portableData.sleeps, ['id', 'createdAt', 'updatedAt', 'occurredAt', 'timezone', 'fellAsleepAt', 'wokeAt', 'awakeMinutes', 'quality', 'note']) },
     { path: README_FILE, bytes: readmeBytes }, ...summaryFiles, ...mediaEntries.map((entry) => ({ path: entry.path, bytes: entry.bytes })),
   ];
@@ -640,6 +663,19 @@ export function mergeBackupData(currentInput: AppData, incomingInput: AppData, e
   const current = validateAppData(currentInput);
   const incoming = validateAppData(incomingInput);
   const equals = equivalent ?? ((a, b) => canonicalJson(a) === canonicalJson(b));
+  // A legacy number is an explicit manual target. Merge its mode together with
+  // the value so importing a new source flag cannot silently enable automation.
+  const currentCalorieMode = current.profile.calorieTargetSource
+    ?? (current.profile.calorieTarget !== undefined ? 'manual' : undefined);
+  const incomingCalorieMode = incoming.profile.calorieTargetSource
+    ?? (incoming.profile.calorieTarget !== undefined ? 'manual' : undefined);
+  if (currentCalorieMode && incomingCalorieMode && currentCalorieMode !== incomingCalorieMode)
+    fail('import-conflict', '本机与备份中的热量目标来源不一致');
+  const currentManualEmpty = current.profile.calorieTargetSource === 'manual' && current.profile.calorieTarget === undefined;
+  const incomingManualEmpty = incoming.profile.calorieTargetSource === 'manual' && incoming.profile.calorieTarget === undefined;
+  if ((currentManualEmpty && incoming.profile.calorieTarget !== undefined)
+    || (incomingManualEmpty && current.profile.calorieTarget !== undefined))
+    fail('import-conflict', '本机与备份中的热量目标不一致：一侧已明确手动留空');
   const profileResult = { ...current.profile };
   for (const [key, value] of Object.entries(incoming.profile)) {
     const existing = (profileResult as Record<string, unknown>)[key];
@@ -683,6 +719,16 @@ export function mergeBackupData(currentInput: AppData, incomingInput: AppData, e
     }
     exerciseTemplates.push(template);
   }
+  const workoutTemplates = [...(current.workoutTemplates ?? [])];
+  for (const template of incoming.workoutTemplates ?? []) {
+    const key = template.name.trim().toLocaleLowerCase();
+    const same = workoutTemplates.find((item) => item.id === template.id || item.name.trim().toLocaleLowerCase() === key);
+    if (same) {
+      if (!equals({ ...same, id: '' }, { ...template, id: '' })) fail('import-conflict', `训练模板内容冲突：${template.name}`);
+      continue;
+    }
+    workoutTemplates.push(template);
+  }
   const healthDataChanged = meals.length !== current.meals.length || trainings.length !== current.trainings.length || sleeps.length !== current.sleeps.length || canonicalJson(profileResult) !== canonicalJson(current.profile);
   const mixed = healthDataChanged && (current.meals.length + current.trainings.length + current.sleeps.length > 0);
   const sourceVersion = mixed ? Math.max(current.sourceVersion, incoming.sourceVersion) + 1 : Math.max(current.sourceVersion, incoming.sourceVersion);
@@ -693,6 +739,7 @@ export function mergeBackupData(currentInput: AppData, incomingInput: AppData, e
     trainings,
     sleeps,
     ...(exerciseTemplates.length ? { exerciseTemplates } : {}),
+    ...(workoutTemplates.length ? { workoutTemplates } : {}),
     summaries: mixed ? summaries.map((summary) => summary.source === 'ai' ? { ...summary, status: 'stale' as const } : summary) : summaries,
     sourceVersion,
     ...(Object.keys(drafts).length ? { drafts } : {}),

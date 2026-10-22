@@ -86,7 +86,7 @@ export function useFormSession(
   };
 }
 
-function compatibleDraft(reference: unknown, value: unknown): boolean {
+export function compatibleDraft(reference: unknown, value: unknown): boolean {
   if (reference === undefined)
     return value === undefined || typeof value === "string";
   if (Array.isArray(reference))

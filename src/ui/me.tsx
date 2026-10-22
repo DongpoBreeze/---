@@ -1,12 +1,14 @@
 import React from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
+import { ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { AppData, Goal } from "../types";
-import type { AiSettings } from "../ai-provider";
-import type { AppearanceMode } from "../appearance";
-import { SmallButton, useBaseStyles, type IconName } from "./components";
-import { radius, space, type ThemeTokens } from "./theme";
+import { recordLocalDate } from "../domain";
+import { space, type ThemeTokens } from "./theme";
 import { useTheme, useThemedStyles } from "./theme-provider";
+import { PressScale, Reveal } from "./motion";
+import { ProfileHealthPanel } from "./profile-health";
+import { profileAgeReference } from "../profile-health";
+import type { Kind } from "./app-types";
 
 const goalLabels: Record<Goal, string> = {
   health: "保持健康",
@@ -14,131 +16,69 @@ const goalLabels: Record<Goal, string> = {
   "muscle-gain": "增肌",
 };
 
-function Setting({ icon, title, detail, onPress, danger = false, last = false }: {
-  icon: IconName;
-  title: string;
-  detail: string;
-  onPress: () => void;
-  danger?: boolean;
-  last?: boolean;
-}) {
-  const { color, type } = useTheme();
-  const st = useThemedStyles(createStyles);
-  const base = useBaseStyles();
-  return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      style={({ pressed }) => [st.setting, !last && st.settingLine, pressed && base.pressed]}
-    >
-      <View style={[st.settingIcon, danger && { backgroundColor: color.dangerTint }]}>
-        <Ionicons name={icon} size={19} color={danger ? color.danger : color.ink} />
-      </View>
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={[type.label, danger && { color: color.danger }]}>{title}</Text>
-        <Text style={type.small}>{detail}</Text>
-      </View>
-      <Ionicons name="chevron-forward" size={17} color={color.inkFaint} />
-    </Pressable>
-  );
-}
-
-const appearanceOptions: Array<{ mode: AppearanceMode; label: string; detail: string; icon: IconName }> = [
-  { mode: "system", label: "跟随系统", detail: "随设备设置自动切换", icon: "phone-portrait-outline" },
-  { mode: "light", label: "浅色模式", detail: "始终使用浅色外观", icon: "sunny-outline" },
-  { mode: "dark", label: "暗色模式", detail: "始终使用暗色外观", icon: "moon-outline" },
-];
-
-function AppearanceSettings() {
-  const { color, type, mode, scheme, ready, saving, error, setMode } = useTheme();
-  const st = useThemedStyles(createStyles);
-  const base = useBaseStyles();
-  const disabled = saving || !ready;
-  return (
-    <View>
-      <View style={st.panel} accessibilityRole="radiogroup" accessibilityLabel="外观模式">
-        {appearanceOptions.map((option, index) => {
-          const selected = mode === option.mode;
-          return (
-            <Pressable
-              key={option.mode}
-              accessibilityRole="radio"
-              accessibilityLabel={option.label}
-              aria-checked={selected}
-              aria-disabled={disabled}
-              accessibilityHint={option.detail}
-              accessibilityState={{ checked: selected, disabled }}
-              disabled={disabled}
-              onPress={() => { void setMode(option.mode).catch(() => undefined); }}
-              style={({ pressed }) => [st.appearanceOption, index < appearanceOptions.length - 1 && st.settingLine,
-                selected && st.appearanceSelected, pressed && base.pressed]}
-            >
-              <View style={st.settingIcon}>
-                <Ionicons name={option.icon} size={19} color={color.ink} />
-              </View>
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={type.label}>{option.label}</Text>
-                <Text style={type.small}>{option.detail}</Text>
-              </View>
-              <View style={[st.radio, selected && st.radioSelected]}>
-                {selected && <View style={st.radioDot} />}
-              </View>
-            </Pressable>
-          );
-        })}
-      </View>
-      <Text style={st.appearanceStatus} accessibilityLiveRegion="polite">
-        {saving ? "正在保存外观设置…" : `当前外观：${scheme === "dark" ? "暗色模式" : "浅色模式"}${mode === "system" ? " · 跟随系统" : ""}。`}
-      </Text>
-      {error ? <Text style={st.appearanceError} accessibilityRole="alert" accessibilityLiveRegion="polite">{error}</Text>
-        : <Text style={st.appearanceHint}>切换立即生效，自动保存在本机。</Text>}
-    </View>
-  );
+function latestDate(records: Parameters<typeof recordLocalDate>[0][]) {
+  let latest = "";
+  for (const record of records) {
+    const date = recordLocalDate(record);
+    if (date > latest) latest = date;
+  }
+  return latest;
 }
 
 export function Me({
   data,
   contentStyle,
   onProfile,
-  onAiSettings,
-  onAiReconfigure,
-  aiSettings,
-  aiSettingsReady,
-  aiSettingsError,
-  onImport,
-  onExport,
-  onMarkdown,
-  onDelete,
+  onRecords,
 }: {
   data: AppData;
   contentStyle: StyleProp<ViewStyle>;
   onProfile: () => void;
-  onAiSettings: () => void;
-  onAiReconfigure?: () => void;
-  aiSettings: AiSettings | null;
-  aiSettingsReady: boolean;
-  aiSettingsError?: string;
-  onImport: () => void;
-  onExport: () => void;
-  onMarkdown: () => void;
-  onDelete: () => void;
+  onRecords: () => void;
 }) {
-  const { color } = useTheme();
+  const { color, moduleTone } = useTheme();
   const st = useThemedStyles(createStyles);
-  const base = useBaseStyles();
   const p = data.profile;
   const total = data.meals.length + data.trainings.length + data.sleeps.length;
+  const latest = latestDate([...data.meals, ...data.trainings, ...data.sleeps]);
+  const modules: Array<[Kind, number]> = [
+    ["meal", data.meals.length],
+    ["training", data.trainings.length],
+    ["sleep", data.sleeps.length],
+  ];
+  const templateCount = data.workoutTemplates?.length ?? 0;
   return (
-    <ScrollView contentContainerStyle={contentStyle} showsVerticalScrollIndicator={false}>
-      <Text style={st.title}>我的</Text>
-      <Text style={st.intro}>目标和资料只影响后续建议，不会改写已有记录。</Text>
-      <Pressable
+    <ScrollView contentContainerStyle={[contentStyle, st.screen]} showsVerticalScrollIndicator={false}>
+      <Reveal index={0}>
+        <View style={st.capRow}>
+          <Text style={st.cap}>PROFILE · 本机</Text>
+          <Text style={st.pill}>{total} 条记录</Text>
+        </View>
+        <Text style={st.title}>我的</Text>
+        <Text style={st.intro}>目标和资料只影响后续建议，不会改写已有记录。</Text>
+      </Reveal>
+      <Reveal index={1}>
+      <PressScale
         accessibilityRole="button"
         onPress={onProfile}
-        style={({ pressed }) => [st.profile, pressed && base.pressed]}
+        scaleTo={0.98}
+        style={st.profile}
       >
-        <Text style={st.profileLabel}>当前目标</Text>
-        <Text style={st.profileGoal}>{p.goal ? goalLabels[p.goal] : "尚未设置目标"}</Text>
+        <View style={st.profileTop}>
+          <View style={st.profileAvatar}>
+            <Ionicons name="person" size={22} color={color.onTraining} />
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={st.cap}>GOAL · 当前目标</Text>
+            <Text style={st.profileGoal}>{p.goal ? goalLabels[p.goal] : "尚未设置目标"}</Text>
+          </View>
+        </View>
+        <Text testID="profile-demographics" style={st.demographics}>
+          {`性别：${p.sex === "male" ? "男" : p.sex === "female" ? "女" : "未填写"} · 年龄：${p.ageYears === undefined ? "未填写" : `${p.ageYears} 岁`}`}
+        </Text>
+        <Text testID="profile-age-group" style={st.ageGroup}>
+          {`年龄分组：${profileAgeReference(p.ageYears).label}`}
+        </Text>
         <View style={st.stats}>
           {[
             ["身高", p.heightCm ? `${p.heightCm}` : "—", "cm"],
@@ -152,40 +92,54 @@ export function Me({
             </View>
           ))}
         </View>
+        <Text style={st.targetSource}>{p.calorieTargetSource === "recommended" ? "热量目标 · 自动起始建议" : p.calorieTarget ? "热量目标 · 手动填写" : p.calorieTargetSource === "manual" ? "热量目标 · 手动留空" : "热量目标 · 尚未填写"}</Text>
         <View style={st.profileEdit}>
           <Text style={st.profileEditText}>修改目标与资料</Text>
-          <Ionicons name="chevron-forward" size={16} color={color.pine} />
+          <Ionicons name="chevron-forward" size={14} color={color.inkSoft} />
         </View>
-      </Pressable>
-      <Text style={st.group}>外观</Text>
-      <AppearanceSettings />
-      <Text style={st.group}>AI</Text>
-      <View style={st.panel}>
-        <Setting
-          icon="sparkles-outline"
-          title="AI 服务设置"
-          detail={!aiSettingsReady ? "读取中" : aiSettingsError ? "读取失败，点此重试" : aiSettings ? `${aiSettings.model} · ${aiSettings.reasoningEffort || "默认强度"}` : "尚未配置"}
-          onPress={onAiSettings}
-          last
-        />
-      </View>
-      {Boolean(aiSettingsError) && onAiReconfigure && (
-        <View style={{ marginBottom: space.md }}>
-          <SmallButton icon="create-outline" label="重新配置 AI 服务" disabled={!aiSettingsReady} onPress={onAiReconfigure} />
-        </View>
-      )}
-      <Text style={st.group}>数据 · 本机共 {total} 条记录</Text>
-      <View style={st.panel}>
-        <Setting icon="download-outline" title="导出完整备份" detail="记录、媒体和每日摘要" onPress={onExport} />
-        <Setting icon="document-text-outline" title="导出今日 Markdown" detail="本地摘要的可读文件" onPress={onMarkdown} />
-        <Setting icon="cloud-upload-outline" title="恢复备份" detail="取消选择不会改变当前数据" onPress={onImport} last />
-      </View>
-      <View style={st.panel}>
-        <Setting icon="trash-outline" title="删除本机数据" detail="App 外的备份不会被撤回" onPress={onDelete} danger last />
-      </View>
+      </PressScale>
+      </Reveal>
+      <Reveal index={2}>
+        <ProfileHealthPanel profile={p} />
+      </Reveal>
+      <Reveal index={3} style={st.section}>
+        <Text style={st.group}>RECORDS · 我的记录</Text>
+        <PressScale
+          accessibilityRole="button"
+          accessibilityLabel="全部记录"
+          accessibilityHint="按日期查看、编辑或删除所有记录"
+          onPress={onRecords}
+          scaleTo={0.98}
+          style={st.records}
+        >
+          <View style={st.recordTiles}>
+            {modules.map(([kind, count]) => {
+              const tone = moduleTone[kind];
+              return (
+                <View key={kind} style={[st.recordTile, { backgroundColor: tone.tint }]}>
+                  <Ionicons name={tone.icon} size={16} color={tone.text} />
+                  <Text style={[st.recordCount, { color: tone.text }]}>{count}</Text>
+                  <Text style={st.recordLabel}>{tone.name}</Text>
+                </View>
+              );
+            })}
+          </View>
+          <View style={st.recordsFoot}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={st.recordsTitle}>全部记录</Text>
+              <Text style={st.recordsDetail} numberOfLines={1}>
+                {total ? `共 ${total} 条 · 最近 ${latest}${templateCount ? ` · ${templateCount} 个训练模板` : ""}` : "还没有记录，从今天页开始记一笔"}
+              </Text>
+            </View>
+            <View style={st.recordsGo}>
+              <Ionicons name="arrow-forward" size={16} color={color.paper} />
+            </View>
+          </View>
+        </PressScale>
+      </Reveal>
       <View style={st.privacy}>
-        <Ionicons name="lock-closed" size={16} color={color.inkSoft} />
-        <Text style={st.privacyText}>核心记录在本机保存。发送给 AI 前会单独询问同意。</Text>
+        <Ionicons name="lock-closed" size={14} color={color.inkFaint} />
+        <Text style={st.privacyText}>资料与记录只保存在本机。外观、AI 与备份在“设置”中管理。</Text>
       </View>
     </ScrollView>
   );
@@ -193,32 +147,38 @@ export function Me({
 
 function createStyles({ color, type, shadow }: ThemeTokens) {
   return StyleSheet.create({
-  title: { ...type.display },
-  intro: { ...type.bodySoft, marginTop: space.xs, marginBottom: space.lg },
-  profile: { backgroundColor: color.surface, borderRadius: radius.block, padding: space.lg, ...shadow.card },
-  profileLabel: { color: color.pine, fontSize: 13, fontWeight: "700" },
-  profileGoal: { color: color.ink, fontSize: 26, lineHeight: 32, fontWeight: "800", marginTop: 2 },
-  stats: { flexDirection: "row", gap: space.sm, marginTop: space.lg },
-  stat: { flex: 1, minWidth: 0, backgroundColor: color.softSurface, borderRadius: radius.input, padding: 10 },
-  statLabel: { color: color.inkSoft, fontSize: 12 },
-  statValue: { color: color.ink, fontSize: 20, fontWeight: "800", marginTop: 2, ...type.numeric },
-  statUnit: { color: color.inkFaint, fontSize: 11 },
-  profileEdit: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: space.md, minHeight: 28 },
-  profileEditText: { color: color.pine, fontSize: 14, fontWeight: "700" },
-  group: { ...type.small, fontWeight: "700", color: color.inkSoft, marginTop: space.xl, marginBottom: space.sm },
-  panel: { backgroundColor: color.surface, borderRadius: radius.block, paddingHorizontal: space.md, marginBottom: space.sm, ...shadow.card },
-  setting: { flexDirection: "row", alignItems: "center", gap: space.md, minHeight: 64 },
-  settingLine: { borderBottomWidth: StyleSheet.hairlineWidth, borderColor: color.lineStrong },
-  settingIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: color.sunken, alignItems: "center", justifyContent: "center" },
-  appearanceOption: { flexDirection: "row", alignItems: "center", gap: space.md, minHeight: 74, paddingVertical: space.sm, paddingHorizontal: space.sm },
-  appearanceSelected: { backgroundColor: color.accentTint, borderRadius: radius.input },
-  radio: { width: 24, height: 24, borderRadius: 12, borderWidth: 1.5, borderColor: color.inkFaint, alignItems: "center", justifyContent: "center", marginLeft: space.xs },
-  radioSelected: { borderColor: color.pine, backgroundColor: color.pine },
-  radioDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: color.onInk },
-  appearanceStatus: { ...type.small, marginTop: space.xs, paddingHorizontal: space.xs },
-  appearanceHint: { ...type.small, marginTop: 2, paddingHorizontal: space.xs },
-  appearanceError: { ...type.small, color: color.danger, marginTop: space.xs, paddingHorizontal: space.xs },
-  privacy: { flexDirection: "row", alignItems: "center", gap: space.sm, marginTop: space.lg, paddingHorizontal: space.xs },
-  privacyText: { ...type.small, flex: 1 },
+  screen: { gap: 14 },
+  section: { gap: 10 },
+  capRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  cap: { ...type.cap },
+  pill: { fontSize: 10, lineHeight: 14, fontWeight: "700", color: color.inkSoft, backgroundColor: color.sunken, paddingVertical: 2, paddingHorizontal: 8, borderRadius: 999, overflow: "hidden" },
+  title: { ...type.display, fontSize: 28, lineHeight: 34, marginTop: 6 },
+  intro: { fontSize: 12.5, lineHeight: 19, color: color.inkSoft, marginTop: space.xs },
+  profile: { backgroundColor: color.surface, borderRadius: 20, padding: 18, borderWidth: 1, borderColor: color.line, borderTopWidth: 4, borderTopColor: color.training, ...shadow.card },
+  profileTop: { flexDirection: "row", alignItems: "center", gap: 12 },
+  profileAvatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: color.training, alignItems: "center", justifyContent: "center" },
+  profileGoal: { color: color.ink, fontSize: 24, lineHeight: 30, fontWeight: "800", letterSpacing: -0.3, marginTop: 2 },
+  demographics: { color: color.inkSoft, fontSize: 12, lineHeight: 19, marginTop: space.sm },
+  ageGroup: { color: color.inkFaint, fontSize: 11, lineHeight: 17, marginTop: 2 },
+  stats: { flexDirection: "row", gap: space.sm, marginTop: 14 },
+  stat: { flex: 1, minWidth: 0, backgroundColor: color.sunken, borderRadius: 14, paddingVertical: 12, paddingHorizontal: 12 },
+  statLabel: { color: color.inkSoft, fontSize: 10.5, lineHeight: 14, fontWeight: "700" },
+  statValue: { color: color.ink, fontSize: 18, lineHeight: 24, fontWeight: "800", marginTop: 4, ...type.mono },
+  statUnit: { color: color.inkFaint, fontSize: 10, lineHeight: 13 },
+  targetSource: { color: color.inkFaint, fontSize: 11, lineHeight: 17, marginTop: space.sm },
+  profileEdit: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 12, paddingTop: 10, minHeight: 28, borderTopWidth: 1, borderTopColor: color.line },
+  profileEditText: { color: color.inkSoft, fontSize: 12.5, fontWeight: "700", flex: 1 },
+  group: { ...type.cap, marginTop: 8, paddingHorizontal: 2 },
+  records: { backgroundColor: color.surface, borderRadius: 20, padding: 14, borderWidth: 1, borderColor: color.line, ...shadow.card },
+  recordTiles: { flexDirection: "row", gap: space.sm },
+  recordTile: { flex: 1, minWidth: 0, borderRadius: 14, paddingVertical: 12, paddingHorizontal: 12, gap: 2 },
+  recordCount: { fontSize: 22, lineHeight: 28, fontWeight: "800", marginTop: 4, ...type.mono },
+  recordLabel: { color: color.inkSoft, fontSize: 11, lineHeight: 15, fontWeight: "700" },
+  recordsFoot: { flexDirection: "row", alignItems: "center", gap: space.md, marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: color.line },
+  recordsTitle: { ...type.label },
+  recordsDetail: { ...type.small, marginTop: 1 },
+  recordsGo: { width: 34, height: 34, borderRadius: 17, backgroundColor: color.ink, alignItems: "center", justifyContent: "center" },
+  privacy: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginTop: space.sm, paddingHorizontal: space.xs },
+  privacyText: { fontSize: 11, lineHeight: 16, color: color.inkFaint, textAlign: "center", flexShrink: 1 },
   });
 }

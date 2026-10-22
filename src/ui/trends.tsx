@@ -1,16 +1,20 @@
 import React, { useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
+import { Animated, Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import type { AppData } from "../types";
 import { localDate } from "../domain";
 import { Note } from "./components";
 import { recordDate, sleepHours } from "./format";
 import { radius, space, type ModuleKind, type ThemeTokens } from "./theme";
 import { useTheme, useThemedStyles } from "./theme-provider";
+import { Reveal, useSpring, useTween } from "./motion";
 
 export function Trends({ data, contentStyle }: { data: AppData; contentStyle: StyleProp<ViewStyle> }) {
   const { color } = useTheme();
   const st = useThemedStyles(createStyles);
   const [days, setDays] = useState<7 | 30>(7);
+  const [segWidth, setSegWidth] = useState(0);
+  const slide = useSpring(days === 7 ? 0 : 1);
+  const segItem = segWidth > 0 ? (segWidth - 6) / 2 : 0;
   const dates = useMemo(
     () =>
       Array.from({ length: days }, (_, index) => {
@@ -35,23 +39,42 @@ export function Trends({ data, contentStyle }: { data: AppData; contentStyle: St
   });
   const sleepInRange = data.sleeps.filter((r) => dates.includes(recordDate(r))).length;
   return (
-    <ScrollView contentContainerStyle={contentStyle} showsVerticalScrollIndicator={false}>
-      <Text style={st.title}>趋势</Text>
-      <Text style={st.intro}>按实际日期展示，空白日期保留为空，不把未记录当成零。</Text>
-      <View style={st.segment}>
+    <ScrollView contentContainerStyle={[contentStyle, st.screen]} showsVerticalScrollIndicator={false}>
+      <Reveal index={0}>
+        <View style={st.capRow}>
+          <Text style={st.cap}>PATTERNS · 近期节律</Text>
+          <Text style={st.pill}>近 {days} 日</Text>
+        </View>
+        <Text style={st.title}>趋势</Text>
+        <Text style={st.intro}>按实际日期展示，空白日期保留为空，不把未记录当成零。</Text>
+      </Reveal>
+      <Reveal index={1}>
+      <View style={st.segment} onLayout={(event) => setSegWidth(event.nativeEvent.layout.width)}>
+        {segItem > 0 && (
+          <Animated.View
+            pointerEvents="none"
+            style={[st.segIndicator, {
+              width: segItem,
+              transform: [{ translateX: slide.interpolate({ inputRange: [0, 1], outputRange: [0, segItem] }) }],
+            }]}
+          />
+        )}
         {([7, 30] as const).map((n) => (
           <Pressable
             key={n}
             accessibilityRole="button"
             accessibilityState={{ selected: days === n }}
             onPress={() => setDays(n)}
-            style={[st.segmentItem, days === n && st.segmentOn]}
+            style={({ pressed }) => [st.segmentItem, pressed && days !== n && { opacity: 0.72 }]}
           >
             <Text style={[st.segmentText, days === n && st.segmentTextOn]}>近 {n} 日</Text>
           </Pressable>
         ))}
       </View>
-      <Coverage dates={dates} meals={meals} training={training} sleep={sleep} />
+      </Reveal>
+      <Reveal index={2}>
+        <Coverage dates={dates} meals={meals} training={training} sleep={sleep} />
+      </Reveal>
       {sleepInRange < 3 && (
         <Note
           text={`睡眠基础趋势至少需要 3 条有效记录；当前区间已有 ${sleepInRange} 条。`}
@@ -59,11 +82,17 @@ export function Trends({ data, contentStyle }: { data: AppData; contentStyle: St
           tint={color.sleepTint}
         />
       )}
-      <Trend kind="meal" title="饮食记录" dates={dates} values={dates.map((d) => meals.get(d) ?? null)} unit="餐" />
-      <Trend kind="training" title="训练记录" dates={dates} values={dates.map((d) => training.get(d) ?? null)} unit="次" />
+      <Reveal index={3}>
+        <Trend kind="meal" index="01" title="饮食记录" dates={dates} values={dates.map((d) => meals.get(d) ?? null)} unit="餐" />
+      </Reveal>
+      <Reveal index={4}>
+        <Trend kind="training" index="02" title="训练记录" dates={dates} values={dates.map((d) => training.get(d) ?? null)} unit="次" />
+      </Reveal>
       {sleepInRange >= 3 && (
+        <Reveal index={5}>
         <Trend
           kind="sleep"
+          index="03"
           title="估算睡眠（每日平均）"
           dates={dates}
           values={dates.map((d) => {
@@ -72,6 +101,7 @@ export function Trends({ data, contentStyle }: { data: AppData; contentStyle: St
           })}
           unit="小时"
         />
+        </Reveal>
       )}
     </ScrollView>
   );
@@ -93,6 +123,7 @@ function Coverage({ dates, meals, training, sleep }: {
   ];
   return (
     <View style={st.coverage}>
+      <Text style={st.cap}>COVERAGE · 覆盖</Text>
       <Text style={st.blockTitle}>记录覆盖</Text>
       {rows.map(([kind, has]) => {
         const hit = dates.filter(has).length;
@@ -112,14 +143,30 @@ function Coverage({ dates, meals, training, sleep }: {
   );
 }
 
-function Trend({ kind, title, dates, values, unit }: {
+/** A single bar that grows from the baseline when it mounts or its value changes. */
+function Bar({ ratio, hue, delay }: { ratio: number; hue: string; delay: number }) {
+  const st = useThemedStyles(createStyles);
+  const grow = useTween(ratio, { delay });
+  return (
+    <Animated.View
+      style={[st.barFill, {
+        backgroundColor: hue,
+        height: grow.interpolate({ inputRange: [0, 1], outputRange: ["0%", "100%"] }),
+      }]}
+    />
+  );
+}
+
+function Trend({ kind, index: no, title, dates, values, unit }: {
+
   kind: ModuleKind;
+  index: string;
   title: string;
   dates: string[];
   values: Array<number | null>;
   unit: string;
 }) {
-  const { type, moduleTone } = useTheme();
+  const { moduleTone } = useTheme();
   const st = useThemedStyles(createStyles);
   const known = values.filter((v): v is number => v !== null);
   const max = Math.max(...known, 1);
@@ -128,11 +175,14 @@ function Trend({ kind, title, dates, values, unit }: {
   return (
     <View style={st.trend}>
       <View style={st.trendHead}>
-        <View style={st.trendTitleRow}>
-          <View style={[st.dot, { backgroundColor: tone.hue }]} />
-          <Text style={type.heading}>{title}</Text>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <View style={st.trendTitleRow}>
+            <View style={[st.dot, { backgroundColor: tone.hue }]} />
+            <Text style={st.cap}>{no} / {tone.name}</Text>
+          </View>
+          <Text style={st.trendTitle}>{title}</Text>
         </View>
-        <Text style={type.small}>有值 {known.length}/{dates.length} 天</Text>
+        <Text style={st.pill}>有值 {known.length}/{dates.length} 天</Text>
       </View>
       <View style={st.bars}>
         {values.map((value, index) => (
@@ -150,7 +200,7 @@ function Trend({ kind, title, dates, values, unit }: {
               {value === null ? (
                 <View style={st.barEmpty} />
               ) : (
-                <View style={[st.barFill, { height: `${Math.max(6, (value / max) * 100)}%`, backgroundColor: tone.hue }]} />
+                <Bar ratio={Math.max(0.06, value / max)} hue={tone.hue} delay={index * (dense ? 12 : 40)} />
               )}
             </View>
             {(!dense || index % 5 === 0 || index === dates.length - 1) ? (
@@ -165,30 +215,36 @@ function Trend({ kind, title, dates, values, unit }: {
 }
 
 const createStyles = ({ color, type, shadow }: ThemeTokens) => StyleSheet.create({
-  title: { ...type.display },
-  intro: { ...type.bodySoft, marginTop: space.xs, marginBottom: space.lg },
-  segment: { flexDirection: "row", alignSelf: "flex-start", backgroundColor: color.surface, borderRadius: radius.pill, padding: 3, marginBottom: space.lg },
-  segmentItem: { minHeight: 38, paddingHorizontal: 18, borderRadius: radius.pill, justifyContent: "center" },
-  segmentOn: { backgroundColor: color.pine },
-  segmentText: { color: color.inkSoft, fontSize: 14, fontWeight: "700" },
-  segmentTextOn: { color: color.onInk },
-  coverage: { backgroundColor: color.surface, borderRadius: radius.block, padding: space.lg, marginBottom: space.lg, ...shadow.card },
-  blockTitle: { ...type.heading, marginBottom: space.md },
+  screen: { gap: 14 },
+  capRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  cap: { ...type.cap },
+  pill: { fontSize: 10, lineHeight: 14, fontWeight: "700", color: color.inkSoft, backgroundColor: color.sunken, paddingVertical: 2, paddingHorizontal: 8, borderRadius: 999, overflow: "hidden" },
+  title: { ...type.display, fontSize: 28, lineHeight: 34, marginTop: 6 },
+  intro: { fontSize: 12.5, lineHeight: 19, color: color.inkSoft, marginTop: space.xs },
+  segment: { flexDirection: "row", alignSelf: "flex-start", width: 200, backgroundColor: color.sunken, borderRadius: radius.pill, padding: 3 },
+  segIndicator: { position: "absolute", left: 3, top: 3, bottom: 3, borderRadius: radius.pill, backgroundColor: color.ink },
+  segmentItem: { flex: 1, minHeight: 34, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
+  segmentText: { color: color.inkSoft, fontSize: 12.5, fontWeight: "700" },
+  segmentTextOn: { color: color.paper },
+  coverage: { backgroundColor: color.surface, borderRadius: 20, padding: 18, borderWidth: 1, borderColor: color.line, ...shadow.card },
+  blockTitle: { ...type.heading, marginTop: 4, marginBottom: space.md },
   covRow: { flexDirection: "row", alignItems: "center", gap: space.md, marginBottom: space.sm },
-  covLabel: { width: 32, ...type.small, color: color.ink, fontWeight: "700" },
+  covLabel: { width: 32, fontSize: 11.5, lineHeight: 16, color: color.ink, fontWeight: "700" },
   covCells: { flex: 1, minWidth: 0, flexDirection: "row", gap: 2 },
-  cell: { flex: 1, height: 18, borderRadius: 3, backgroundColor: color.sunken },
-  covCount: { width: 40, textAlign: "right", ...type.small, ...type.numeric },
-  trend: { backgroundColor: color.surface, borderRadius: radius.block, padding: space.lg, marginBottom: space.lg, ...shadow.card },
-  trendHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: space.md },
-  trendTitleRow: { flexDirection: "row", alignItems: "center", gap: space.sm },
-  dot: { width: 10, height: 10, borderRadius: 5 },
+  cell: { flex: 1, height: 18, borderRadius: 4, backgroundColor: color.sunken },
+  covCount: { width: 40, textAlign: "right", fontSize: 11, color: color.inkSoft, ...type.mono },
+  trend: { backgroundColor: color.surface, borderRadius: 20, padding: 18, borderWidth: 1, borderColor: color.line, ...shadow.card },
+  trendHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: space.sm, marginBottom: space.md },
+  trendTitleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  trendTitle: { ...type.heading, marginTop: 4 },
+  dot: { width: 8, height: 8, borderRadius: 2 },
   bars: { flexDirection: "row", alignItems: "flex-end", gap: 2 },
   barColumn: { flex: 1, alignItems: "center", minWidth: 0 },
-  barValue: { fontSize: 11, color: color.ink, minHeight: 15, ...type.numeric },
-  barSlot: { width: "70%", maxWidth: 22, height: 88, justifyContent: "flex-end" },
+  barValue: { fontSize: 10.5, color: color.ink, minHeight: 15, ...type.mono },
+  barSlot: { width: "70%", maxWidth: 22, height: 96, justifyContent: "flex-end" },
   barEmpty: { height: 4, borderRadius: 2, backgroundColor: color.sunken },
-  barFill: { width: "100%", borderRadius: 4 },
-  barDate: { fontSize: 10, color: color.inkFaint, marginTop: 6, ...type.numeric },
-  trendUnit: { ...type.small, color: color.inkFaint, marginTop: space.md },
+  barFill: { width: "100%", borderRadius: 6, opacity: 0.9 },
+
+  barDate: { fontSize: 9.5, color: color.inkFaint, marginTop: 6, ...type.mono },
+  trendUnit: { fontSize: 10.5, lineHeight: 15, color: color.inkFaint, marginTop: space.md },
 });

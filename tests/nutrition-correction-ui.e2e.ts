@@ -119,7 +119,8 @@ test('AI 每100g参考、数量小计、菜品修正与备份恢复保留独立�
   // Low nutrition confidence alone must not cause extra identification requests.
   expect(provider.responses()).toHaveLength(1);
 
-  await page.getByRole('tab', { name: '记录', exact: true }).click();
+  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('button', { name: '全部记录', exact: true }).click();
   await page.getByText(analysedFoodName, { exact: true }).click();
   const current = page.getByTestId('current-meal-analysis');
   const originalReferenceText = await current.getByText(/每 100 g：热量/).allTextContents();
@@ -142,7 +143,8 @@ test('AI 每100g参考、数量小计、菜品修正与备份恢复保留独立�
   await page.getByRole('tab', { name: '今天', exact: true }).click();
   await expect(page.getByText(/1 餐数据不完整/).first()).toBeVisible();
   await expect(page.getByText(/1 餐均已估算/)).toHaveCount(0);
-  await page.getByRole('tab', { name: '记录', exact: true }).click();
+  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('button', { name: '全部记录', exact: true }).click();
   await page.getByText(analysedFoodName, { exact: true }).click();
 
   await openQuantities(page);
@@ -198,7 +200,7 @@ test('AI 每100g参考、数量小计、菜品修正与备份恢复保留独立�
   await expectNoOverflow(page);
   await page.screenshot({ path: testInfo.outputPath('ai-per100g-history.png'), fullPage: true });
   await page.getByRole('dialog').getByLabel('关闭', { exact: true }).click();
-  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('tab', { name: '设置', exact: true }).click();
   const { bytes, backup } = await exportBackup(page);
   const meal = backup.data.meals[0];
   const versions = meal.analyses ?? [];
@@ -245,14 +247,15 @@ test('AI 每100g参考、数量小计、菜品修正与备份恢复保留独立�
   await restore(page, bytes);
   await restore(page, bytes);
   await page.reload();
-  await page.getByRole('tab', { name: '记录', exact: true }).click();
+  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('button', { name: '全部记录', exact: true }).click();
   await expect(page.getByText(correctedFoodName, { exact: true })).toHaveCount(1);
   await page.getByText(correctedFoodName, { exact: true }).click();
   await expect(current.getByText(/每 100 g：热量 130～170 kcal/)).toBeVisible();
   await expect(current.getByText(/已填写菜品小计 · 热量 约 345～495 kcal/)).toBeVisible();
   await expect(page.getByRole('button', { name: `查看 ${historyCount} 个历史分析`, exact: true })).toBeVisible();
   await page.getByRole('dialog').getByLabel('关闭', { exact: true }).click();
-  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('tab', { name: '设置', exact: true }).click();
   const restored = await exportBackup(page);
   expect(restored.backup.data.meals).toEqual([meal]);
   expect(provider.legacyRequests).toEqual([]);
@@ -284,7 +287,8 @@ test('可靠本地家用单位按 AI 参考换算，单独修改做法会使旧�
   await page.getByLabel('食物名称', { exact: true }).fill('家用单位米饭');
   await page.getByRole('dialog').getByRole('button', { name: '保存', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  await page.getByRole('tab', { name: '记录', exact: true }).click();
+  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('button', { name: '全部记录', exact: true }).click();
   await page.getByLabel('请求饮食分析', { exact: true }).click();
   await confirmAndSaveMealReview(page, { clearQuantities: true, foodName: '家用单位米饭' });
   await page.getByText('家用单位米饭', { exact: true }).click();
@@ -311,7 +315,7 @@ test('可靠本地家用单位按 AI 参考换算，单独修改做法会使旧�
   await expect(page.getByRole('button', { name: '重新分析已修正菜品', exact: true })).toBeVisible();
   expect(provider.responses()).toHaveLength(1);
   await page.getByRole('dialog').getByLabel('关闭', { exact: true }).click();
-  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('tab', { name: '设置', exact: true }).click();
   const { backup } = await exportBackup(page);
   const analyses = backup.data.meals[0].analyses!;
   expect(analyses).toHaveLength(4);
@@ -341,9 +345,10 @@ test('已有 USDA 历史可恢复、填写数量并继续保留原版本', async
   };
   const bytes = await createBackupArchive({ ...emptyData(), meals: [meal] }, [], now);
   await page.goto('/');
-  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('tab', { name: '设置', exact: true }).click();
   await restore(page, Buffer.from(bytes));
-  await page.getByRole('tab', { name: '记录', exact: true }).click();
+  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('button', { name: '全部记录', exact: true }).click();
   await page.getByText('历史熟米饭', { exact: true }).click();
   await expect(page.getByTestId('current-meal-analysis').getByText(/每 100 g：热量 130 kcal/)).toBeVisible();
   await page.getByRole('button', { name: '填写菜品数量', exact: true }).click();

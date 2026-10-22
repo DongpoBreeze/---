@@ -158,7 +158,7 @@ export async function installMockAiProvider(page: Page, options: ProviderOptions
 }
 
 export async function openAiSettings(page: Page): Promise<Locator> {
-  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('tab', { name: '设置', exact: true }).click();
   await page.getByText('AI 服务设置', { exact: true }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByLabel('API 地址', { exact: true })).toBeVisible();

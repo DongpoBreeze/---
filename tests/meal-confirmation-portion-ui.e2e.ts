@@ -123,13 +123,14 @@ async function saveMeal(page: Page) {
 }
 
 async function reopenMeal(page: Page, title: string) {
-  await page.getByRole('tab', { name: '记录', exact: true }).click();
+  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('button', { name: '全部记录', exact: true }).click();
   await page.getByText(title, { exact: true }).click();
   await expect(page.getByLabel('食物名称', { exact: true })).toHaveValue(title);
 }
 
 async function exportBackup(page: Page) {
-  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('tab', { name: '设置', exact: true }).click();
   const downloadEvent = page.waitForEvent('download');
   await page.getByText('导出完整备份', { exact: true }).click();
   const download = await downloadEvent;
@@ -139,7 +140,7 @@ async function exportBackup(page: Page) {
 async function restoreMeals(page: Page, meals: MealRecord[], profile: Profile) {
   const bytes = await createBackupArchive({ ...emptyData(), profile, meals }, []);
   await page.goto('/');
-  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('tab', { name: '设置', exact: true }).click();
   const restored = page.waitForEvent('dialog', { predicate: (dialog) => dialog.message().includes('恢复完成') });
   const chooser = page.waitForEvent('filechooser');
   await page.getByText('恢复备份', { exact: true }).click();
