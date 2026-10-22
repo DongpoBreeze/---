@@ -6,7 +6,7 @@ import type {
   TrainingRecord,
 } from "../types";
 
-export type Tab = "today" | "records" | "trends" | "me";
+export type Tab = "today" | "trends" | "me" | "settings";
 export type Kind = "meal" | "training" | "sleep";
 export type ModalKind = Kind | "profile" | "ai-settings" | null;
 export type DraftKey = "meal-new" | "training-new" | "sleep-new" | string;

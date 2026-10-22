@@ -8,15 +8,21 @@
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
+    "ios:check": "node scripts/ios-source-policy.mjs --check",
+    "ios:prepare": "node scripts/ios-prepare.mjs",
+    "ios:package": "node scripts/ios-prepare.mjs --source-only",
+    "ios:unsigned": "node scripts/ios-unsigned.mjs",
     "web": "expo start --web --max-workers 2",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
     "test:server": "node --test server/*.test.mjs",
     "test:scripts": "node --import tsx --test --test-timeout=30000 scripts/*.test.mjs",
+    "test:ios": "node --import tsx --test --test-timeout=30000 scripts/ios-source-policy.test.mjs",
     "test:ui": "playwright test",
     "server": "node server/index.mjs",
     "server:codex": "node server/start-local-codex.mjs",
-    "web:codex": "node scripts/start-local-preview.mjs"
+    "web:codex": "node scripts/start-local-preview.mjs",
+    "eas-build-pre-install": "node scripts/ios-source-policy.mjs --check"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",

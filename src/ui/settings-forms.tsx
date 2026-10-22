@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { Goal, Profile } from "../types";
+import { effectiveCalorieTarget, initialCalorieTargetMode, profileAgeReference, profileAgeValidationError, profileFromForm, profileInputNumber, type CalorieTargetMode } from "../profile-health";
 import { discoverModel, discoverModels } from "../ai";
 import { isValidReasoningEffort, normalizeConnection, type AiConnection, type AiModel, type AiSettings } from "../ai-provider";
 import { type FormSession, useFormSession } from "./useFormDraft";
@@ -9,6 +10,7 @@ import { Banner, Choice, Field, Legend, Note, Sheet, SmallButton, useBaseStyles 
 import { confirmAction, errorText } from "./format";
 import { radius, space, type ThemeTokens } from "./theme";
 import { useTheme, useThemedStyles } from "./theme-provider";
+import { ProfileHealthPanel } from "./profile-health";
 
 export function AiSettingsForm({ initial, loadError, session, onClose, onSave, onDelete }: {
   initial: AiSettings | null;
@@ -231,6 +233,8 @@ export function ProfileForm({
 }) {
   const st = useThemedStyles(createStyles);
   const [goal, setGoal] = useState<Goal | "none">(initial.goal ?? "none");
+  const [sex, setSex] = useState<NonNullable<Profile['sex']> | "none">(initial.sex ?? "none");
+  const [age, setAge] = useState(initial.ageYears === undefined ? "" : String(initial.ageYears));
   const [height, setHeight] = useState(
     initial.heightCm === undefined ? "" : String(initial.heightCm),
   );
@@ -240,6 +244,17 @@ export function ProfileForm({
   const [calories, setCalories] = useState(
     initial.calorieTarget === undefined ? "" : String(initial.calorieTarget),
   );
+  const [calorieMode, setCalorieMode] = useState<CalorieTargetMode>(() => initialCalorieTargetMode(initial));
+  const preview: Profile = {
+    goal: goal === "none" ? undefined : goal,
+    sex: sex === "none" ? undefined : sex,
+    ageYears: profileInputNumber(age),
+    heightCm: profileInputNumber(height),
+    weightKg: profileInputNumber(weight),
+  };
+  const displayedCalories = effectiveCalorieTarget(preview, calorieMode, calories);
+  const ageReference = profileAgeReference(preview.ageYears);
+  const ageError = profileAgeValidationError(preview.ageYears);
   const [error, setError] = useState("");
   const lifecycle = useFormSession(session, {
     onClose,
@@ -249,19 +264,7 @@ export function ProfileForm({
     if (!lifecycle.beginSave()) return;
     setError("");
     try {
-      const optional = (value: string, label: string) => {
-        if (!value.trim()) return undefined;
-        const n = Number(value);
-        if (!Number.isFinite(n) || n <= 0)
-          throw new Error(`${label}需要是大于 0 的数字。`);
-        return n;
-      };
-      await onSave({
-        goal: goal === "none" ? undefined : goal,
-        heightCm: optional(height, "身高"),
-        weightKg: optional(weight, "体重"),
-        calorieTarget: optional(calories, "热量目标"),
-      });
+      await onSave(profileFromForm({ goal, sex, age, height, weight, calories, calorieMode }));
       if (lifecycle.isActive()) onClose();
     } catch (e) {
       if (lifecycle.isActive()) setError(errorText(e));
@@ -284,7 +287,7 @@ export function ProfileForm({
           <Banner text={error} danger onClose={() => setError("")} />
         )}
         <Text style={st.intro}>
-          资料不足时不生成精确目标；修改目标只影响后续建议。
+          填写后在本机计算身体参考与起始建议；修改资料只影响后续建议，已有记录保留。
         </Text>
         <Choice
           label="健康目标"
@@ -300,7 +303,24 @@ export function ProfileForm({
           }}
         />
         <Legend text="身体资料（全部可选）" />
-        <Text style={st.intro}>身高体重可用于 AI 识别页的“本餐备餐参考”；填写每日热量目标后优先按该目标换算。</Text>
+        <Text style={st.intro}>年龄用于选择适用的参考，资料不填也可记录。</Text>
+        <Choice
+          label="性别（可选）"
+          value={sex}
+          choices={[["none", "暂不填写"], ["male", "男"], ["female", "女"]]}
+          onChange={(value) => { if (lifecycle.isIdle()) setSex(value); }}
+        />
+        <Field
+          label="年龄（岁，可选）"
+          value={age}
+          onChangeText={(value) => { if (lifecycle.isIdle()) setAge(value); }}
+          placeholder="整数周岁，例如：30"
+          keyboardType="numeric"
+        />
+        <Text testID="profile-age-group" style={st.ageGroup} accessibilityLiveRegion="polite">
+          {`年龄分组：${ageReference.label}`}
+        </Text>
+        {ageError && <Text testID="profile-age-error" style={st.ageError} accessibilityRole="alert" accessibilityLiveRegion="polite">{ageError}</Text>}
         <View style={st.two}>
           <Field
             label="身高（cm，可选）"
@@ -321,13 +341,26 @@ export function ProfileForm({
             keyboardType="numeric"
           />
         </View>
+        <ProfileHealthPanel profile={preview} />
+        <Legend text="每日热量目标" />
+        <View style={st.calorieActions}>
+          <SmallButton icon="refresh-outline" label="使用推荐" disabled={!lifecycle.isIdle() || calorieMode === "recommended"}
+            onPress={() => { if (lifecycle.isIdle()) setCalorieMode("recommended"); }} />
+          <SmallButton icon="create-outline" label="手动填写" disabled={!lifecycle.isIdle() || calorieMode === "manual"}
+            onPress={() => { if (lifecycle.isIdle()) { setCalories(displayedCalories); setCalorieMode("manual"); } }} />
+        </View>
+        <Text testID="profile-calorie-mode" style={st.intro} accessibilityLiveRegion="polite">
+          {calorieMode === "recommended"
+            ? "当前使用自动建议：资料或健康目标变化时重新计算；信息不足或年龄不适用时留空。可直接修改数字切换为手动。"
+            : "当前使用手动目标：修改资料不会覆盖此值，留空也可保存；点“使用推荐”可恢复自动计算。"}
+        </Text>
         <Field
           label="每日热量目标（kcal，可选）"
-          value={calories}
+          value={displayedCalories}
           onChangeText={(value) => {
-            if (lifecycle.isIdle()) setCalories(value);
+            if (lifecycle.isIdle()) { setCalories(value); setCalorieMode("manual"); }
           }}
-          placeholder="不填写则保持未知"
+          placeholder={calorieMode === "recommended" ? "资料不足或超出范围，暂不自动推荐" : "不填写则保持未知"}
           keyboardType="numeric"
         />
       </>
@@ -337,19 +370,22 @@ export function ProfileForm({
 
 const createStyles = ({ color, type }: ThemeTokens) => StyleSheet.create({
   intro: { ...type.bodySoft, marginBottom: space.lg },
+  ageGroup: { ...type.small, color: color.inkSoft, marginTop: -space.sm, marginBottom: space.md },
+  ageError: { ...type.small, color: color.danger, marginBottom: space.md },
   two: { flexDirection: "row", gap: space.md },
+  calorieActions: { flexDirection: "row", flexWrap: "wrap", gap: space.sm, marginBottom: space.sm },
   step: { flexDirection: "row", alignItems: "center", gap: space.sm, marginTop: space.md, marginBottom: space.md },
   stepNo: {
-    width: 24, height: 24, borderRadius: 12, backgroundColor: color.pine, color: color.onInk,
-    textAlign: "center", lineHeight: 24, fontSize: 12, fontWeight: "800", overflow: "hidden",
+    width: 22, height: 22, borderRadius: 6, backgroundColor: color.ink, color: color.paper,
+    textAlign: "center", lineHeight: 22, fontSize: 11, fontWeight: "800", overflow: "hidden", ...type.mono,
   },
   stepTitle: { ...type.heading },
   keyRow: { flexDirection: "row", alignItems: "center", gap: space.sm },
-  eye: { width: 48, height: 48, alignItems: "center", justifyContent: "center", borderRadius: radius.input, backgroundColor: color.surface },
+  eye: { width: 48, height: 48, alignItems: "center", justifyContent: "center", borderRadius: radius.input, backgroundColor: color.surface, borderWidth: 1, borderColor: color.line },
   status: { ...type.bodySoft, marginBottom: space.md },
   list: {
     maxHeight: 280, borderRadius: radius.block, backgroundColor: color.surface, marginBottom: space.lg,
-    borderWidth: StyleSheet.hairlineWidth, borderColor: color.lineStrong,
+    borderWidth: 1, borderColor: color.line,
   },
   effortList: { maxHeight: undefined },
   effortHelp: { ...type.small, color: color.inkSoft, marginTop: space.sm },
@@ -357,9 +393,9 @@ const createStyles = ({ color, type }: ThemeTokens) => StyleSheet.create({
   invalidInput: { borderColor: color.danger },
   option: {
     flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.md, minHeight: 50,
-    borderBottomWidth: StyleSheet.hairlineWidth, borderColor: color.line,
+    borderBottomWidth: 1, borderColor: color.line,
   },
-  optionOn: { backgroundColor: color.pineTint },
+  optionOn: { backgroundColor: color.sunken },
   optionText: { ...type.body, flexShrink: 1 },
   chosen: { fontWeight: "700", marginBottom: space.sm },
 });

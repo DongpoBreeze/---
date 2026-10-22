@@ -1,4 +1,5 @@
 import { hasMealIdentityConflict } from '../shared/nutrition.mjs';
+import { profileAgeReference } from './profile-health';
 import type { MealAnalysis, MealComponent, MealRecord, NutrientRange, NutrientRanges, Profile } from './types';
 
 export type MealPortionReference = {
@@ -86,6 +87,11 @@ export function estimateMealPortion(profile: Profile, mealType: MealRecord['meal
     status: 'unavailable', reason, dailyCalories, mealCalories, totalGrams: null, dishes: [], assumptions, weightKg, basis,
   });
 
+  const age = profileAgeReference(profile.ageYears);
+  if (!age.adultApplicable)
+    return unavailable(`${age.reason} 暂不自动生成成人备餐量，仍可按实际情况逐菜填写食用量。`);
+  assumptions.push(`${age.label}；年龄仅用于判断适用范围，公式未按年龄、性别、身高或活动量作个人化测算。`);
+
   if (within(profile.calorieTarget, targetBounds)) {
     basis = 'daily-target';
     dailyCalories = outward(profile.calorieTarget, profile.calorieTarget);
@@ -105,7 +111,7 @@ export function estimateMealPortion(profile: Profile, mealType: MealRecord['meal
         : '已填写的体重不在本参考的有效范围（30–250 kg），未采用异常数值，改用一般成人 60 kg 基准估计。');
     }
     dailyCalories = outward(25 * weightKg, 35 * weightKg);
-    assumptions.push('按 25–35 kcal/kg/day 的产品参考区间估计每日热量；未据身高、年龄、性别或活动量作个人化测算。');
+    assumptions.push('按 25–35 kcal/kg/day 的产品参考区间估计每日热量。');
   }
 
   const percent = mealPercent[mealType];

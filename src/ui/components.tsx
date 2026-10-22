@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import {
+  Animated,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -18,6 +19,7 @@ import type { DailySummary } from "../types";
 import { lightTheme, radius, space, type ModuleKind, type ThemeTokens } from "./theme";
 import { useTheme, useThemedStyles } from "./theme-provider";
 import { localDateTime } from "./format";
+import { PressScale, Reveal, useSpring } from "./motion";
 
 export type IconName = keyof typeof Ionicons.glyphMap;
 
@@ -63,6 +65,8 @@ export function Banner({
   );
 }
 
+const SHEET_CAP: Record<ModuleKind, string> = { meal: "NUTRITION · 饮食", training: "TRAINING · 训练", sleep: "SLEEP · 睡眠" };
+
 /** Full-height form sheet. `tone` identifies the record module. */
 export function Sheet({
   title,
@@ -86,12 +90,14 @@ export function Sheet({
   const { color, moduleTone } = useTheme();
   const s = useBaseStyles();
   const off = disabled || saving || closing;
+  const hue = tone ? moduleTone[tone].hue : color.pine;
+  const onHue = tone ? moduleTone[tone].onHue : color.onInk;
   return (
     <KeyboardAvoidingView
       style={s.sheet}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <View style={[s.sheetEdge, { backgroundColor: tone ? moduleTone[tone].hue : color.pine }]} />
+      <View style={[s.sheetEdge, { backgroundColor: hue }]} />
       <View style={s.sheetHeader}>
         <Pressable
           accessibilityRole="button"
@@ -102,23 +108,30 @@ export function Sheet({
         >
           <Ionicons name="close" size={24} color={color.ink} />
         </Pressable>
-        <Text style={s.sheetTitle} numberOfLines={1}>{title}</Text>
-        <Pressable
+        <View style={s.sheetHeading}>
+          <View style={s.sheetCapRow}>
+            <View style={[s.sheetChip, { backgroundColor: hue }]} />
+            <Text style={s.sheetCap} numberOfLines={1}>{tone ? SHEET_CAP[tone] : "SETTINGS"}</Text>
+          </View>
+          <Text style={s.sheetTitle} numberOfLines={1}>{title}</Text>
+        </View>
+        <PressScale
           accessibilityRole="button"
           onPress={onSave}
           disabled={off}
-          style={[s.saveButton, off && s.saveButtonOff]}
+          scaleTo={0.94}
+          style={[s.saveButton, { backgroundColor: hue }, off && s.saveButtonOff]}
         >
-          <Text style={[s.saveText, off && s.saveTextOff]}>
+          <Text style={[s.saveText, { color: onHue }, off && s.saveTextOff]}>
             {saving ? "保存中" : "保存"}
           </Text>
-        </Pressable>
+        </PressScale>
       </View>
       <ScrollView
         contentContainerStyle={s.form}
         keyboardShouldPersistTaps="handled"
       >
-        {children}
+        <Reveal distance={18}>{children}</Reveal>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -195,10 +208,24 @@ export function Choice<T extends string>({
   const activeText = tone ? moduleTone[tone].text : color.pine;
   const foreground = tone ? moduleTone[tone].onHue : color.onInk;
   const joined = choices.length <= 4;
+  const [trackWidth, setTrackWidth] = useState(0);
+  const selected = Math.max(0, choices.findIndex(([key]) => key === value));
+  const slide = useSpring(selected);
+  const segment = trackWidth > 0 ? (trackWidth - 6) / choices.length : 0;
+  const hasValue = choices.some(([key]) => key === value);
   return (
     <View style={s.choice}>
       <Text style={s.fieldLabel}>{label}</Text>
-      <View style={joined ? s.track : s.chips}>
+      <View style={joined ? s.track : s.chips} onLayout={joined ? (event) => setTrackWidth(event.nativeEvent.layout.width) : undefined}>
+        {joined && hasValue && segment > 0 && (
+          <Animated.View
+            pointerEvents="none"
+            style={[s.trackThumb, {
+              width: segment,
+              transform: [{ translateX: slide.interpolate({ inputRange: [0, 1], outputRange: [0, segment] }) }],
+            }]}
+          />
+        )}
         {choices.map(([key, text]) => {
           const on = value === key;
           return (
@@ -209,7 +236,8 @@ export function Choice<T extends string>({
               onPress={() => onChange(key)}
               style={[
                 joined ? s.trackItem : s.chip,
-                on && (joined ? s.trackItemOn : { backgroundColor: active, borderColor: active }),
+                on && !joined && { backgroundColor: active, borderColor: active },
+                on && joined && segment === 0 && s.trackItemOn,
               ]}
             >
               <Text
@@ -276,15 +304,15 @@ export function PrimaryButton({
   const s = useBaseStyles();
   const foreground = Object.values(moduleTone).find((item) => item.hue === tone)?.onHue ?? color.onInk;
   return (
-    <Pressable
+    <PressScale
       accessibilityRole="button"
       onPress={onPress}
       disabled={disabled}
-      style={({ pressed }) => [s.primary, { backgroundColor: tone ?? color.pine }, pressed && s.pressed, disabled && s.dim]}
+      style={[s.primary, { backgroundColor: tone ?? color.pine }, disabled && s.dim]}
     >
       {icon && <Ionicons name={icon} size={19} color={foreground} />}
       <Text style={[s.primaryText, { color: foreground }]}>{label}</Text>
-    </Pressable>
+    </PressScale>
   );
 }
 
@@ -312,7 +340,10 @@ export function Legend({ text, hint }: { text: string; hint?: string }) {
   const s = useBaseStyles();
   return (
     <View style={s.legendBox}>
-      <Text style={s.legend}>{text}</Text>
+      <View style={s.legendRow}>
+        <View style={s.legendMark} />
+        <Text style={s.legend}>{text}</Text>
+      </View>
       {hint ? <Text style={s.helper}>{hint}</Text> : null}
     </View>
   );
@@ -474,21 +505,26 @@ function createBaseStyles({ color, type, shadow }: ThemeTokens) {
   banner: {
     marginHorizontal: space.lg, marginTop: space.sm, paddingVertical: 10, paddingHorizontal: space.md,
     flexDirection: "row", alignItems: "center", gap: space.sm,
-    backgroundColor: color.pineTint, borderRadius: radius.input,
+    backgroundColor: color.surface, borderRadius: radius.input, borderWidth: 1, borderColor: color.line, ...shadow.card,
   },
-  bannerDanger: { backgroundColor: color.dangerTint },
+  bannerDanger: { backgroundColor: color.dangerTint, borderColor: color.dangerTint },
   bannerText: { flex: 1, color: color.pine, fontSize: 13, lineHeight: 19 },
   bannerAction: { fontSize: 13, fontWeight: "800" },
   sheet: { flex: 1, backgroundColor: color.paper },
   sheetEdge: { height: 4 },
   sheetHeader: {
-    minHeight: 60, paddingHorizontal: space.sm, flexDirection: "row", alignItems: "center", gap: space.sm,
-    borderBottomWidth: StyleSheet.hairlineWidth, borderColor: color.lineStrong, backgroundColor: color.paper,
+    minHeight: 64, paddingHorizontal: space.sm, flexDirection: "row", alignItems: "center", gap: space.xs,
+    borderBottomWidth: 1, borderColor: color.line, backgroundColor: color.paper,
   },
-  sheetIcon: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
-  sheetTitle: { ...type.title, flex: 1, minWidth: 0 },
+  sheetIcon: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
+  sheetHeading: { flex: 1, minWidth: 0 },
+  sheetCapRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  sheetChip: { width: 7, height: 7, borderRadius: 2 },
+  sheetCap: { ...type.cap, flexShrink: 1 },
+  sheetTitle: { fontSize: 20, lineHeight: 26, fontWeight: "800", color: color.ink, letterSpacing: -0.3, marginTop: 1 },
   saveButton: {
-    minHeight: 38, paddingHorizontal: 18, marginRight: space.sm, borderRadius: radius.pill,
+    minHeight: 40, paddingHorizontal: 22, marginRight: space.sm, borderRadius: radius.pill,
+
     backgroundColor: color.pine, alignItems: "center", justifyContent: "center",
   },
   saveButtonOff: { backgroundColor: color.sunken },
@@ -496,10 +532,10 @@ function createBaseStyles({ color, type, shadow }: ThemeTokens) {
   saveTextOff: { color: color.inkFaint },
   form: {
     width: "100%", maxWidth: 680, alignSelf: "center",
-    paddingHorizontal: space.lg + 4, paddingTop: space.lg, paddingBottom: space.xxxl,
+    paddingHorizontal: space.lg + 4, paddingTop: space.lg + 4, paddingBottom: space.xxxl,
   },
   field: { flex: 1, minWidth: 0, marginBottom: space.lg },
-  fieldLabel: { ...type.label, marginBottom: space.sm },
+  fieldLabel: { fontSize: 13, lineHeight: 18, fontWeight: "700", color: color.inkSoft, marginBottom: space.sm },
   fieldLabelRow: { flexDirection: "row", alignItems: "center", gap: space.sm, marginBottom: space.sm },
   fieldLabelWithAccessory: { flex: 1, minWidth: 0, marginBottom: 0 },
   input: {
@@ -507,8 +543,8 @@ function createBaseStyles({ color, type, shadow }: ThemeTokens) {
     backgroundColor: color.surface, borderWidth: 1, borderColor: color.line, borderRadius: radius.input,
     fontSize: 16, color: color.ink, minWidth: 0,
   },
-  inputFocused: { borderColor: color.pine, borderWidth: 1.5 },
-  inputDisabled: { backgroundColor: color.paper, color: color.inkFaint },
+  inputFocused: { borderColor: color.ink, borderWidth: 1.5 },
+  inputDisabled: { backgroundColor: color.sunken, color: color.inkFaint },
   multiline: { minHeight: 88, textAlignVertical: "top" },
   choice: { marginBottom: space.lg },
   track: {
@@ -521,22 +557,26 @@ function createBaseStyles({ color, type, shadow }: ThemeTokens) {
     backgroundColor: color.raised,
     ...shadow.card,
   },
+  trackThumb: {
+    position: "absolute", left: 3, top: 3, bottom: 3, borderRadius: radius.input - 3,
+    backgroundColor: color.raised, ...shadow.card,
+  },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
   chip: {
-    minHeight: 40, paddingHorizontal: 14, borderRadius: radius.pill, justifyContent: "center",
-    backgroundColor: color.surface, borderWidth: 1, borderColor: color.line,
+    minHeight: 38, paddingHorizontal: 14, borderRadius: radius.pill, justifyContent: "center",
+    backgroundColor: color.sunken, borderWidth: 1, borderColor: color.sunken,
   },
   chipText: { color: color.inkSoft, fontSize: 14, fontWeight: "600" },
   smallButton: {
     minHeight: 44, paddingHorizontal: 14, borderRadius: radius.pill,
-    backgroundColor: color.surface, borderWidth: 1, borderColor: color.line,
+    backgroundColor: color.surface, borderWidth: 1, borderColor: color.lineStrong,
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginBottom: space.md,
   },
   smallButtonText: { fontSize: 14, fontWeight: "700", flexShrink: 1 },
   primary: {
-    minHeight: 54, borderRadius: radius.block, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space.sm, paddingHorizontal: space.lg,
+    minHeight: 50, borderRadius: radius.pill, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space.sm, paddingHorizontal: space.lg,
   },
-  primaryText: { color: color.onInk, fontSize: 16, fontWeight: "800" },
+  primaryText: { color: color.onInk, fontSize: 15, fontWeight: "800" },
   checkRow: { flexDirection: "row", alignItems: "center", paddingVertical: 10, gap: space.md, minHeight: 44 },
   checkBox: {
     width: 22, height: 22, borderRadius: 6, borderWidth: 1.5, borderColor: color.lineStrong,
@@ -544,12 +584,14 @@ function createBaseStyles({ color, type, shadow }: ThemeTokens) {
   },
   checkBoxOn: { backgroundColor: color.pine, borderColor: color.pine },
   checkText: { flex: 1, ...type.body },
-  legendBox: { marginTop: space.md, marginBottom: space.md },
-  legend: { ...type.heading },
+  legendBox: { marginTop: space.md + 4, marginBottom: space.md },
+  legendRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  legendMark: { width: 3, height: 14, borderRadius: 2, backgroundColor: color.ink },
+  legend: { ...type.heading, fontSize: 15, flexShrink: 1 },
   helper: { ...type.small, marginTop: 2, marginBottom: space.sm },
   note: { flexDirection: "row", gap: space.sm, padding: space.md, borderRadius: radius.input, marginBottom: space.lg },
   noteText: { flex: 1, fontSize: 13, lineHeight: 19 },
-  media: { marginBottom: space.md, borderRadius: radius.block, overflow: "hidden", backgroundColor: color.surface },
+  media: { marginBottom: space.md, borderRadius: radius.block, overflow: "hidden", backgroundColor: color.surface, borderWidth: 1, borderColor: color.line },
   preview: { width: "100%", aspectRatio: 4 / 3, maxHeight: 360 },
   mediaCaption: {
     flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.md, paddingVertical: 10,
@@ -557,7 +599,7 @@ function createBaseStyles({ color, type, shadow }: ThemeTokens) {
   mediaTitle: { color: color.ink, fontSize: 14, fontWeight: "700" },
   mediaDetail: { color: color.inkSoft, fontSize: 12, marginTop: 2 },
   mediaRemove: {
-    width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", backgroundColor: color.raised,
+    width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", backgroundColor: color.sunken,
   },
   draft: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: space.md },
   draftDot: { width: 6, height: 6, borderRadius: 3 },
@@ -566,7 +608,7 @@ function createBaseStyles({ color, type, shadow }: ThemeTokens) {
   markdown: { paddingVertical: space.sm },
   markdownHeading: { ...type.heading, fontSize: 15, marginTop: space.md, marginBottom: 6 },
   markdownLine: { ...type.bodySoft, marginBottom: 4 },
-  version: { borderTopWidth: StyleSheet.hairlineWidth, borderColor: color.lineStrong },
+  version: { borderTopWidth: 1, borderColor: color.line },
   versionHead: { flexDirection: "row", alignItems: "center", gap: space.md, paddingVertical: space.md, minHeight: 52 },
   versionMark: { width: 4, alignSelf: "stretch", borderRadius: 2 },
   versionTitle: { ...type.label },

@@ -24,7 +24,7 @@ Date: 2026-10-21. Users configure their own URL, key, model and reasoning effort
 4. Typecheck, focused unit tests and mobile/desktop UI flows pass; original health backup roundtrip still passes and excludes credentials.
 5. Build a standalone signed Android test APK with current code, inspect package/native SecureStore inclusion and verify no bundled developer credentials. Real-device installation and provider-specific compatibility are reported separately.
 
-The 2026-10-21 persistence change does not imply a new APK build or that an inaccessible user's previously entered values have been saved on their behalf. The latest built APK is the 2026-10-19 source freeze; see [Android testing](android-testing.md) for its separate scope.
+The 2026-10-21 persistence verification does not itself establish a new APK build or that an inaccessible user's previously entered values have been saved on their behalf. See [Android testing](android-testing.md) for the latest built APK and its separate source and device-verification scope. Personal browser settings are never copied into a release package.
 
 Official model-list reference: https://developers.openai.com/api/reference/resources/models/methods/list (read on 2026-10-11; basic model metadata has no standard reasoning-effort list).
 

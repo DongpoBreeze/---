@@ -51,7 +51,8 @@ async function restoreSaved(page: Page, twoDishes = false) {
   const initial = savedMeal(twoDishes);
   await restorePortionMeals(page, [initial], {}, [{ uri: photo, kind: 'image', bytes: portionPng, extension: 'png' }]);
   await configureMockAi(page);
-  await page.getByRole('tab', { name: '记录', exact: true }).click();
+  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('button', { name: '全部记录', exact: true }).click();
   return (await stored(page)).data.meals[0];
 }
 
@@ -61,7 +62,8 @@ async function closeMeal(page: Page) {
 }
 
 async function requestSaved(page: Page) {
-  await page.getByRole('tab', { name: '记录', exact: true }).click();
+  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('button', { name: '全部记录', exact: true }).click();
   await page.getByRole('button', { name: '请求饮食分析', exact: true }).click();
 }
 
@@ -85,7 +87,8 @@ test('确认识别后主表单显示新菜名和营养范围，保存后记录�
   await expect(page.getByLabel('热量 kcal', { exact: true })).toHaveValue('270～300');
   await savePortionMeal(page);
 
-  await page.getByRole('tab', { name: '记录', exact: true }).click();
+  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('button', { name: '全部记录', exact: true }).click();
   await expect(page.getByText('鸡肉饭', { exact: true })).toBeVisible();
   await page.getByText('鸡肉饭', { exact: true }).click();
   await expect(page.getByLabel('食物名称', { exact: true })).toHaveValue('鸡肉饭');
@@ -164,9 +167,10 @@ test('确认草稿经关闭、刷新、再次修改和备份恢复保留菜品�
     await expectPortionRanges(restored, 1, pointRanges(220));
     await portionReview(restored).getByRole('button', { name: '返回饮食', exact: true }).click();
     await closeMeal(restored);
-    await restored.getByRole('tab', { name: '我的', exact: true }).click();
+    await restored.getByRole('tab', { name: '设置', exact: true }).click();
     await restored.getByText('删除本机数据', { exact: true }).click();
-    await restored.getByRole('tab', { name: '记录', exact: true }).click();
+    await restored.getByRole('tab', { name: '我的', exact: true }).click();
+    await restored.getByRole('button', { name: '全部记录', exact: true }).click();
     await expect(restored.getByText('熟米饭、蒸蛋', { exact: true })).toHaveCount(0);
     await importPortionBackup(restored, final.bytes);
     await reopenPortionMeal(restored, '熟米饭、蒸蛋');

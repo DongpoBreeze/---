@@ -1,0 +1,47 @@
+{
+  "cli": {
+    "version": ">= 16.0.0",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "ios-simulator": {
+      "distribution": "internal",
+      "environment": "preview",
+      "env": {
+        "EXPO_NO_DOTENV": "1",
+        "EXPO_NO_CLIENT_ENV_VARS": "1",
+        "EXPO_NO_TELEMETRY": "1"
+      },
+      "ios": {
+        "simulator": true,
+        "buildConfiguration": "Release"
+      }
+    },
+    "ios-internal": {
+      "distribution": "internal",
+      "environment": "preview",
+      "env": {
+        "EXPO_NO_DOTENV": "1",
+        "EXPO_NO_CLIENT_ENV_VARS": "1",
+        "EXPO_NO_TELEMETRY": "1"
+      },
+      "ios": {
+        "simulator": false,
+        "buildConfiguration": "Release"
+      }
+    },
+    "ios-testflight": {
+      "distribution": "store",
+      "environment": "production",
+      "env": {
+        "EXPO_NO_DOTENV": "1",
+        "EXPO_NO_CLIENT_ENV_VARS": "1",
+        "EXPO_NO_TELEMETRY": "1"
+      },
+      "ios": {
+        "simulator": false,
+        "buildConfiguration": "Release"
+      }
+    }
+  }
+}

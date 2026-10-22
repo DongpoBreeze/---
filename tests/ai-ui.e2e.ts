@@ -30,7 +30,8 @@ test('AI versions preserve source input and reject responses after record change
   await page.getByLabel('食物名称', { exact: true }).fill('原始餐食');
   await page.getByText('保存', { exact: true }).click();
   await expect(page.getByLabel('食物名称', { exact: true })).toHaveCount(0);
-  await page.getByRole('tab', { name: '记录', exact: true }).click();
+  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('button', { name: '全部记录', exact: true }).click();
   await page.getByLabel('请求饮食分析', { exact: true }).click();
   await confirmAndSaveMealReview(page);
   await expect(page.getByText('未知酱料', { exact: true })).toBeVisible();
@@ -54,7 +55,7 @@ test('AI versions preserve source input and reject responses after record change
   await expect(page.getByLabel('食物名称', { exact: true })).toHaveCount(0);
   await release!();
   await expect(page.getByText('记录在分析期间发生变化，请重新发起分析。', { exact: true })).toBeVisible();
-  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('tab', { name: '设置', exact: true }).click();
   const downloadEvent = page.waitForEvent('download');
   await page.getByText('导出完整备份', { exact: true }).click();
   const download = await downloadEvent;
@@ -102,7 +103,8 @@ test('已保存餐食实时显示等待时间，110秒后仍可接收完整分�
   await page.getByLabel('食物名称', { exact: true }).fill('已保存慢响应餐食');
   await page.getByRole('dialog').getByRole('button', { name: '保存', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  await page.getByRole('tab', { name: '记录', exact: true }).click();
+  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('button', { name: '全部记录', exact: true }).click();
   await page.clock.install();
   await page.getByLabel('请求饮食分析', { exact: true }).click();
   await expect.poll(() => provider.responses().length).toBe(1);

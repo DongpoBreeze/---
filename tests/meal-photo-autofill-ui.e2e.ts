@@ -98,7 +98,7 @@ test('餐前照片分析经过确认回填表单并作为独立版本导出', as
   await page.getByRole('dialog').getByRole('button', { name: '保存', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
-  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('tab', { name: '设置', exact: true }).click();
   const downloadEvent = page.waitForEvent('download');
   await page.getByText('导出完整备份', { exact: true }).click();
   const download = await downloadEvent;

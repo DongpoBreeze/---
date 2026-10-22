@@ -1,4 +1,4 @@
-import { AppData, DailySummary, MealRecord, SleepRecord, TrainingRecord } from './types';
+import { AppData, DailySummary, MealRecord, SleepRecord, TrainingExercise, TrainingRecord } from './types';
 
 export function localDate(value: string | Date = new Date()): string {
   const d = new Date(value);
@@ -36,10 +36,21 @@ export function parseSleepTimes(date: string, start: string, end: string): { fel
   return { fellAsleepAt: sleep.toISOString(), wokeAt: wake.toISOString() };
 }
 
+/** Per-exercise view of a session; legacy records become a single exercise named after the record. */
+export function trainingExercises(record: Pick<TrainingRecord, 'exercise' | 'sets' | 'exercises'>): TrainingExercise[] {
+  return record.exercises?.length ? record.exercises : [{ name: record.exercise, sets: record.sets }];
+}
+
+const setsText = (sets: TrainingExercise['sets']) => sets.map((s) => `${s.isWarmup ? '热身' : '工作组'} ${s.weight} ${s.unit} × ${s.reps} 次`).join('，');
+
 export function trainingAdvice(record: TrainingRecord, history: TrainingRecord[]): string {
   if (record.mode === 'cardio') return `已完成 ${record.durationMinutes ?? 0} 分钟${record.exercise}。根据身体感受安排恢复。`;
   if (record.pain === 'yes') return '记录了疼痛，暂停增加负荷，先评估不适原因。';
   if (record.controlled === 'no' || record.rir === '0' || record.rir === '1') return '本次动作控制或余力不足，暂不增加重量和次数。';
+  if ((record.exercises?.length ?? 0) > 1) {
+    const work = record.sets.filter((s) => !s.isWarmup).length;
+    return `本次完成 ${record.exercises!.length} 个动作、${work} 个工作组。动作稳定、余力充足时再逐个动作小幅加重。`;
+  }
   const { targetSets, targetMin, targetMax, increment } = record;
   if (!targetSets || !targetMin || !targetMax || !increment || targetMin > targetMax || increment <= 0 || !record.weightBasis || record.weightBasis === 'bodyweight') return '补充目标组数、次数区间和最小加重后，再提供进阶参考。';
   if (record.pain !== 'no' || record.controlled !== 'yes' || !['2', '3', '4+'].includes(record.rir)) return '补充疼痛、动作控制与剩余次数反馈后，再提供进阶参考。';
@@ -90,7 +101,7 @@ export function summaryMarkdown(data: AppData, date = localDate()): string {
       return `- ${r.mealType}：${r.foodName} ${r.portion}；${missing.length ? `未计入：${missing.join('、')}` : '数量记录完整或无已识别菜品'}；剩余：${r.remaining || '未知'}${r.note ? `；备注：${r.note}` : ''}`;
     }),
     '', '## 训练',
-    ...(training.length ? training.map((r) => `- ${r.exercise}：${r.mode === 'cardio' ? `${r.durationMinutes} 分钟` : r.sets.map((s) => `${s.isWarmup ? '热身' : '工作组'} ${s.weight} ${s.unit} × ${s.reps} 次`).join('，')}；疼痛：${feedback[r.pain]}；动作可控：${r.controlled === 'yes' ? '是' : r.controlled === 'no' ? '否' : '未填写'}；最少剩余次数：${r.rir === 'unknown' ? '未填写' : r.rir}${r.note ? `；备注：${r.note}` : ''}\n  训练参考：${trainingAdvice(r, data.trainings)}`) : ['未记录']),
+    ...(training.length ? training.map((r) => `- ${r.exercise}：${r.mode === 'cardio' ? `${r.durationMinutes} 分钟` : (r.exercises?.length ?? 0) > 1 ? r.exercises!.map((e) => `${e.name}（${setsText(e.sets)}）`).join('；') : setsText(r.sets)}；疼痛：${feedback[r.pain]}；动作可控：${r.controlled === 'yes' ? '是' : r.controlled === 'no' ? '否' : '未填写'}；最少剩余次数：${r.rir === 'unknown' ? '未填写' : r.rir}${r.note ? `；备注：${r.note}` : ''}\n  训练参考：${trainingAdvice(r, data.trainings)}`) : ['未记录']),
     '', '## 睡眠',
     ...(sleep.length ? sleep.map((r) => { const s = sleepStats(r); return `- 时间区间 ${(s.intervalMinutes / 60).toFixed(1)} 小时；估算睡眠 ${s.asleepMinutes === null ? '未知' : `${(s.asleepMinutes / 60).toFixed(1)} 小时`}；主观质量 ${r.quality === undefined ? '未填写' : `${r.quality}/5`}${r.note ? `；备注：${r.note}` : ''}`; }) : ['未记录']),
     '', '## 今日关注',

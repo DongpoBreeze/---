@@ -146,9 +146,9 @@ export function SleepTimeline({ model, disabled = false, onChange }: {
 
 const createStyles = ({ color, type }: ThemeTokens) => StyleSheet.create({
   selectionLabels: { flexDirection: 'row', justifyContent: 'space-between', gap: 8, marginTop: 14 },
-  selectionLabel: { color: color.sleepText, fontSize: 12, fontWeight: '600', ...type.numeric },
+  selectionLabel: { color: color.sleepText, fontSize: 12, fontWeight: '700', ...type.mono },
   trackArea: { height: 44, marginHorizontal: 22, position: 'relative' },
-  track: { position: 'absolute', left: 0, right: 0, top: 18, height: 8, borderRadius: 4, backgroundColor: color.paper },
+  track: { position: 'absolute', left: 0, right: 0, top: 18, height: 8, borderRadius: 4, backgroundColor: color.surface },
   range: { position: 'absolute', top: 18, height: 8, borderRadius: 4, backgroundColor: color.sleep },
   suggested: { opacity: 0.45 },
   handle: { position: 'absolute', top: 0, width: 44, height: 44, transform: [{ translateX: -22 }], justifyContent: 'center', alignItems: 'center' },
@@ -156,6 +156,6 @@ const createStyles = ({ color, type }: ThemeTokens) => StyleSheet.create({
   thumbActive: { width: 32, height: 32, borderRadius: 16, borderWidth: 3 },
   disabled: { opacity: 0.45 },
   ticks: { height: 18, marginHorizontal: 22, position: 'relative' },
-  tick: { position: 'absolute', width: 38, marginLeft: -19, textAlign: 'center', color: color.inkFaint, fontSize: 10, ...type.numeric },
+  tick: { position: 'absolute', width: 38, marginLeft: -19, textAlign: 'center', color: color.inkFaint, fontSize: 9.5, ...type.mono },
   dateRange: { color: color.inkFaint, fontSize: 10, lineHeight: 16, marginTop: 4, textAlign: 'center', ...type.numeric },
 });

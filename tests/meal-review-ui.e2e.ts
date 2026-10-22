@@ -96,7 +96,7 @@ async function confirmReview(page: Page, options: { editNutrition?: boolean } = 
 async function saveAndExport(page: Page) {
   await page.getByRole('dialog').getByRole('button', { name: '保存', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('tab', { name: '设置', exact: true }).click();
   const downloadEvent = page.waitForEvent('download');
   await page.getByText('导出完整备份', { exact: true }).click();
   const download = await downloadEvent;
@@ -252,14 +252,15 @@ test('人工修改每100g四项范围并增删菜品可直接确认，不追加A
   });
   // Reopening an existing record must not apply this manual reference to a
   // different dish through the older quantity-correction entry point.
-  await page.getByRole('tab', { name: '记录', exact: true }).click();
+  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('button', { name: '全部记录', exact: true }).click();
   await page.getByText(archive.data.meals[0].foodName, { exact: true }).click();
   await page.getByRole('button', { name: '填写菜品数量', exact: true }).click();
   await page.getByLabel('菜品 1 名称', { exact: true }).fill('已换成另一道菜');
   await page.getByRole('button', { name: '保存营养校正', exact: true }).click();
   await expect(page.getByTestId('current-meal-analysis').getByText(/热量 约 40～80 kcal/)).toBeVisible();
   await page.getByRole('dialog').getByLabel('关闭', { exact: true }).click();
-  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('tab', { name: '设置', exact: true }).click();
   const exportEvent = page.waitForEvent('download');
   await page.getByText('导出完整备份', { exact: true }).click();
   const correctedArchive = await parseBackupArchive(new Uint8Array(await readFile((await (await exportEvent).path())!)));
@@ -429,7 +430,8 @@ test('确认后可手改整餐数值和区间，保存重开及摘要采用修�
   await page.reload();
   await page.getByRole('tab', { name: '今天', exact: true }).click();
   await expect(page.getByTestId('today-nutrition').getByText('280', { exact: true })).toBeVisible();
-  await page.getByRole('tab', { name: '记录', exact: true }).click();
+  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('button', { name: '全部记录', exact: true }).click();
   await page.getByText(meal.foodName, { exact: true }).click();
   await expect(page.getByLabel('热量 kcal', { exact: true })).toHaveValue('280');
   await expect(page.getByLabel('蛋白质 g', { exact: true })).toHaveValue('4.5～5.5');
@@ -464,7 +466,8 @@ test('手动清空全部营养后保存为未知，重新打开不恢复旧AI总
     nutritionSource: { provider: 'manual', method: 'manual-total-v1' },
   });
   expect(meal.analyses!.some((version) => version.analysis.calories?.min === 260 && version.analysis.calories.max === 300)).toBe(true);
-  await page.getByRole('tab', { name: '记录', exact: true }).click();
+  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('button', { name: '全部记录', exact: true }).click();
   await page.getByText(meal.foodName, { exact: true }).click();
   for (const field of ['热量 kcal', '蛋白质 g', '碳水 g', '脂肪 g'])
     await expect(page.getByLabel(field, { exact: true })).toHaveValue('');
@@ -484,13 +487,14 @@ test('旧记录隐藏份量和剩余量后仍保留原数据，无需AI也可手
   };
   const bytes = await createBackupArchive({ ...emptyData(), meals: [originalMeal] }, []);
   await page.goto('/');
-  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('tab', { name: '设置', exact: true }).click();
   const restored = page.waitForEvent('dialog', { predicate: (dialog) => dialog.message().includes('恢复完成') });
   const chooser = page.waitForEvent('filechooser');
   await page.getByText('恢复备份', { exact: true }).click();
   await (await chooser).setFiles({ name: 'old-meal.zip', mimeType: 'application/zip', buffer: Buffer.from(bytes) });
   await restored;
-  await page.getByRole('tab', { name: '记录', exact: true }).click();
+  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('button', { name: '全部记录', exact: true }).click();
   await page.getByText(originalMeal.foodName, { exact: true }).click();
   await expect(page.getByLabel('份量或参考物（可选）', { exact: true })).toHaveCount(0);
   await expect(page.getByLabel('剩余量（可选）', { exact: true })).toHaveCount(0);
@@ -520,7 +524,8 @@ test('手动整餐营养之后可按原AI参考重新填写数量，新计算可
   await page.getByLabel('碳水 g', { exact: true }).fill('60');
   await page.getByLabel('脂肪 g', { exact: true }).fill('1');
   const first = await saveAndExport(page);
-  await page.getByRole('tab', { name: '记录', exact: true }).click();
+  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('button', { name: '全部记录', exact: true }).click();
   await page.getByText(first.data.meals[0].foodName, { exact: true }).click();
   await expect(page.getByLabel('热量 kcal', { exact: true })).toHaveValue('280');
   await page.getByRole('button', { name: '填写菜品数量', exact: true }).click();
@@ -552,7 +557,8 @@ for (const keepPhoto of [true, false]) {
     await confirmReview(page);
     const first = await saveAndExport(page);
     const foodName = first.data.meals[0].foodName;
-    await page.getByRole('tab', { name: '记录', exact: true }).click();
+    await page.getByRole('tab', { name: '我的', exact: true }).click();
+    await page.getByRole('button', { name: '全部记录', exact: true }).click();
     await page.getByText(foodName, { exact: true }).click();
     if (!keepPhoto) await page.getByLabel('移除餐前照片', { exact: true }).click();
     await page.getByRole('button', { name: '修改识别结果', exact: true }).click();
@@ -566,7 +572,8 @@ for (const keepPhoto of [true, false]) {
     await page.getByRole('button', { name: '返回饮食', exact: true }).click();
     const second = await saveAndExport(page);
     expect(second.data.meals[0].analyses!.at(-1)!.analysis.components![0].userQuantity).toEqual({ amount: 200, unit: 'g', origin: 'user' });
-    await page.getByRole('tab', { name: '记录', exact: true }).click();
+    await page.getByRole('tab', { name: '我的', exact: true }).click();
+    await page.getByRole('button', { name: '全部记录', exact: true }).click();
     await page.getByText(foodName, { exact: true }).click();
     await expect(page.getByLabel('热量 kcal', { exact: true })).toHaveValue('260～300');
     await page.getByRole('button', { name: '填写菜品数量', exact: true }).click();
@@ -596,7 +603,8 @@ test('后台AI完整响应不会覆盖打开表单中的手动营养，保存保
   await page.getByLabel('食物名称', { exact: true }).fill('后台响应测试餐食');
   await page.getByRole('dialog').getByRole('button', { name: '保存', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  await page.getByRole('tab', { name: '记录', exact: true }).click();
+  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('button', { name: '全部记录', exact: true }).click();
   await page.getByLabel('请求饮食分析', { exact: true }).click();
   await expect.poll(() => Boolean(release)).toBe(true);
   await page.getByText('后台响应测试餐食', { exact: true }).click();

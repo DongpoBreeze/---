@@ -1,22 +1,23 @@
 # 文档与验证索引
 
-整理日期：2026-10-21。启动、基本使用与检查命令见 [项目 README](../README.md)。
+整理日期：2026-10-22。启动、基本使用与检查命令见 [项目 README](../README.md)。
 
 ## 现行约定
 
 | 阅读目的 | 文档 | 范围 |
 | --- | --- | --- |
-| 产品范围与验收 | [首版产品规格](product-spec-v0.1.md) | 三模块、数据归属、隐私、A-01～A-21 验收要求。定义目标，不表示已全部通过。 |
+| 产品范围与验收 | [首版产品规格](product-spec-v0.1.md) | 三模块、选填性别年龄、BMI 与推荐目标、数据归属、隐私、A-01～A-22 验收要求。定义目标，不表示已全部通过。 |
 | 菜品、每 100 g 营养与食用量 | [营养实现规格](nutrition-implementation.md) | 最小 JSON、默认参考量、用户修改、确认同步、旧数据与备份兼容。 |
 | AI 连接与持久化 | [用户 AI 设置](user-ai-settings.md) | 用户直连、模型与自定义强度、SecureStore / IndexedDB、保存失败及凭据边界。 |
 | 实现顺序和发布条件 | [技术路线图](technical-roadmap.md) | P0～P6 依赖、接口与阶段验收。 |
 | 餐食链路的代码落点 | [P2 技术报告](p2-meal-analysis-technical-report.md) | 多图输入、请求、校验、复核、本地换算、版本和备份。 |
 | 当前视觉方向 | [方案 A 设计约定](ui-design-a.md) | 24 格节律矩阵、四个 Tab、浅暗主题及设计参考。 |
 | 构建与设备验证 | [Android 测试说明](android-testing.md) | 最新 APK 的源码边界、构建命令、签名和限定的模拟器结果。 |
+| iPhone 编译与 Windows 安装 | [iOS 测试说明](ios-testing.md) | 隔离源码、macOS 未签名 IPA 构建、用户自行签名及设备验收边界。 |
 | 开发和诊断工具 | [脚本说明](../scripts/README.md) | 脚本分类、专项检查、历史冻结及实验约束。 |
 | 本次维护发现 | [维护审查](maintenance-review.md) | 文件整理、代码检查、专项测试结果及后续建议。 |
 
-当前源码行为以这些规格和实现为准；带日期的测试记录只描述当时的快照、模型和设备。旧记录中的 55 / 90 秒等待、页面内存配置、手动采用参考量等属于历史阶段：当前普通分析每阶段上限 120 秒，Web 配置使用独立 IndexedDB，识别页在本地预填可用参考量。最新已构建 APK 停留在 2026-10-19，不能当成当前工作树的安装包。
+当前源码行为以这些规格和实现为准；带日期的测试记录只描述当时的快照、模型和设备。旧记录中的 55 / 90 秒等待、页面内存配置、手动采用参考量等属于历史阶段：当前普通分析每阶段上限 120 秒，Web 配置使用独立 IndexedDB，识别页在本地预填可用参考量。2026-10-22 已将 BMI、推荐目标和用户最新名称/图标重建为 Android 0.1.3 / code 4，具体包身份、安装和限定验证范围见 [Android 说明](android-testing.md)。其后的参考图布局及选填性别年龄没有进入该 Android 包，已进入本次 [iOS 0.1.3 / build 1 未签名包](ios-testing.md)；iPhone 签名安装和真机流程尚待验证。
 
 ## 验证记录与原始证据
 
@@ -24,6 +25,9 @@
 
 | 主题 | 记录入口 | 证据与边界 |
 | --- | --- | --- |
+| iOS 0.1.3 / build 1 未签名 IPA | [iOS 测试说明](ios-testing.md) | 云端 18/18 专项、类型检查、Xcode 26.3 原生编译和下载后验包通过；67 文件源码对应、76 个包文件与 13 个原生二进制通过核对。Windows 用户自行重签，iPhone 设备测试未做。 |
+| 选填性别年龄与年龄适用判断 | [开发记录](development.md#profile-demographics) | 类型检查、客户端 331/331、相关单元 46/46、网页 10/10；选填/清空、分组边界、保存恢复及备餐参考限制通过，无真实 AI、原生或儿童/老年专门模型验收。 |
+| BMI、阶段体重与热量建议 | [开发记录](development.md#profile-health) | 本地计算、自动/手动来源及备份冲突；首轮客户端 319/319、服务端 80/80。参考图布局更新的定向单元 18/18、完整身体参考网页 6/6，含四档公斤区间、分层标记、深浅主题和保存恢复；8081 正常，Android 范围单独记录。 |
 | 默认食用量、名称与四项营养同步 | [开发记录](development.md#estimated-portions) | 该功能集成时核心 277/277、服务端 80/80、类型检查通过。Web 的 42 个不同场景/视口组合跨 7 轮各有通过结果；[原始目录](../artifacts/meal-estimated-portion-web-20261021/) 保留初轮失败和定向补跑。 |
 | 多餐前图及配置持久化 | [开发记录](development.md#multi-photo-settings) | 多图与受影响流程的 18 个组合分轮通过；[多图证据](../artifacts/meal-before-photos-settings-web-20261021/)。设置场景、事务失败与完整关闭浏览器后恢复的证据详见 [AI 设置验证](user-ai-settings.md#verification-on-2026-10-21)。 |
 | 固定 8081 来源重开恢复 | [AI 设置复查](user-ai-settings.md#same-origin-reopen-recheck-2026-10-21) | 长预算回归一轮 2/2；[结果 JSON](../artifacts/ai-reopen-8081-20261020T180840Z/restart-verification-long.json)。早期整条用例超时保留，增加的是测试预算，App 上限未改。 |
@@ -31,9 +35,11 @@
 | 方案 A 初次集成 | [设计说明中的历史验证](ui-design-a.md#initial-validation) | 2026-10-18 的 Web 流程、布局及截图；已进入 10 月 19 日 APK。后续暗色和餐食交互变化另见开发记录。 |
 | 最小餐食 JSON 的真实首轮 | [开发记录](development.md#frontend-protocol) | [三图报告](../artifacts/meal-frontend-20261018-high-v1/report.md)：固定 `gpt-6.1-sol/high` 的三次首轮均完整有效；没有人工营养真值，未验证长期稳定性。 |
 | 旧提示、速度与失败诊断 | [开发历史](development.md#latency-history) | [22 次试验结论](../artifacts/meal-latency-20261018-90s-v1/conclusion.md) 使用当时的 90 秒、冻结源码及旧提示，不是现行配置的速度保证。 |
+| Android 0.1.3 身体参考与当前名称/图标 | [最新 Android 包](android-testing.md#latest-integrated-build-2026-10-22) | 签名、源码、名称图标与凭据模式扫描通过；离线 x86_64 模拟器身体参考、保存和冷启动恢复通过。其后参考图布局仅更新 Web，不在此包中；无实体手机/iOS 验收。 |
+| Android 0.1.2 当前 UI | [历史 UI 包](android-testing.md#earlier-ui-build-2026-10-22-012) | 隔离 x86_64 模拟器覆盖 0.1.1 后保留一条测试餐食，新版手动营养保存重开、训练/睡眠表单和系统暗色启动通过；未做该轮原生真实 AI、相机、备份恢复或实体设备验收。 |
 | Android 0.1.1 | [Android 运行范围](android-testing.md#native-runtime-scope) | 一个 x86_64 模拟器、一次真实 Responses 分析、离线 150 g 换算、同 APK 覆盖安装与原生导出。原生恢复、arm64 实体手机和 iOS 未验收。 |
 
-完整开发时间线及 A-01～A-21 的实现/验证边界集中在 [开发记录](development.md)。Android 各版包身份、历史签名与设备结果集中在 [Android 测试说明](android-testing.md)。新测试应保存自己的运行结果，不改写旧冻结清单、账本或失败产物。
+完整开发时间线及 A-01～A-22 的实现/验证边界集中在 [开发记录](development.md)。Android 各版包身份、历史签名与设备结果集中在 [Android 测试说明](android-testing.md)。新测试应保存自己的运行结果，不改写旧冻结清单、账本或失败产物。
 
 ## 历史调研与待完成评估
 

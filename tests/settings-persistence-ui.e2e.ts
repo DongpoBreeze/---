@@ -136,6 +136,7 @@ for (const protocol of ['responses', 'chat_completions'] as const) {
       await page.reload();
       await verifyConnection(page, protocol);
       await verifyProfile(page);
+      await page.getByRole('tab', { name: '设置', exact: true }).click();
       const downloadPromise = page.waitForEvent('download');
       await page.getByText('导出完整备份', { exact: true }).click();
       const download = await downloadPromise;
@@ -157,8 +158,9 @@ for (const protocol of ['responses', 'chat_completions'] as const) {
       const otherOrigin = new URL(baseURL);
       otherOrigin.hostname = otherOrigin.hostname === 'localhost' ? '127.0.0.1' : 'localhost';
       await page.goto(otherOrigin.href);
-      await page.getByRole('tab', { name: '我的', exact: true }).click();
+      await page.getByRole('tab', { name: '设置', exact: true }).click();
       await expect(page.getByText('尚未配置', { exact: true })).toBeVisible();
+      await page.getByRole('tab', { name: '我的', exact: true }).click();
       await page.getByText('修改目标与资料', { exact: true }).click();
       await expect(page.getByRole('dialog').getByLabel('身高（cm，可选）', { exact: true })).toHaveValue('');
       await expect(page.getByRole('dialog').getByLabel('体重（kg，可选）', { exact: true })).toHaveValue('');
@@ -170,7 +172,7 @@ for (const protocol of ['responses', 'chat_completions'] as const) {
       await page.getByRole('dialog').getByText('删除 AI 配置', { exact: true }).click();
       await expect(page.getByRole('dialog')).toHaveCount(0);
       await page.reload();
-      await page.getByRole('tab', { name: '我的', exact: true }).click();
+      await page.getByRole('tab', { name: '设置', exact: true }).click();
       await expect(page.getByText('尚未配置', { exact: true })).toBeVisible();
       await verifyProfile(page);
       expect(reopenedProvider.requests).toHaveLength(0);
@@ -218,7 +220,7 @@ test('slow AI initialization and read failure keep offline profile usable and re
     };
   }, aiDatabase);
   await page.reload();
-  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('tab', { name: '设置', exact: true }).click();
   await expect(page.getByText('读取中', { exact: true })).toBeVisible();
   await page.getByRole('tab', { name: '今天', exact: true }).click();
   await page.getByText('请求 AI 综合分析', { exact: true }).click();
@@ -230,10 +232,11 @@ test('slow AI initialization and read failure keep offline profile usable and re
   await page.evaluate(() => sessionStorage.setItem('test-ai-read-fault', 'deny'));
   await page.reload();
   await expect(page.getByText(/读取 AI 设置失败：.*原配置未清除/)).toBeVisible();
-  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('tab', { name: '设置', exact: true }).click();
   await expect(page.getByText('读取失败，点此重试', { exact: true })).toBeVisible();
   await expect(page.getByText('尚未配置', { exact: true })).toHaveCount(0);
   await verifyProfile(page);
+  await page.getByRole('tab', { name: '设置', exact: true }).click();
   await page.getByText('AI 服务设置', { exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.getByText('读取失败，点此重试', { exact: true })).toBeVisible();
@@ -243,7 +246,7 @@ test('slow AI initialization and read failure keep offline profile usable and re
   await verifyConnection(page, 'responses');
   await corruptSavedConnection(page);
   await page.reload();
-  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('tab', { name: '设置', exact: true }).click();
   await expect(page.getByText(/已保存的 AI 设置无效/)).toBeVisible();
   await page.getByRole('button', { name: '重新配置 AI 服务', exact: true }).click();
   await expect(page.getByRole('dialog').getByText(/原存储仍保留/)).toBeVisible();
@@ -252,13 +255,13 @@ test('slow AI initialization and read failure keep offline profile usable and re
   await verifyProfile(page);
   await corruptSavedConnection(page);
   await page.reload();
-  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('tab', { name: '设置', exact: true }).click();
   await expect(page.getByRole('button', { name: '重新配置 AI 服务', exact: true })).toBeVisible();
   await page.getByRole('button', { name: '重新配置 AI 服务', exact: true }).click();
   await page.getByRole('dialog').getByText('删除 AI 配置', { exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await page.reload();
-  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('tab', { name: '设置', exact: true }).click();
   await expect(page.getByText('尚未配置', { exact: true })).toBeVisible();
   await verifyProfile(page);
   expect(provider.responses()).toHaveLength(0);
@@ -309,6 +312,7 @@ test('aborted write transactions keep previous AI and profile values and leave f
   expect(unchanged).toBe(true);
   await dialog.getByLabel('关闭', { exact: true }).click();
   await page.evaluate(() => { (window as any).__settingsWriteFault = 'profile'; });
+  await page.getByRole('tab', { name: '我的', exact: true }).click();
   await page.getByText('修改目标与资料', { exact: true }).click();
   await dialog.getByLabel('身高（cm，可选）', { exact: true }).fill('190');
   await dialog.getByLabel('体重（kg，可选）', { exact: true }).fill('90');
@@ -340,7 +344,7 @@ test('empty saved and unreadable AI settings forms render without console errors
   await dialog.getByLabel('关闭', { exact: true }).click();
   await corruptSavedConnection(page);
   await page.reload();
-  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('tab', { name: '设置', exact: true }).click();
   await page.getByRole('button', { name: '重新配置 AI 服务', exact: true }).click();
   await expect(dialog.getByText(/原存储仍保留/)).toBeVisible();
   await dialog.getByText('删除 AI 配置', { exact: true }).click();

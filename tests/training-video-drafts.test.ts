@@ -7,7 +7,7 @@ import * as backup from '../src/backup';
 import * as domain from '../src/domain';
 import * as localStore from '../src/local-store';
 import * as mealPhotos from '../src/meal-photos';
-import { emptyData, type AppData, type TrainingRecord } from '../src/types';
+import { emptyData, type AppData, type TrainingRecord, type WorkoutTemplate } from '../src/types';
 import type { TrainingDraft } from '../src/ui/app-types';
 
 function compiled(path: string) {
@@ -65,7 +65,12 @@ const sameDeps = (a: readonly unknown[] | undefined, b: readonly unknown[] | und
 
 // Run the production form, draft/session hooks and JSON repository together.
 // Only native rendering, the file picker and the media-copy boundary are replaced.
-async function mount(store: ReturnType<typeof stored>, initial?: TrainingRecord) {
+async function mount(
+  store: ReturnType<typeof stored>,
+  initial?: TrainingRecord,
+  options: { workoutTemplates?: WorkoutTemplate[]; history?: TrainingRecord[] } = {},
+) {
+  const savedTemplates: Array<Omit<WorkoutTemplate, 'id'>> = [];
   const slots: HookSlot[] = [];
   const pendingEffects: Array<() => void> = [];
   let cursor = 0;
@@ -117,12 +122,15 @@ async function mount(store: ReturnType<typeof stored>, initial?: TrainingRecord)
       useBaseStyles: () => ({}),
     },
     './format': execute(formatCode, { 'react-native': native, '../domain': domain }),
+    './motion': { animateLayout: () => {} }, './date-time-field': { DateTimeField: 'DateTimeField' },
     './theme': {}, './theme-provider': { useTheme: () => ({ color: {}, type: {}, scheme: 'light' }), useThemedStyles: () => ({}) },
   });
   const draftKey = `training-${initial?.id ?? 'new'}`;
   const session = { id: 1, epoch: 0, isActive: () => active };
   const props = {
-    initial, draftKey, session, history: [], exerciseTemplates: [], onSaveTemplate: async () => {}, onClose: () => { closed++; },
+    initial, draftKey, session, history: options.history ?? [], workoutTemplates: options.workoutTemplates ?? [], exerciseTemplates: [],
+    onSaveTemplate: async (template: Omit<WorkoutTemplate, 'id'>) => { savedTemplates.push(template); },
+    onClose: () => { closed++; },
     onSave: async (draft: TrainingDraft) => {
       submitted.push(draft);
       if (!initial) return;
@@ -155,13 +163,21 @@ async function mount(store: ReturnType<typeof stored>, initial?: TrainingRecord)
   };
   const find = (predicate: (element: Element) => boolean) => {
     const found = elements().find(predicate);
-    assert.ok(found, 'Expected training form control'); return found;
+    assert.ok(found, 'Expected training form control; labels: ' + elements().map((e) => e.props.accessibilityLabel).filter(Boolean).join('|')); return found;
   };
   const act = async (action: () => unknown) => { await action(); await flush(); };
   await flush();
   assert.equal(find((element) => element.type === 'DraftStatus').props.error, '');
+  const labelled = (label: string) => find((element) => element.props.accessibilityLabel === label);
   return {
-    draftKey, submitted, closed: () => closed,
+    draftKey, submitted, savedTemplates, closed: () => closed,
+    press: (label: string) => act(() => labelled(label).props.onPress()),
+    input: (label: string, value: string) => act(() => labelled(label).props.onChangeText(value)),
+    value: (label: string) => labelled(label).props.value,
+    blockName: (n: number) => labelled(`选择动作${n}`).props.children[0].props.children[0],
+    has: (label: string) => elements().some((element) => element.props.accessibilityLabel === label),
+    error: () => elements().find((element) => element.type === 'Banner')?.props.text,
+    trySave: () => act(() => find((element) => element.type === 'Sheet').props.onSave()),
     video: () => elements().find((element) => element.type === 'VideoAttachment')?.props.uri,
     note: () => find((element) => element.type === 'Field' && element.props.label === '备注（可选）').props.value,
     remove: () => act(() => find((element) => element.props.accessibilityLabel === '移除训练视频').props.onPress()),
@@ -256,4 +272,99 @@ test('new forms persist a JSON-safe empty video state without inventing a media 
   assert.deepEqual(backup.collectDraftMediaReferences(store.snapshot().drafts), []);
   const reopened = await mount(store); t.after(reopened.dispose);
   assert.equal(reopened.video(), undefined);
+});
+
+test('a multi-exercise session saves every exercise and can be stored as one workout template', async (t) => {
+  const store = stored(emptyData());
+  const form = await mount(store); t.after(form.dispose);
+  await form.input('训练名称', '推日');
+  await form.press('选择动作1'); await form.press('卧推');
+  assert.equal(form.blockName(1), '卧推');
+  await form.input('动作1 每组次数', '8'); await form.input('动作1 每组重量', '40');
+  await form.press('添加动作');
+  assert.equal(form.has('卧推'), true, 'a new exercise opens its picker');
+  await form.press('肩推');
+  await form.press('动作2 减少一组');
+  await form.input('动作2 每组次数', '10'); await form.input('动作2 每组重量', '15');
+  await form.press('保存为模板');
+  assert.deepEqual(form.savedTemplates, [{ name: '推日', exercises: [
+    { name: '卧推', setCount: 3, weightUnit: 'kg', weightBasis: 'total' },
+    { name: '肩推', setCount: 2, weightUnit: 'kg', weightBasis: 'total' },
+  ] }]);
+  await form.save();
+  const saved = form.submitted[0];
+  assert.equal(saved.exercise, '推日');
+  assert.deepEqual(saved.exercises?.map((item) => [item.name, item.sets.length]), [['卧推', 3], ['肩推', 2]]);
+  assert.equal(saved.sets.length, 5);
+  assert.deepEqual(saved.sets[3], { reps: 10, weight: 15, unit: 'kg', isWarmup: false });
+});
+
+test('template saving requires a title and named exercises; untitled sessions join exercise names', async (t) => {
+  const form = await mount(stored(emptyData())); t.after(form.dispose);
+  await form.press('保存为模板');
+  assert.equal(form.error(), '请先填写训练名称，再保存为模板。');
+  await form.input('训练名称', '腿日');
+  await form.press('保存为模板');
+  assert.equal(form.error(), '请先填写第 1 个动作的名称。');
+  assert.equal(form.savedTemplates.length, 0);
+  await form.input('训练名称', '');
+  await form.press('选择动作1'); await form.input('动作1 名称', '深蹲');
+  await form.input('动作1 每组次数', '5'); await form.input('动作1 每组重量', '60');
+  await form.press('添加动作'); await form.press('硬拉');
+  await form.trySave();
+  assert.equal(form.error(), '请填写硬拉第 1 组的实际次数和重量。');
+  await form.input('动作2 每组次数', '5'); await form.input('动作2 每组重量', '80');
+  await form.save();
+  assert.equal(form.submitted[0].exercise, '深蹲、硬拉');
+  assert.equal(form.submitted[0].exercises?.length, 2);
+});
+
+test('a single exercise named after itself keeps the legacy record shape', async (t) => {
+  const form = await mount(stored(emptyData())); t.after(form.dispose);
+  await form.press('选择动作1'); await form.input('动作1 名称', '深蹲');
+  await form.input('动作1 每组次数', '5'); await form.input('动作1 每组重量', '60');
+  await form.save();
+  assert.equal(form.submitted[0].exercise, '深蹲');
+  assert.equal(form.submitted[0].exercises, undefined);
+  assert.equal(form.submitted[0].sets.length, 3);
+});
+
+test('applying a workout template fills every exercise with its set count and unit', async (t) => {
+  const template: WorkoutTemplate = { id: 'pull', name: '拉日', exercises: [
+    { name: '引体向上', setCount: 4, weightUnit: 'kg', weightBasis: 'total' },
+    { name: '划船', setCount: 2, weightUnit: 'lb', weightBasis: 'total' },
+  ] };
+  const form = await mount(stored(emptyData()), undefined, { workoutTemplates: [template] });
+  t.after(form.dispose);
+  await form.press('选择训练模板');
+  await form.press('使用模板 拉日');
+  assert.equal(form.value('训练名称'), '拉日');
+  assert.equal(form.blockName(1), '引体向上');
+  assert.equal(form.blockName(2), '划船');
+  assert.equal(form.has('动作1 共 4 组'), true);
+  assert.equal(form.has('动作2 共 2 组'), true);
+  assert.equal(form.has('动作2 重量单位：磅，点按切换'), true);
+  await form.press('选择训练模板'); await form.press('空白训练');
+  assert.equal(form.value('训练名称'), '');
+  assert.equal(form.has('选择动作2'), false);
+});
+
+test('legacy single-exercise drafts and records open as one exercise block', async (t) => {
+  const store = stored(emptyData(), { 'training-new': { mode: 'strength', exercise: '深蹲', sets: [
+    { reps: '5', weight: '60', unit: 'kg', warmup: false }, { reps: '5', weight: '60', unit: 'kg', warmup: false },
+  ] } });
+  const restored = await mount(store); t.after(restored.dispose);
+  assert.equal(restored.value('训练名称'), '');
+  assert.equal(restored.blockName(1), '深蹲');
+  assert.equal(restored.has('动作1 共 2 组'), true);
+  assert.equal(restored.value('动作1 每组重量'), '60');
+  restored.dispose();
+
+  const original = record();
+  const opened = await mount(stored({ ...emptyData(), trainings: [original] }), original); t.after(opened.dispose);
+  assert.equal(opened.blockName(1), '训练视频回归');
+  assert.equal(opened.has('选择动作2'), false);
+  await opened.save();
+  assert.equal(opened.submitted[0].exercise, '训练视频回归');
+  assert.equal(opened.submitted[0].exercises, undefined);
 });

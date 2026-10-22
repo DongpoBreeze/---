@@ -26,7 +26,7 @@ async function restoreMeals(page: Page, meals: MealRecord[]) {
       || ['blob:', 'data:'].includes(url.protocol) ? route.continue() : route.abort();
   });
   await page.goto('/');
-  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('tab', { name: '设置', exact: true }).click();
   const bytes = await createBackupArchive({ ...emptyData(), meals }, []);
   const restored = page.waitForEvent('dialog', { predicate: (dialog) => dialog.message().includes('恢复完成') });
   const picker = page.waitForEvent('filechooser');

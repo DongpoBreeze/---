@@ -55,7 +55,8 @@ test('configured provider and upstream effort drive analysis while keys stay out
   await page.getByLabel('备注（可选）', { exact: true }).fill('已称重 200g，吃下 50%，无其他油酱料');
   await page.getByRole('dialog').getByRole('button', { name: '保存', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  await page.getByRole('tab', { name: '记录', exact: true }).click();
+  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('button', { name: '全部记录', exact: true }).click();
   await page.getByLabel('请求饮食分析', { exact: true }).click();
   await confirmAndSaveMealReview(page, { clearQuantities: true, foodName: '设置验收米饭' });
   await page.getByRole('button', { name: /设置验收米饭 午餐/ }).click();
@@ -65,7 +66,7 @@ test('configured provider and upstream effort drive analysis while keys stay out
   await expect(page.getByText('待填写菜品数量', { exact: true })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('direct-provider-ai-reference.png'), fullPage: true });
   await page.getByRole('dialog').getByLabel('关闭', { exact: true }).click();
-  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('tab', { name: '设置', exact: true }).click();
   const downloadEvent = page.waitForEvent('download');
   await page.getByText('导出完整备份', { exact: true }).click();
   const download = await downloadEvent;
@@ -87,7 +88,8 @@ test('configured provider and upstream effort drive analysis while keys stay out
   await dialog.getByText('删除 AI 配置', { exact: true }).click();
   await expect(dialog).toHaveCount(0);
   await expect(page.getByText('尚未配置', { exact: true })).toBeVisible();
-  await page.getByRole('tab', { name: '记录', exact: true }).click();
+  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('button', { name: '全部记录', exact: true }).click();
   await expect(page.getByText('设置验收米饭', { exact: true })).toBeVisible();
   await configureMockAi(page, 'settings-model', 'high');
   await page.reload();

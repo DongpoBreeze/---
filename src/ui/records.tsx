@@ -1,12 +1,13 @@
 import React, { useState } from "react";
-import { Image, Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
+import { Animated, Image, Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { AppData } from "../types";
-import { mealCalories } from "../domain";
+import { mealCalories, trainingExercises } from "../domain";
 import { SummaryVersions, useBaseStyles } from "./components";
 import { rangeLabel, recordDate, sleepHours, timeLabel } from "./format";
 import { radius, space, type ThemeTokens } from "./theme";
 import { useTheme, useThemedStyles } from "./theme-provider";
+import { PressScale, Reveal, useSpring } from "./motion";
 import type { Kind } from "./app-types";
 
 type Entry = { kind: Kind; id: string; title: string; detail: string; at: string; date: string; imageUri?: string };
@@ -22,23 +23,34 @@ function dayHeading(date: string) {
   return diff === 0 ? `今天 · ${label}` : diff === 1 ? `昨天 · ${label}` : label;
 }
 
+function trainingDetail(record: AppData["trainings"][number]) {
+  const exercises = trainingExercises(record);
+  const work = record.sets.filter((x) => !x.isWarmup).length;
+  return exercises.length > 1 ? `${exercises.length} 个动作 · ${work} 工作组` : `${work} 工作组`;
+}
+
 export function Records({
   data,
   contentStyle,
   onEdit,
   onDelete,
   onAi,
+  onBack,
+  backLabel = "我的",
 }: {
   data: AppData;
   contentStyle: StyleProp<ViewStyle>;
   onEdit: (kind: Kind, id: string) => void;
   onDelete: (kind: Kind, id: string) => void;
   onAi: (id: string) => void;
+  onBack: () => void;
+  backLabel?: string;
 }) {
   const { color, type, moduleTone } = useTheme();
   const base = useBaseStyles();
   const st = useThemedStyles(createStyles);
   const [filter, setFilter] = useState<Filter>("all");
+  const [segWidth, setSegWidth] = useState(0);
   const entries: Entry[] = [
     ...data.meals.map((r) => ({
       kind: "meal" as Kind, id: r.id, title: r.foodName, at: r.occurredAt, date: recordDate(r), imageUri: r.imageUri,
@@ -46,7 +58,7 @@ export function Records({
     })),
     ...data.trainings.map((r) => ({
       kind: "training" as Kind, id: r.id, title: r.exercise, at: r.occurredAt, date: recordDate(r),
-      detail: `${timeLabel(r.occurredAt)} · ${r.mode === "cardio" ? r.durationMinutes === undefined ? "时长未知" : `${r.durationMinutes} 分钟` : `${r.sets.filter((x) => !x.isWarmup).length} 工作组`}`,
+      detail: `${timeLabel(r.occurredAt)} · ${r.mode === "cardio" ? r.durationMinutes === undefined ? "时长未知" : `${r.durationMinutes} 分钟` : trainingDetail(r)}`,
     })),
     ...data.sleeps.map((r) => ({
       kind: "sleep" as Kind, id: r.id, at: r.wokeAt, date: recordDate(r),
@@ -63,14 +75,43 @@ export function Records({
     else groups.push([e.date, [e]]);
   });
   const filters: Array<[Filter, string]> = [["all", "全部"], ["meal", "饮食"], ["training", "训练"], ["sleep", "睡眠"]];
+  const filterIndex = filters.findIndex(([key]) => key === filter);
+  const slide = useSpring(filterIndex);
+  const segItem = segWidth > 0 ? (segWidth - 8) / filters.length : 0;
   return (
-    <ScrollView contentContainerStyle={contentStyle} showsVerticalScrollIndicator={false}>
-      <Text style={st.title}>记录</Text>
-      <Text style={st.intro}>每条记录都可以打开、修改或删除。估算和 AI 结果与原始输入分开保存。</Text>
-      <View style={st.filters} accessibilityRole="tablist">
+    <ScrollView contentContainerStyle={[contentStyle, st.screen]} showsVerticalScrollIndicator={false}>
+      <Reveal index={0}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="返回"
+          accessibilityHint={`回到“${backLabel}”`}
+          onPress={onBack}
+          hitSlop={8}
+          style={({ pressed }) => [st.back, pressed && base.pressed]}
+        >
+          <Ionicons name="chevron-back" size={18} color={color.ink} />
+          <Text style={st.backText}>{backLabel}</Text>
+        </Pressable>
+        <View style={st.capRow}>
+          <Text style={st.cap}>ARCHIVE · 全部记录</Text>
+          <Text style={st.pill}>{counts.all} 条</Text>
+        </View>
+        <Text style={st.title}>记录</Text>
+        <Text style={st.intro}>每条记录都可以打开、修改或删除。估算和 AI 结果与原始输入分开保存。</Text>
+      </Reveal>
+      <Reveal index={1}>
+      <View style={st.filters} accessibilityRole="tablist" onLayout={(event) => setSegWidth(event.nativeEvent.layout.width)}>
+        {segItem > 0 && (
+          <Animated.View
+            pointerEvents="none"
+            style={[st.segIndicator, {
+              width: segItem,
+              transform: [{ translateX: slide.interpolate({ inputRange: [0, 1], outputRange: [0, segItem] }) }],
+            }]}
+          />
+        )}
         {filters.map(([key, label]) => {
           const on = filter === key;
-          const hue = key === "all" ? color.pine : moduleTone[key].hue;
           return (
             <Pressable
               key={key}
@@ -78,101 +119,139 @@ export function Records({
               accessibilityState={{ selected: on }}
               accessibilityLabel={`筛选${label}`}
               onPress={() => setFilter(key)}
-              style={[st.filter, on && { backgroundColor: color.raised, borderColor: key === "all" ? color.pine : moduleTone[key].hue }]}
+              style={({ pressed }) => [st.filter, pressed && !on && base.pressed]}
             >
-              {key !== "all" && <View style={[st.filterDot, { backgroundColor: hue }]} />}
-              <Text style={[st.filterText, on && { color: color.ink }]}>{label}</Text>
-              <Text style={[st.filterCount, on && { color: color.inkSoft }]}>{counts[key]}</Text>
+              {key !== "all" && <View style={[st.filterDot, { backgroundColor: moduleTone[key].hue }]} />}
+              <Text style={[st.filterText, on && st.filterTextOn]}>{label}</Text>
+              <Text style={[st.filterCount, on && st.filterTextOn]}>{counts[key]}</Text>
             </Pressable>
           );
         })}
       </View>
-      {groups.length ? groups.map(([date, items]) => (
-        <View key={date} style={st.group}>
-          <Text style={st.groupTitle}>{dayHeading(date)}</Text>
-          {items.map((r) => {
+      </Reveal>
+      {groups.length ? groups.map(([date, items], groupIndex) => (
+        <Reveal key={filter + "-" + date} index={groupIndex + 2}>
+          <View style={st.groupHead}>
+            <View style={st.groupDot} />
+            <Text style={st.groupTitle}>{dayHeading(date)}</Text>
+            <View style={st.groupRule} />
+            <Text style={st.groupCount}>{items.length} 条</Text>
+          </View>
+        <View style={st.card}>
+          {items.map((r, index) => {
             const tone = moduleTone[r.kind];
             return (
-              <View key={`${r.kind}-${r.id}`} style={st.row}>
-                <Pressable
+              <View key={`${r.kind}-${r.id}`} style={[st.row, index > 0 && st.rowLine]}>
+                <PressScale
                   accessibilityRole="button"
-                  style={({ pressed }) => [st.rowMain, pressed && base.pressed]}
+                  style={st.rowMain}
+                  scaleTo={0.98}
                   onPress={() => onEdit(r.kind, r.id)}
                 >
-                  <View style={[st.spine, { backgroundColor: tone.hue }]} />
                   {r.imageUri ? (
                     <Image source={{ uri: r.imageUri }} style={st.thumb} />
                   ) : (
                     <View style={[st.icon, { backgroundColor: tone.tint }]}>
-                      <Ionicons name={tone.icon} size={18} color={tone.text} />
+                      <Ionicons name={tone.icon} size={17} color={tone.text} />
                     </View>
                   )}
                   <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text style={type.label} numberOfLines={1}>{r.title}</Text>
-                    <Text style={type.small} numberOfLines={1}>{r.detail}</Text>
+                    <View style={st.rowTitleLine}>
+                      <View style={[st.swatch, { backgroundColor: tone.hue }]} />
+                      <Text style={st.rowTitle} numberOfLines={1}>{r.title}</Text>
+                    </View>
+                    <Text style={st.rowDetail} numberOfLines={1}>{r.detail}</Text>
                   </View>
-                </Pressable>
+                </PressScale>
                 {r.kind === "meal" && (
                   <Pressable
                     accessibilityRole="button"
                     onPress={() => onAi(r.id)}
-                    style={st.action}
+                    style={({ pressed }) => [st.action, pressed && base.pressed]}
                     accessibilityLabel="请求饮食分析"
                   >
-                    <Ionicons name="sparkles-outline" size={18} color={color.pine} />
+                    <Ionicons name="sparkles-outline" size={17} color={color.inkSoft} />
                   </Pressable>
                 )}
                 <Pressable
                   accessibilityRole="button"
                   onPress={() => onDelete(r.kind, r.id)}
-                  style={st.action}
+                  style={({ pressed }) => [st.action, pressed && base.pressed]}
                   accessibilityLabel="删除记录"
                 >
-                  <Ionicons name="trash-outline" size={18} color={color.inkFaint} />
+                  <Ionicons name="trash-outline" size={17} color={color.inkFaint} />
                 </Pressable>
               </View>
             );
           })}
         </View>
+        </Reveal>
       )) : (
-        <View style={st.empty}>
+        <Reveal key={"empty-" + filter} index={2}>
+        <View style={[st.card, st.empty]}>
+          <View style={st.emptyIcon}>
+            <Ionicons name={filter === "all" ? "albums-outline" : moduleTone[filter].icon} size={22} color={filter === "all" ? color.inkSoft : moduleTone[filter].hue} />
+          </View>
           <Text style={type.heading}>暂无记录</Text>
           <Text style={[type.bodySoft, { textAlign: "center" }]}>
             {filter === "all" ? "在“今天”页记下第一餐、一次训练或一晚睡眠。" : `还没有${moduleTone[filter].name}记录。`}
           </Text>
         </View>
+        </Reveal>
       )}
-      <View style={st.summaries}>
+      <Reveal index={Math.min(groups.length + 2, 8)}>
+      <View style={[st.card, st.summaryCard]}>
+        <Text style={st.cap}>AI SYNTHESIS · 历史摘要</Text>
         <Text style={st.sectionTitle}>每日摘要</Text>
         <SummaryVersions summaries={data.summaries} />
       </View>
+      </Reveal>
+
     </ScrollView>
   );
 }
 
 const createStyles = ({ color, type, shadow }: ThemeTokens) => StyleSheet.create({
-  title: { ...type.display },
-  intro: { ...type.bodySoft, marginTop: space.xs, marginBottom: space.lg },
-  filters: { flexDirection: "row", flexWrap: "wrap", gap: space.sm, marginBottom: space.lg },
+  screen: { gap: 14 },
+  back: {
+    alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 2, minHeight: 36,
+    paddingLeft: 6, paddingRight: 12, marginLeft: -6, marginBottom: space.sm, borderRadius: radius.pill, backgroundColor: color.sunken,
+  },
+  backText: { fontSize: 13, fontWeight: "700", color: color.ink },
+  capRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  cap: { ...type.cap },
+  pill: { fontSize: 10, lineHeight: 14, fontWeight: "700", color: color.inkSoft, backgroundColor: color.sunken, paddingVertical: 2, paddingHorizontal: 8, borderRadius: 999, overflow: "hidden" },
+  title: { ...type.display, fontSize: 28, lineHeight: 34, marginTop: 6 },
+  intro: { fontSize: 12.5, lineHeight: 19, color: color.inkSoft, marginTop: space.xs },
+  filters: { flexDirection: "row", padding: 4, borderRadius: radius.pill, backgroundColor: color.sunken },
+  segIndicator: { position: "absolute", left: 4, top: 4, bottom: 4, borderRadius: radius.pill, backgroundColor: color.ink },
   filter: {
-    flexDirection: "row", alignItems: "center", gap: 5, minHeight: 40, paddingHorizontal: 12,
-    borderRadius: radius.pill, borderWidth: 1, borderColor: color.lineStrong, backgroundColor: color.surface,
+    flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, minHeight: 36,
+    borderRadius: radius.pill,
   },
-  filterDot: { width: 8, height: 8, borderRadius: 4 },
-  filterText: { fontSize: 14, fontWeight: "700", color: color.ink },
-  filterCount: { fontSize: 12, color: color.inkFaint, ...type.numeric },
-  group: { marginBottom: space.xl },
-  groupTitle: { ...type.small, fontWeight: "700", color: color.inkSoft, marginBottom: space.sm },
-  row: {
-    flexDirection: "row", alignItems: "center", backgroundColor: color.surface, borderRadius: radius.block,
-    marginBottom: space.sm, paddingRight: 4, overflow: "hidden", ...shadow.card,
-  },
-  rowMain: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: space.md, minHeight: 64, paddingRight: space.sm },
-  spine: { width: 4, alignSelf: "stretch" },
-  thumb: { width: 44, height: 44, borderRadius: radius.input, backgroundColor: color.sunken },
-  icon: { width: 44, height: 44, borderRadius: radius.input, alignItems: "center", justifyContent: "center" },
-  action: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
-  empty: { alignItems: "center", gap: 4, paddingVertical: space.xl, paddingHorizontal: space.lg, backgroundColor: color.surface, borderRadius: radius.block, ...shadow.card },
-  summaries: { marginTop: space.lg },
-  sectionTitle: { ...type.title, marginBottom: space.sm },
+  filterDot: { width: 7, height: 7, borderRadius: 2 },
+  filterText: { fontSize: 12.5, fontWeight: "700", color: color.inkSoft },
+  filterTextOn: { color: color.paper },
+  filterCount: { fontSize: 11, color: color.inkFaint, ...type.mono },
+  card: { backgroundColor: color.surface, borderRadius: 20, paddingVertical: 6, paddingHorizontal: 14, borderWidth: 1, borderColor: color.line, ...shadow.card },
+  groupHead: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8, paddingHorizontal: 4 },
+  groupDot: { width: 8, height: 8, borderRadius: 4, borderWidth: 2, borderColor: color.ink },
+  groupRule: { flex: 1, height: 1, backgroundColor: color.line },
+  groupTitle: { fontSize: 13, lineHeight: 18, fontWeight: "800", color: color.ink },
+  groupCount: { fontSize: 10.5, color: color.inkFaint, ...type.mono },
+  row: { flexDirection: "row", alignItems: "center", marginHorizontal: -6 },
+  rowLine: { borderTopWidth: 1, borderTopColor: color.line },
+  rowMain: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: space.md, minHeight: 64, paddingHorizontal: 6 },
+  rowTitleLine: { flexDirection: "row", alignItems: "center", gap: 6 },
+  swatch: { width: 7, height: 7, borderRadius: 2 },
+  rowTitle: { flex: 1, minWidth: 0, fontSize: 13.5, lineHeight: 19, fontWeight: "700", color: color.ink },
+  rowDetail: { fontSize: 11, lineHeight: 16, color: color.inkSoft, marginTop: 2, ...type.mono },
+  thumb: { width: 44, height: 44, borderRadius: 14, backgroundColor: color.sunken },
+  icon: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  action: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center", backgroundColor: color.sunken, marginLeft: 6 },
+  empty: { alignItems: "center", gap: 6, paddingVertical: space.xxl, paddingHorizontal: space.xl },
+  emptyIcon: { width: 52, height: 52, borderRadius: 26, backgroundColor: color.sunken, alignItems: "center", justifyContent: "center", marginBottom: 4 },
+  sectionTitle: { ...type.heading, marginTop: 6, marginBottom: 4 },
+  summaryCard: { padding: 16 },
+
 });

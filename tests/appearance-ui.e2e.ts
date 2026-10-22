@@ -61,14 +61,14 @@ test('暗色设置覆盖四个Tab和全部表单，手填营养保存且刷新�
   page.on('pageerror', (error) => errors.push(error.message));
   await page.emulateMedia({ colorScheme: 'light' });
   await page.goto('/');
-  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('tab', { name: '设置', exact: true }).click();
   await expect(page.getByRole('radio', { name: '跟随系统', exact: true })).toBeChecked();
   await page.getByRole('radio', { name: '暗色模式', exact: true }).click();
   await expect(page.getByRole('radio', { name: '暗色模式', exact: true })).toBeChecked();
   await expectScheme(page, 'dark');
   await page.screenshot({ path: info.outputPath('dark-settings.png'), fullPage: true });
 
-  for (const tab of ['今天', '记录', '趋势']) {
+  for (const tab of ['今天', '趋势', '我的']) {
     await page.getByRole('tab', { name: tab, exact: true }).click();
     await expectScheme(page, 'dark');
     await expectNoOverflow(page);
@@ -92,7 +92,7 @@ test('暗色设置覆盖四个Tab和全部表单，手填营养保存且刷新�
 
   for (const entry of ['记训练', '记睡眠']) {
     await page.getByText(entry, { exact: true }).click();
-    if (entry === '记训练') await expect(page.getByRole('button', { name: '选择动作模板' })).toBeVisible();
+    if (entry === '记训练') await expect(page.getByRole('button', { name: '选择训练模板' })).toBeVisible();
     else await expectReadableInput(page.getByLabel('入睡（YYYY-MM-DD HH:mm）', { exact: true }));
     await expectNoOverflow(page);
     await page.screenshot({ path: info.outputPath(`dark-${entry}-form.png`), fullPage: true });
@@ -102,6 +102,7 @@ test('暗色设置覆盖四个Tab和全部表单，手填营养保存且刷新�
   await page.getByText('修改目标与资料', { exact: true }).click();
   await expectReadableInput(page.getByLabel('体重（kg，可选）', { exact: true }));
   await closeSheet(page);
+  await page.getByRole('tab', { name: '设置', exact: true }).click();
   await page.getByText('AI 服务设置', { exact: true }).click();
   await expectReadableInput(page.getByLabel('API 地址', { exact: true }));
   await expectReadableInput(page.getByLabel('API Key', { exact: true }));
@@ -109,14 +110,15 @@ test('暗色设置覆盖四个Tab和全部表单，手填营养保存且刷新�
 
   await page.reload();
   await expectScheme(page, 'dark');
-  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('tab', { name: '设置', exact: true }).click();
   await expect(page.getByRole('radio', { name: '暗色模式', exact: true })).toBeChecked();
-  await page.getByRole('tab', { name: '记录', exact: true }).click();
+  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('button', { name: '全部记录', exact: true }).click();
   await page.getByText('暗色手工餐', { exact: true }).click();
   await expect(page.getByLabel('热量 kcal', { exact: true })).toHaveValue('650');
   await expect(page.getByLabel('蛋白质 g', { exact: true })).toHaveValue('40');
   await closeSheet(page);
-  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('tab', { name: '设置', exact: true }).click();
   await page.getByRole('radio', { name: '浅色模式', exact: true }).click();
   await expectScheme(page, 'light');
   await page.reload();
@@ -140,7 +142,7 @@ test('跟随系统即时切换并保留表单内容，固定浅色和暗色不�
   await expectReadableInput(page.getByLabel('热量 kcal', { exact: true }));
   await page.screenshot({ path: info.outputPath('system-change-keeps-open-form.png'), fullPage: true });
   await closeSheet(page);
-  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('tab', { name: '设置', exact: true }).click();
   await page.getByRole('radio', { name: '浅色模式', exact: true }).click();
   await expectScheme(page, 'light');
   await page.emulateMedia({ colorScheme: 'light' });
@@ -155,7 +157,7 @@ test('跟随系统即时切换并保留表单内容，固定浅色和暗色不�
   await expectScheme(page, 'dark');
   await page.reload();
   await expectScheme(page, 'dark');
-  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('tab', { name: '设置', exact: true }).click();
   await expect(page.getByRole('radio', { name: '跟随系统', exact: true })).toBeChecked();
   await page.getByRole('tab', { name: '今天', exact: true }).click();
   await page.getByText('记饮食', { exact: true }).click();
@@ -195,7 +197,8 @@ test('照片请求中切换系统主题不会取消分析，暗色识别页编�
   await expect(page.getByLabel('热量 kcal', { exact: true })).toHaveValue('130～150');
   await page.getByRole('dialog').getByRole('button', { name: '保存', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  await page.getByRole('tab', { name: '记录', exact: true }).click();
+  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('button', { name: '全部记录', exact: true }).click();
   await page.getByText('熟米饭', { exact: true }).click();
   await page.getByRole('button', { name: '填写菜品数量', exact: true }).click();
   await expectReadableInput(page.getByLabel('菜品 1 食用量', { exact: true }));
@@ -204,7 +207,7 @@ test('照片请求中切换系统主题不会取消分析，暗色识别页编�
   await expect(page.getByLabel('热量 kcal', { exact: true })).toHaveValue('260～300');
   await page.getByRole('dialog').getByRole('button', { name: '保存', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('tab', { name: '设置', exact: true }).click();
   const downloadPromise = page.waitForEvent('download');
   await page.getByText('导出完整备份', { exact: true }).click();
   const backup = await parseBackupArchive(new Uint8Array(await readFile((await (await downloadPromise).path())!)));
@@ -219,7 +222,7 @@ test('外观设置保存失败可见且保留旧选择，恢复存储后可以�
   page.on('pageerror', (error) => errors.push(error.message));
   await page.emulateMedia({ colorScheme: 'light' });
   await page.goto('/');
-  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('tab', { name: '设置', exact: true }).click();
   await page.getByRole('radio', { name: '浅色模式', exact: true }).click();
   await expect(page.getByRole('radio', { name: '浅色模式', exact: true })).toBeChecked();
   await page.evaluate((key) => {
@@ -246,7 +249,7 @@ test('损坏的外观设置安全回落系统并提示，用户可以重新选�
   await page.addInitScript((key) => { localStorage.setItem(key, '{invalid-appearance'); }, APPEARANCE_KEY);
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.goto('/');
-  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('tab', { name: '设置', exact: true }).click();
   await expect(page.getByRole('radio', { name: '跟随系统', exact: true })).toBeChecked();
   await expectScheme(page, 'dark');
   await expect(page.getByText(/已保存的外观设置无效/)).toBeVisible();

@@ -72,7 +72,8 @@ for (const protocol of ['responses', 'chat_completions'] as const) {
     await addMeal(page, '自定义强度米饭');
     await page.getByText('请求 AI 综合分析', { exact: true }).click();
     await expect(page.getByText('AI 总结已保存为独立版本。', { exact: true })).toBeVisible();
-    await page.getByRole('tab', { name: '记录', exact: true }).click();
+    await page.getByRole('tab', { name: '我的', exact: true }).click();
+    await page.getByRole('button', { name: '全部记录', exact: true }).click();
     await page.getByLabel('请求饮食分析', { exact: true }).click();
     await confirmAndSaveMealReview(page);
     expect(provider.responses()).toHaveLength(2);

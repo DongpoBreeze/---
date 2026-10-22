@@ -176,9 +176,9 @@ export function SleepForm({
 
 const createStyles = ({ color, type }: ThemeTokens) => StyleSheet.create({
   night: {
-    backgroundColor: color.sleepTint, borderRadius: radius.block, padding: space.lg, marginBottom: space.xl, borderWidth: 1, borderColor: color.sleepBorder,
+    backgroundColor: color.sleepTint, borderRadius: radius.block, padding: space.lg, marginBottom: space.xl, borderWidth: 1, borderColor: color.sleepBorder, borderTopWidth: 3, borderTopColor: color.sleep,
   },
-  nightLabel: { color: color.sleepText, fontSize: 13 },
-  nightValue: { color: color.ink, fontSize: 32, lineHeight: 38, fontWeight: "800", marginTop: 2, ...type.numeric },
+  nightLabel: { ...type.cap, color: color.sleepText },
+  nightValue: { color: color.ink, fontSize: 32, lineHeight: 38, fontWeight: "800", marginTop: 4, ...type.mono },
   nightNote: { color: color.inkSoft, fontSize: 12, lineHeight: 18, marginTop: space.md },
 });

@@ -53,7 +53,7 @@ async function video(page: Page, color: string): Promise<Buffer> {
 }
 
 async function importBackup(page: Page, bytes: Uint8Array) {
-  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('tab', { name: '设置', exact: true }).click();
   const restored = page.waitForEvent('dialog', { predicate: (dialog) => dialog.message().includes('恢复完成') });
   const choosing = page.waitForEvent('filechooser');
   await page.getByText('恢复备份', { exact: true }).click();
@@ -62,7 +62,7 @@ async function importBackup(page: Page, bytes: Uint8Array) {
 }
 
 async function exportBackup(page: Page) {
-  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('tab', { name: '设置', exact: true }).click();
   const downloading = page.waitForEvent('download');
   await page.getByText('导出完整备份', { exact: true }).click();
   const download = await downloading;
@@ -81,7 +81,8 @@ async function seed(page: Page, mode: 'strength' | 'cardio', drafts: Record<stri
 }
 
 async function openTraining(page: Page, original: TrainingRecord) {
-  await page.getByRole('tab', { name: '记录', exact: true }).click();
+  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('button', { name: '全部记录', exact: true }).click();
   await page.getByText(original.exercise, { exact: true }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
   await expect(page.getByRole('dialog').getByRole('button', { name: '保存', exact: true })).toBeEnabled();
