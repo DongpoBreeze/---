@@ -53,7 +53,7 @@ async function backportBytes(packageRoot) {
 }
 
 test('fresh installations contain no body measurements, health entries, or AI settings', () => {
-  assert.deepEqual(emptyData(), { version: 1, profile: {}, meals: [], trainings: [], sleeps: [], exerciseTemplates: [], summaries: [], sourceVersion: 0 });
+  assert.deepEqual(emptyData(), { version: 1, profile: {}, meals: [], trainings: [], sleeps: [], exerciseTemplates: [], workoutTemplates: [], summaries: [], sourceVersion: 0 });
   const first = emptyData();
   first.profile.heightCm = 199;
   assert.deepEqual(emptyData().profile, {});
