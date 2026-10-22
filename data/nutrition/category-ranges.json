@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "method": "local-category-range-v1",
+  "categories": {
+    "grain": { "calories": { "min": 100, "max": 150 }, "protein": { "min": 2, "max": 4 }, "carbs": { "min": 20, "max": 32 }, "fat": { "min": 0, "max": 3 } },
+    "noodle": { "calories": { "min": 90, "max": 160 }, "protein": { "min": 2, "max": 8 }, "carbs": { "min": 18, "max": 32 }, "fat": { "min": 0, "max": 5 } },
+    "vegetable": { "calories": { "min": 20, "max": 60 }, "protein": { "min": 1, "max": 4 }, "carbs": { "min": 4, "max": 15 }, "fat": { "min": 0, "max": 2 } },
+    "mushroom": { "calories": { "min": 20, "max": 50 }, "protein": { "min": 1.5, "max": 4 }, "carbs": { "min": 3, "max": 10 }, "fat": { "min": 0, "max": 2 } },
+    "tofu": { "calories": { "min": 60, "max": 180 }, "protein": { "min": 6, "max": 20 }, "carbs": { "min": 1, "max": 10 }, "fat": { "min": 3, "max": 12 } },
+    "soy": { "calories": { "min": 60, "max": 180 }, "protein": { "min": 6, "max": 20 }, "carbs": { "min": 1, "max": 10 }, "fat": { "min": 3, "max": 12 } },
+    "egg": { "calories": { "min": 130, "max": 180 }, "protein": { "min": 10, "max": 14 }, "carbs": { "min": 0, "max": 3 }, "fat": { "min": 8, "max": 14 } },
+    "meat": { "calories": { "min": 100, "max": 250 }, "protein": { "min": 18, "max": 32 }, "carbs": { "min": 0, "max": 5 }, "fat": { "min": 2, "max": 18 } },
+    "oil": { "calories": { "min": 800, "max": 900 }, "protein": { "min": 0, "max": 0 }, "carbs": { "min": 0, "max": 0 }, "fat": { "min": 90, "max": 100 } },
+    "sauce": { "calories": { "min": 20, "max": 150 }, "protein": { "min": 0, "max": 10 }, "carbs": { "min": 2, "max": 20 }, "fat": { "min": 0, "max": 10 } }
+  },
+  "householdMeasures": {
+    "rice_white_long_grain_cooked": { "label": "半碗熟米饭", "grams": 100, "approximate": true },
+    "rice_white_medium_grain_cooked": { "label": "半碗熟米饭", "grams": 100, "approximate": true },
+    "rice_white_short_grain_cooked": { "label": "半碗熟米饭", "grams": 100, "approximate": true },
+    "rice_brown_long_grain_cooked": { "label": "半碗熟米饭", "grams": 100, "approximate": true },
+    "egg_hard_boiled": { "label": "1 个鸡蛋", "grams": 50, "approximate": true },
+    "egg_raw": { "label": "1 个鸡蛋", "grams": 50, "approximate": true },
+    "soybean_oil": { "label": "1 平汤匙食用油", "grams": 14, "approximate": true }
+  },
+  "aliases": {
+    "米饭": "grain", "饭": "grain", "谷物": "grain", "面": "noodle", "面条": "noodle", "米粉": "noodle",
+    "蔬菜": "vegetable", "青菜": "vegetable", "藕": "vegetable", "土豆": "vegetable", "马铃薯": "vegetable", "胡萝卜": "vegetable", "洋葱": "vegetable", "西兰花": "vegetable", "卷心菜": "vegetable", "菠菜": "vegetable",
+    "菌菇": "mushroom", "蘑菇": "mushroom", "金针菇": "mushroom", "香菇": "mushroom", "豆制品": "soy", "豆皮": "soy", "豆腐": "tofu",
+    "鸡蛋": "egg", "蛋": "egg", "肉": "meat", "鸡肉": "meat", "牛肉": "meat", "猪肉": "meat", "食用油": "oil", "烹调油": "oil", "油": "oil",
+    "酱料": "sauce", "酱汁": "sauce", "调味汁": "sauce", "蘸料": "sauce", "酱油": "sauce"
+  }
+}

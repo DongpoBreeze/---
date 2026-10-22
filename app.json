@@ -1,0 +1,85 @@
+{
+  "expo": {
+    "name": "有节",
+    "slug": "health-compass",
+    "version": "0.1.3",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "backgroundColor": "#F8F7F5",
+    "splash": {
+      "backgroundColor": "#F8F7F5"
+    },
+    "androidStatusBar": {
+      "barStyle": "dark-content",
+      "backgroundColor": "#F8F7F5"
+    },
+    "androidNavigationBar": {
+      "barStyle": "dark-content",
+      "backgroundColor": "#F8F7F5"
+    },
+    "scheme": "healthcompass",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.healthcompass.app",
+      "buildNumber": "1",
+      "icon": {
+        "light": "./assets/icon.png",
+        "dark": "./assets/icon-dark.png"
+      },
+      "infoPlist": {
+        "NSCameraUsageDescription": "用于拍摄餐食照片，帮助你记录饮食。",
+        "NSPhotoLibraryUsageDescription": "用于选择餐食照片或训练视频。",
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": false
+        }
+      },
+      "config": {
+        "usesNonExemptEncryption": false
+      },
+      "privacyManifests": {
+        "NSPrivacyTracking": false,
+        "NSPrivacyTrackingDomains": []
+      }
+    },
+    "android": {
+      "package": "com.healthcompass.app",
+      "versionCode": 4,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "monochromeImage": "./assets/adaptive-icon-monochrome.png",
+        "backgroundColor": "#F8F7F5"
+      },
+      "permissions": [
+        "CAMERA",
+        "READ_MEDIA_IMAGES",
+        "READ_MEDIA_VIDEO"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "用于选择餐食照片或训练视频。",
+          "cameraPermission": "用于拍摄餐食照片，帮助你记录饮食。",
+          "microphonePermission": false
+        }
+      ],
+      "expo-document-picker",
+      "expo-sharing",
+      "expo-status-bar",
+      "expo-system-ui",
+      "expo-video",
+      [
+        "expo-secure-store",
+        {
+          "faceIDPermission": false
+        }
+      ]
+    ]
+  }
+}

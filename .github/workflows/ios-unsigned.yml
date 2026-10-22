@@ -1,0 +1,93 @@
+name: iOS unsigned device build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'codex/ios-unsigned-*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-unsigned-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 75
+    env:
+      EXPO_NO_DOTENV: '1'
+      EXPO_NO_CLIENT_ENV_VARS: '1'
+      EXPO_NO_TELEMETRY: '1'
+    steps:
+      - name: Bootstrap only the source policy
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /scripts/ios-source-policy.mjs
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.18.0'
+
+      - name: Checkout only reviewed client files
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { spawnSync } from 'node:child_process';
+          import { IOS_SOURCE_FILES } from './scripts/ios-source-policy.mjs';
+          const result = spawnSync('git', ['sparse-checkout', 'set', '--no-cone', '--stdin'], {
+            input: IOS_SOURCE_FILES.map(file => '/' + file).join('\n') + '\n',
+            encoding: 'utf8',
+          });
+          process.stdout.write(result.stdout ?? '');
+          process.stderr.write(result.stderr ?? '');
+          if (result.error || result.status !== 0) process.exit(result.status || 1);
+          NODE
+
+      - name: Stage the isolated client source allowlist
+        shell: bash
+        run: node scripts/ios-source-policy.mjs --stage "$RUNNER_TEMP/health-compass-ios-client"
+
+      - name: Install locked client dependencies
+        working-directory: ${{ runner.temp }}/health-compass-ios-client
+        run: npm ci --no-audit --no-fund
+
+      - name: Check the client and privacy source policy
+        working-directory: ${{ runner.temp }}/health-compass-ios-client
+        run: |
+          npm run ios:check
+          npm run test:ios
+          npm run typecheck
+
+      - name: Compile the Release arm64 app without signing
+        working-directory: ${{ runner.temp }}/health-compass-ios-client
+        shell: bash
+        run: node scripts/ios-unsigned.mjs --output "$RUNNER_TEMP/ios-unsigned-build"
+
+      - name: Upload the unsigned IPA and its manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: youjie-ios-arm64-UNSIGNED
+          if-no-files-found: error
+          retention-days: 7
+          path: |
+            ${{ runner.temp }}/ios-unsigned-build/*-UNSIGNED.ipa
+            ${{ runner.temp }}/ios-unsigned-build/*-UNSIGNED.ipa.sha256
+            ${{ runner.temp }}/ios-unsigned-build/unsigned-ipa-manifest.json
+
+      - name: Preserve build evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: youjie-ios-build-evidence
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
+            ${{ runner.temp }}/ios-unsigned-build/build-summary.json
+            ${{ runner.temp }}/ios-unsigned-build/logs/*.log
