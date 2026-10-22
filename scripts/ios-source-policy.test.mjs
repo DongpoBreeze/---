@@ -4,6 +4,7 @@ import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { randomUUID } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import ignore from 'ignore';
 import JSZip from 'jszip';
@@ -174,15 +175,23 @@ test('the cloud workflow builds only on explicit dispatch or the dedicated unsig
   assert.deepEqual(workflow.permissions, { contents: 'read' });
   assert.equal(workflow.jobs.build['runs-on'], 'macos-15');
   const steps = workflow.jobs.build.steps;
-  const checkout = steps.find((step) => step.uses?.startsWith('actions/checkout@'));
+  const checkouts = steps.filter((step) => step.uses?.startsWith('actions/checkout@'));
+  assert.equal(checkouts.length, 2);
+  const checkout = checkouts[0];
   assert.equal(checkout.with['persist-credentials'], false);
   assert.equal(checkout.with['sparse-checkout-cone-mode'], false);
   assert.equal(checkout.with['sparse-checkout'].trim(), '/scripts/ios-source-policy.mjs');
-  const expand = steps.findIndex((step) => step.run?.includes("['sparse-checkout', 'set', '--no-cone', '--stdin']"));
+  const policy = steps.findIndex((step) => step.id === 'source-policy');
+  const expand = steps.indexOf(checkouts[1]);
   const stage = steps.findIndex((step) => step.run?.includes('ios-source-policy.mjs --stage'));
   const install = steps.findIndex((step) => step.run?.includes('npm ci'));
   const build = steps.findIndex((step) => step.run?.includes('ios-unsigned.mjs --output'));
-  assert.ok(expand >= 0 && stage > expand && install > stage && build > install);
+  assert.ok(policy >= 0 && expand > policy && stage > expand && install > stage && build > install);
+  assert.equal(checkouts[1].with.path, 'reviewed-client');
+  assert.equal(checkouts[1].with['persist-credentials'], false);
+  assert.equal(checkouts[1].with['sparse-checkout-cone-mode'], false);
+  assert.equal(checkouts[1].with['sparse-checkout'], '${{ steps.source-policy.outputs.paths }}');
+  assert.equal(steps[stage]['working-directory'], 'reviewed-client');
   assert.equal(workflow.jobs.build.env.EXPO_NO_DOTENV, '1');
   assert.equal(workflow.jobs.build.env.EXPO_NO_CLIENT_ENV_VARS, '1');
   const uploads = steps.filter((step) => step.uses?.startsWith('actions/upload-artifact@'));
@@ -193,6 +202,34 @@ test('the cloud workflow builds only on explicit dispatch or the dedicated unsig
     }
   }
   assert.equal(/secrets\.|EXPO_TOKEN|APPLE_ID|APPLE_PASSWORD|allowProvisioningUpdates|allowProvisioningDeviceRegistration/.test(text), false);
+});
+
+test('private partial-clone checkout expands through the authenticated action, with only reviewed paths passed as step output', async () => {
+  const workflow = YAML.parse(await fs.readFile(path.join(root, '.github/workflows/ios-unsigned.yml'), 'utf8'));
+  const steps = workflow.jobs.build.steps;
+  const output = steps.find((step) => step.id === 'source-policy');
+  assert.ok(output);
+  assert.match(output.run, />> "\$GITHUB_OUTPUT"/);
+  const script = /<<'NODE'[^\n]*\n([\s\S]+)\nNODE\s*$/.exec(output.run)?.[1];
+  assert.ok(script, 'The reviewed-path output must be an inspectable Node script.');
+  const result = spawnSync(process.execPath, ['--input-type=module', '--eval', script], { cwd: root, env: iosBuildEnvironment(), encoding: 'utf8', windowsHide: true });
+  assert.ifError(result.error);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, '');
+  const lines = result.stdout.trimEnd().split(/\r?\n/);
+  assert.equal(lines.shift(), 'paths<<HEALTH_COMPASS_IOS_SOURCE_PATHS');
+  assert.equal(lines.pop(), 'HEALTH_COMPASS_IOS_SOURCE_PATHS');
+  assert.deepEqual(lines, IOS_SOURCE_FILES.map((file) => '/' + file));
+  for (const step of steps.filter((step) => typeof step.run === 'string')) {
+    // Regression: `git sparse-checkout set` after persist-credentials:false can
+    // fetch missing promisor blobs without auth and fail in a private repo.
+    assert.equal(/(?:spawnSync\s*\(\s*['"]git['"]|\bgit\s+(?:sparse-checkout|fetch|checkout)\b)/.test(step.run), false, step.name);
+    assert.equal(/github\.token|secrets\.|http\.extraheader|GIT_ASKPASS|GITHUB_TOKEN|GH_TOKEN/.test(step.run), false, step.name);
+  }
+  const expanded = steps.find((step) => step.uses?.startsWith('actions/checkout@') && step.with?.['sparse-checkout'] === '${{ steps.source-policy.outputs.paths }}');
+  assert.ok(expanded, 'The checkout action itself must hydrate the reviewed files while it has its temporary authorization.');
+  assert.equal(expanded.with['persist-credentials'], false);
+  assert.equal(expanded.with.path, 'reviewed-client');
 });
 
 test('compiled iOS metadata must preserve the app identity, camera/photo needs, and HTTPS policy', () => {

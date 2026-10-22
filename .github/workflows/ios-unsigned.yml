@@ -35,22 +35,30 @@ jobs:
         with:
           node-version: '24.18.0'
 
-      - name: Checkout only reviewed client files
+      - name: Read the reviewed checkout paths
+        id: source-policy
         shell: bash
         run: |
-          node --input-type=module <<'NODE'
-          import { spawnSync } from 'node:child_process';
+          node --input-type=module <<'NODE' >> "$GITHUB_OUTPUT"
           import { IOS_SOURCE_FILES } from './scripts/ios-source-policy.mjs';
-          const result = spawnSync('git', ['sparse-checkout', 'set', '--no-cone', '--stdin'], {
-            input: IOS_SOURCE_FILES.map(file => '/' + file).join('\n') + '\n',
-            encoding: 'utf8',
-          });
-          process.stdout.write(result.stdout ?? '');
-          process.stderr.write(result.stderr ?? '');
-          if (result.error || result.status !== 0) process.exit(result.status || 1);
+          console.log('paths<<HEALTH_COMPASS_IOS_SOURCE_PATHS');
+          for (const file of IOS_SOURCE_FILES) console.log('/' + file);
+          console.log('HEALTH_COMPASS_IOS_SOURCE_PATHS');
           NODE
 
+      # A partial clone may need to fetch blobs while expanding sparse checkout.
+      # Keep that operation inside checkout's authenticated action lifecycle;
+      # credentials are removed before the staging/build scripts run.
+      - name: Checkout only reviewed client files
+        uses: actions/checkout@v4
+        with:
+          path: reviewed-client
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: ${{ steps.source-policy.outputs.paths }}
+
       - name: Stage the isolated client source allowlist
+        working-directory: reviewed-client
         shell: bash
         run: node scripts/ios-source-policy.mjs --stage "$RUNNER_TEMP/health-compass-ios-client"
 
