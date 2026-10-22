@@ -12,7 +12,7 @@ import YAML from 'yaml';
 import { minimatch } from 'minimatch';
 import { emptyData } from '../src/types.ts';
 import { canonicalSourcePath, copySafeSource, createSourceArchive, expectedEasIgnore, inspectSource, IOS_SOURCE_FILES, iosBuildEnvironment, isAllowedSourcePath, listRegularFiles } from './ios-source-policy.mjs';
-import { assertUnsignedAppMetadata, auditUnsignedIpa, readIosSwiftRequirements, swiftToolsMinimum, unsignedXcodeArguments, validateUnsignedToolchain } from './ios-unsigned.mjs';
+import { applyExpoSwift62Backport, assertUnsignedAppMetadata, auditUnsignedIpa, EXPO_SWIFT62_BACKPORT, readIosSwiftRequirements, swiftToolsMinimum, unsignedXcodeArguments, validateUnsignedToolchain } from './ios-unsigned.mjs';
 import { sha256 } from './ios-source-policy.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -31,6 +31,25 @@ async function fixture(t) {
   const source = path.join(directory, 'source');
   await copySafeSource(root, source);
   return { directory, source };
+}
+
+async function backportFixture(t) {
+  const result = await fixture(t);
+  const packageRoot = path.join(result.source, 'node_modules/expo-modules-jsi');
+  for (const entry of EXPO_SWIFT62_BACKPORT.files) await fs.mkdir(path.dirname(path.join(packageRoot, ...entry.path.split('/'))), { recursive: true });
+  for (const file of ['package.json', ...EXPO_SWIFT62_BACKPORT.files.filter((entry) => entry.beforeSha256 !== null).map((entry) => entry.path)]) {
+    const target = path.join(packageRoot, ...file.split('/'));
+    await fs.mkdir(path.dirname(target), { recursive: true });
+    await fs.copyFile(path.join(root, 'node_modules/expo-modules-jsi', ...file.split('/')), target);
+  }
+  return { ...result, packageRoot };
+}
+
+async function backportBytes(packageRoot) {
+  return Promise.all(EXPO_SWIFT62_BACKPORT.files.map((file) => fs.readFile(path.join(packageRoot, ...file.path.split('/'))).catch((error) => {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  })));
 }
 
 test('fresh installations contain no body measurements, health entries, or AI settings', () => {
@@ -183,6 +202,102 @@ test('the locked Apple Swift packages reject Xcode 16.4 despite meeting React Na
   assert.throws(() => validateUnsignedToolchain(failingRunner), /Swift 6\.1\.0.*require Swift tools 6\.2/);
   assert.equal(validateUnsignedToolchain({ ...failingRunner, xcodeVersion: '26.3', sdkVersion: '26.2', swiftVersion: '6.2.3' }).minimumSwift, '6.2');
   assert.throws(() => validateUnsignedToolchain({ ...failingRunner, xcodeVersion: '26.3' }), /provides Swift 6\.1\.0/);
+});
+
+test('the Swift 6.2 backport exactly matches all three official SDK 57 production files without changing installed dependencies', async (t) => {
+  const installedPackage = path.join(root, 'node_modules/expo-modules-jsi');
+  const installedBefore = await backportBytes(installedPackage);
+  assert.deepEqual(installedBefore.map((bytes) => bytes === null ? null : sha256(bytes)), EXPO_SWIFT62_BACKPORT.files.map((file) => file.beforeSha256));
+  const { source, packageRoot } = await backportFixture(t);
+  const result = await applyExpoSwift62Backport(source);
+  assert.equal(result.status, 'applied');
+  assert.equal(result.package, 'expo-modules-jsi');
+  assert.equal(result.version, '57.1.1');
+  assert.equal(result.upstreamPullRequest, 'https://github.com/expo/expo/pull/51040');
+  assert.equal(result.upstreamCommit, 'd50bac42ff61d70fba771efd7056f09565f86b03');
+  assert.equal(result.sdk57Commit, 'bd2ade709029be3fbb44b6ba49bff32b02e66c81');
+  assert.equal(result.scope, 'isolated-build-dependency-copy');
+  assert.deepEqual(result.files, EXPO_SWIFT62_BACKPORT.files.map((file) => ({ ...file, path: 'node_modules/expo-modules-jsi/' + file.path })));
+  const [headerBytes, runtimeBytes, wrapperBytes] = await backportBytes(packageRoot);
+  assert.deepEqual([headerBytes, runtimeBytes, wrapperBytes].map(sha256), EXPO_SWIFT62_BACKPORT.files.map((file) => file.afterSha256));
+  const header = headerBytes.toString('utf8'), runtime = runtimeBytes.toString('utf8');
+  assert.equal((header.match(/static RuntimeScheduler \*create\(/g) ?? []).length, 2);
+  assert.equal((header.match(/noexcept SWIFT_RETURNS_RETAINED/g) ?? []).length, 2);
+  assert.equal(/SWIFT_RETURNS_RETAINED RuntimeScheduler\(/.test(header), false);
+  assert.match(header, /SWIFT_SHARED_REFERENCE\(retainRuntimeScheduler, releaseRuntimeScheduler\)/);
+  assert.match(header, /refCount\.fetch_add\(1, std::memory_order_relaxed\)/);
+  assert.match(header, /refCount\.fetch_sub\(1, std::memory_order_acq_rel\)/);
+  assert.equal((runtime.match(/expo\.RuntimeScheduler\.create\(/g) ?? []).length, 4);
+  assert.equal(/expo\.RuntimeScheduler\(/.test(runtime), false);
+  for (const [name, count] of [['thisPtr', 2], ['argumentsPtr', 2], ['resultPtr', 3]]) {
+    assert.equal(runtime.split('let ' + name + ' = UncheckedSendable(' + name + ')').length - 1, count);
+  }
+  assert.equal((runtime.match(/writeJSIValue\(to: resultPtr\.value\)/g) ?? []).length, 3);
+  assert.match(wrapperBytes.toString('utf8'), /internal struct UncheckedSendable<Value>: @unchecked Sendable/);
+  assert.deepEqual(await backportBytes(installedPackage), installedBefore);
+  assert.equal(JSON.parse(await fs.readFile(path.join(packageRoot, 'package.json'), 'utf8')).version, '57.1.1');
+  assert.equal(await fs.readFile(path.join(source, 'package-lock.json'), 'utf8'), await fs.readFile(path.join(root, 'package-lock.json'), 'utf8'));
+  const mtimes = await Promise.all(result.files.map((file) => fs.stat(path.join(source, ...file.path.split('/'))).then((info) => info.mtimeMs)));
+  assert.equal((await applyExpoSwift62Backport(source)).status, 'already_applied');
+  assert.deepEqual(await Promise.all(result.files.map((file) => fs.stat(path.join(source, ...file.path.split('/'))).then((info) => info.mtimeMs))), mtimes);
+});
+
+test('any changed preimage or partially applied backport rejects the entire operation before writing', async (t) => {
+  for (const file of EXPO_SWIFT62_BACKPORT.files) {
+    const { source, packageRoot } = await backportFixture(t);
+    await fs.appendFile(path.join(packageRoot, ...file.path.split('/')), '\n// Controlled fixture preimage drift.\n');
+    const before = await backportBytes(packageRoot);
+    await assert.rejects(applyExpoSwift62Backport(source), /preimage drift or partial application/);
+    assert.deepEqual(await backportBytes(packageRoot), before, file.path);
+  }
+  const { source, packageRoot } = await backportFixture(t);
+  const originals = await backportBytes(packageRoot);
+  await applyExpoSwift62Backport(source);
+  await fs.writeFile(path.join(packageRoot, ...EXPO_SWIFT62_BACKPORT.files[1].path.split('/')), originals[1]);
+  const partial = await backportBytes(packageRoot);
+  await assert.rejects(applyExpoSwift62Backport(source), /preimage drift or partial application/);
+  assert.deepEqual(await backportBytes(packageRoot), partial);
+});
+
+test('the backport refuses a different installed or locked version, linked dependency trees, and the caller source tree', async (t) => {
+  for (const target of ['installed', 'lock']) {
+    const { source, packageRoot } = await backportFixture(t);
+    const file = target === 'installed' ? path.join(packageRoot, 'package.json') : path.join(source, 'package-lock.json');
+    const json = JSON.parse(await fs.readFile(file, 'utf8'));
+    if (target === 'installed') json.version = '57.1.2';
+    else json.packages['node_modules/expo-modules-jsi'].version = '57.1.2';
+    await fs.writeFile(file, JSON.stringify(json));
+    const before = await backportBytes(packageRoot);
+    await assert.rejects(applyExpoSwift62Backport(source), /only to locked expo-modules-jsi@57\.1\.1/);
+    assert.deepEqual(await backportBytes(packageRoot), before);
+  }
+  const { directory, source, packageRoot } = await backportFixture(t);
+  const linkedPackage = path.join(directory, 'outside-installed-package');
+  await fs.rename(packageRoot, linkedPackage);
+  await fs.symlink(linkedPackage, packageRoot, process.platform === 'win32' ? 'junction' : 'dir');
+  const before = await backportBytes(linkedPackage);
+  await assert.rejects(applyExpoSwift62Backport(source), /must not contain links/);
+  assert.deepEqual(await backportBytes(linkedPackage), before);
+  await assert.rejects(applyExpoSwift62Backport(root), /requires an isolated build dependency copy/);
+});
+
+test('only the Mac unsigned build copies dependencies and applies the backport before CocoaPods', async () => {
+  const script = await fs.readFile(path.join(root, 'scripts/ios-unsigned.mjs'), 'utf8');
+  const build = script.indexOf('async function buildUnsignedIpa()');
+  const mac = script.indexOf("if (process.platform !== 'darwin')", build);
+  const copy = script.indexOf("await run('copy-locked-build-dependencies', 'ditto'", build);
+  const patch = script.indexOf('report.nativeDependencyBackport = await applyExpoSwift62Backport(stage)', build);
+  const pods = script.indexOf("await run('pod-install'", build);
+  assert.ok(build >= 0 && mac > build && copy > mac && patch > copy && pods > patch);
+  assert.equal(script.includes('await fs.symlink('), false);
+  assert.match(script, /nativeDependencyBackport: report\.nativeDependencyBackport/);
+  assert.equal((await fs.readFile(path.join(root, 'scripts/ios-prepare.mjs'), 'utf8')).includes('applyExpoSwift62Backport'), false);
+  if (process.platform !== 'darwin') {
+    const result = spawnSync(process.execPath, ['scripts/ios-unsigned.mjs'], { cwd: root, env: iosBuildEnvironment(), encoding: 'utf8', windowsHide: true });
+    assert.ifError(result.error);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /macOS and Xcode/);
+  }
 });
 
 test('the cloud workflow builds only on explicit dispatch or the dedicated unsigned branch and stages exact reviewed files', async () => {

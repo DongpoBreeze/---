@@ -45,6 +45,163 @@ export async function readIosSwiftRequirements(projectRoot) {
   return { minimumSwift: manifests.map((entry) => entry.minimumSwift).reduce((maximum, version) => atLeast(version, maximum) ? version : maximum), manifests };
 }
 
+// The locked SDK 57 package predates Expo's Swift 6.2 compatibility fix.
+// Its two preimages exactly match the parent of the official sdk-57 backport.
+// Keep the dependency version fixed and reproduce only its three production files.
+export const EXPO_SWIFT62_BACKPORT = Object.freeze({
+  package: 'expo-modules-jsi',
+  version: '57.1.1',
+  upstreamPullRequest: 'https://github.com/expo/expo/pull/51040',
+  upstreamCommit: 'd50bac42ff61d70fba771efd7056f09565f86b03',
+  sdk57Commit: 'bd2ade709029be3fbb44b6ba49bff32b02e66c81',
+  sdk57Parent: '345ae1660abdeb7e43ebca0e41b63e72b30969e8',
+  files: Object.freeze([
+    {
+      path: 'apple/Sources/ExpoModulesJSI-Cxx/include/RuntimeScheduler.h',
+      beforeSha256: 'ab3e6488b7e527210ecc1c8c58318c1e0ac5db3a489ddcc8ed5a11eaf6f7e5fb',
+      afterSha256: '208241aeccd17dbcf40aa572a551effc6cb76f2a1025ed6e6ecbb278744c6c1c',
+    },
+    {
+      path: 'apple/Sources/ExpoModulesJSI/Runtime/JavaScriptRuntime.swift',
+      beforeSha256: 'c13e50450d2efe6b8dc8c243b44cb13341331cca188ebea96fed308b5547d9dc',
+      afterSha256: 'cd81ae49e471a4c7932a4a5cd110484c4cb3d1c388e79bb8c2c4ca343ef2d8e9',
+    },
+    {
+      path: 'apple/Sources/ExpoModulesJSI/Utilities/UncheckedSendable.swift',
+      beforeSha256: null,
+      afterSha256: '9fd6243dafadce81688bc40845812265ce97a429f3120068bfe817181e64f766',
+    },
+  ].map((entry) => Object.freeze(entry))),
+});
+
+function replaceBackportText(source, before, after, count = 1) {
+  if (source.split(before).length - 1 !== count) throw new Error('The reviewed Expo Swift compatibility hunk does not match its preimage.');
+  return source.replaceAll(before, after);
+}
+
+function backportRuntimeScheduler(source) {
+  source = replaceBackportText(source, '  std::atomic<int> refCount{1};\n\npublic:\n', [
+    '  std::atomic<int> refCount{1};',
+    '',
+    '  RuntimeScheduler(void *scheduler, ScheduleFn fn) noexcept',
+    '      : nativeScheduler(scheduler), scheduleFn(fn) {}',
+    '',
+    '  RuntimeScheduler() noexcept {}',
+    '',
+    'public:',
+    '  // Swift creates instances through the static `create` functions rather than the constructors.',
+    '  // Annotating the constructors with `SWIFT_RETURNS_RETAINED` silences the Swift 6.4 "cannot infer',
+    '  // ownership" warning, but Swift 6.2 rejects that annotation on a constructor as an error. Static',
+    '  // functions returning a shared reference accept the annotation on every Swift version.',
+    '',
+    '',
+  ].join('\n'));
+  source = replaceBackportText(source, 'Constructs a scheduler bound', 'Creates a scheduler bound');
+  source = replaceBackportText(source, 'Constructs a no-op scheduler.', 'Creates a no-op scheduler.');
+  source = replaceBackportText(source, [
+    '  SWIFT_RETURNS_RETAINED RuntimeScheduler(void *scheduler, ScheduleFn fn) noexcept',
+    '      : nativeScheduler(scheduler), scheduleFn(fn) {}',
+  ].join('\n'), [
+    '  static RuntimeScheduler *create(void *scheduler, ScheduleFn fn) noexcept SWIFT_RETURNS_RETAINED {',
+    '    return new RuntimeScheduler(scheduler, fn);',
+    '  }',
+  ].join('\n'));
+  return replaceBackportText(source, '  SWIFT_RETURNS_RETAINED RuntimeScheduler() {}', [
+    '  static RuntimeScheduler *create() noexcept SWIFT_RETURNS_RETAINED {',
+    '    return new RuntimeScheduler();',
+    '  }',
+  ].join('\n'));
+}
+
+function backportJavaScriptRuntime(source) {
+  source = replaceBackportText(source, 'expo.RuntimeScheduler()', 'expo.RuntimeScheduler.create()', 3);
+  source = replaceBackportText(source, 'expo.RuntimeScheduler(scheduler, fn)', 'expo.RuntimeScheduler.create(scheduler, fn)');
+  for (const [name, count] of [['thisPtr', 2], ['argumentsPtr', 2], ['resultPtr', 3]]) {
+    source = replaceBackportText(source, 'nonisolated(unsafe) let ' + name + ' = ' + name, 'let ' + name + ' = UncheckedSendable(' + name + ')', count);
+  }
+  source = replaceBackportText(source, 'synchronous call, so the `nonisolated(unsafe)` capture is sound.', 'synchronous call, so capturing them through `UncheckedSendable` is sound.');
+  source = replaceBackportText(source, 'UnsafeMutablePointer(mutating: thisPtr).move()', 'UnsafeMutablePointer(mutating: thisPtr.value).move()');
+  source = replaceBackportText(source, 'JavaScriptValuesBuffer(runtime, start: argumentsPtr, count: argumentsCount)', 'JavaScriptValuesBuffer(runtime, start: argumentsPtr.value, count: argumentsCount)', 2);
+  source = replaceBackportText(source, 'JavaScriptUnownedValue(runtime.pointee, thisPtr)', 'JavaScriptUnownedValue(runtime.pointee, thisPtr.value)');
+  return replaceBackportText(source, 'writeJSIValue(to: resultPtr)', 'writeJSIValue(to: resultPtr.value)', 3);
+}
+
+const uncheckedSendableSwift = [
+  '/// Immutable wrapper that makes a non-Sendable value capturable by a `@Sendable` closure without compiler enforcement.',
+  "/// Unlike `NonisolatedUnsafeVar`, it is a struct, so wrapping a value doesn't allocate.",
+  '///',
+  '/// Use it instead of a `nonisolated(unsafe) let` local captured by such a closure: Swift 6.2 still reports',
+  '/// "sending \'...\' risks causing data races" for those, while a capture of a `Sendable` value passes on every version.',
+  '/// The caller is responsible for making sure the value is never accessed concurrently.',
+  'internal struct UncheckedSendable<Value>: @unchecked Sendable {',
+  '  let value: Value',
+  '',
+  '  init(_ value: Value) {',
+  '    self.value = value',
+  '  }',
+  '}',
+  '',
+].join('\n');
+
+export async function applyExpoSwift62Backport(projectRoot) {
+  const isolatedRoot = await fs.realpath(projectRoot);
+  if (isolatedRoot === await fs.realpath(root)) throw new Error('The Expo backport requires an isolated build dependency copy; the installed source tree must remain unchanged.');
+  const prefix = 'node_modules/' + EXPO_SWIFT62_BACKPORT.package + '/';
+  const readRegular = async (relative, optional = false) => {
+    let current = isolatedRoot;
+    const parts = relative.split('/');
+    for (let index = 0; index < parts.length; index += 1) {
+      current = path.join(current, parts[index]);
+      const info = await fs.lstat(current).catch((error) => {
+        if (optional && index === parts.length - 1 && error.code === 'ENOENT') return null;
+        throw error;
+      });
+      if (!info) return null;
+      if (info.isSymbolicLink()) throw new Error('Expo backport paths must not contain links outside the isolated dependency copy.');
+      if (index < parts.length - 1 ? !info.isDirectory() : !info.isFile()) throw new Error('Expo backport inputs must be regular files inside the isolated dependency copy.');
+      if (index === parts.length - 1 && info.nlink !== 1) throw new Error('Expo backport inputs must not be hard-linked to another dependency tree.');
+    }
+    return fs.readFile(current);
+  };
+  const lock = JSON.parse((await readRegular('package-lock.json')).toString('utf8'));
+  const installed = JSON.parse((await readRegular(prefix + 'package.json')).toString('utf8'));
+  if (installed.name !== EXPO_SWIFT62_BACKPORT.package || installed.version !== EXPO_SWIFT62_BACKPORT.version || lock.packages?.['node_modules/' + EXPO_SWIFT62_BACKPORT.package]?.version !== EXPO_SWIFT62_BACKPORT.version) {
+    throw new Error('The reviewed Expo Swift backport applies only to locked expo-modules-jsi@57.1.1.');
+  }
+  // Inspect every preimage before constructing or writing any replacement.
+  // An already complete application is idempotent; partial applications fail.
+  const inputs = [];
+  for (const file of EXPO_SWIFT62_BACKPORT.files) {
+    const bytes = await readRegular(prefix + file.path, file.beforeSha256 === null);
+    inputs.push({ ...file, bytes, actualSha256: bytes === null ? null : sha256(bytes) });
+  }
+  const original = inputs.every((file) => file.actualSha256 === file.beforeSha256);
+  const applied = inputs.every((file) => file.actualSha256 === file.afterSha256);
+  if (!original && !applied) throw new Error('Expo Swift backport preimage drift or partial application detected. No dependency files were modified.');
+  if (original) {
+    const replacements = [
+      backportRuntimeScheduler(inputs[0].bytes.toString('utf8')),
+      backportJavaScriptRuntime(inputs[1].bytes.toString('utf8')),
+      uncheckedSendableSwift,
+    ].map((content) => Buffer.from(content, 'utf8'));
+    for (let index = 0; index < inputs.length; index += 1) {
+      if (sha256(replacements[index]) !== inputs[index].afterSha256) throw new Error('The Expo Swift backport result differs from the official sdk-57 production file. No dependency files were modified.');
+    }
+    for (let index = 0; index < inputs.length; index += 1) {
+      await fs.writeFile(path.join(isolatedRoot, ...prefix.split('/'), ...inputs[index].path.split('/')), replacements[index]);
+    }
+    for (const file of inputs) {
+      if (sha256(await readRegular(prefix + file.path)) !== file.afterSha256) throw new Error('An Expo Swift backport file failed verification after writing.');
+    }
+  }
+  return {
+    ...EXPO_SWIFT62_BACKPORT,
+    status: original ? 'applied' : 'already_applied',
+    scope: 'isolated-build-dependency-copy',
+    files: inputs.map(({ path: file, beforeSha256, afterSha256 }) => ({ path: prefix + file, beforeSha256, afterSha256 })),
+  };
+}
+
 export function validateUnsignedToolchain({ xcodeVersion, sdkVersion, swiftVersion, minimumXcode, minimumIos, minimumSwift }) {
   for (const value of [xcodeVersion, sdkVersion, swiftVersion, minimumXcode, minimumIos, minimumSwift]) {
     if (!/^\d+(?:\.\d+)*$/.test(value ?? '')) throw new Error('Cannot determine the installed Xcode/SDK/Swift or dependency minimum versions.');
@@ -153,9 +310,10 @@ async function buildUnsignedIpa() {
     const stage = path.join(output, 'work');
     const source = await copySafeSource(root, stage);
     report.source = { reviewedFiles: source.entries.length, bytes: source.totalBytes, files: source.entries };
-    // Build dependencies are an installed, locked tree in the parent checkout;
-    // no developer data or native project is copied into this isolated build.
-    await fs.symlink(await fs.realpath(path.join(root, 'node_modules')), path.join(stage, 'node_modules'), 'dir');
+    // Use an independent copy so the Swift compatibility backport and native
+    // build products never change the caller's installed node_modules.
+    await run('copy-locked-build-dependencies', 'ditto', [await fs.realpath(path.join(root, 'node_modules')), path.join(stage, 'node_modules')], stage);
+    report.dependencies = { strategy: 'isolated-copy', installedSourceTreeModified: false };
     const xcode = await run('xcode-version', 'xcodebuild', ['-version'], stage);
     const sdk = await run('iphoneos-sdk', 'xcrun', ['--sdk', 'iphoneos', '--show-sdk-version'], stage);
     const swift = await run('swift-version', 'xcrun', ['swift', '--version'], stage);
@@ -176,6 +334,7 @@ async function buildUnsignedIpa() {
       minimumXcode, minimumIos, minimumSwift: report.swiftRequirements.minimumSwift,
     };
     validateUnsignedToolchain(report.toolchain);
+    report.nativeDependencyBackport = await applyExpoSwift62Backport(stage);
     await save();
     // CocoaPods aggregates the installed modules' real privacy manifests. Do not
     // synthesize a list of required-reason APIs from documentation guesses.
@@ -261,7 +420,7 @@ async function buildUnsignedIpa() {
       signingStatus: 'UNSIGNED', directlyInstallable: false, requiresResigning: true,
       provisioningProfileIncluded: false, appleCredentialsUsed: false,
       app: metadata, architecture: 'arm64', ipa: ipaName, bytes: bytes.length, sha256: sha256(bytes),
-      sourceFileCount: source.entries.length, toolchain: report.toolchain, swiftRequirements: report.swiftRequirements, privacyManifests: privacy,
+      sourceFileCount: source.entries.length, toolchain: report.toolchain, swiftRequirements: report.swiftRequirements, nativeDependencyBackport: report.nativeDependencyBackport, privacyManifests: privacy,
       javascript: report.javascript, archiveAudit: audit,
       instructions: 'Re-sign on the owner\'s Windows computer using their own Apple account and an appropriate sideloading tool. This unsigned IPA cannot be installed directly, and no device test has been performed.',
     };
