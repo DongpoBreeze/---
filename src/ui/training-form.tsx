@@ -14,8 +14,9 @@ import { animateLayout } from "./motion";
 import { DateTimeField } from "./date-time-field";
 import type { DraftKey, TrainingDraft } from "./app-types";
 
-type SetState = { reps: string; weight: string; unit: "kg" | "lb"; warmup: boolean };
-type BlockState = { name: string; sets: SetState[] };
+// `id` is a render key only; it is never copied into the saved record.
+type SetState = { id: string; reps: string; weight: string; unit: "kg" | "lb"; warmup: boolean };
+type BlockState = { id: string; name: string; sets: SetState[] };
 type TrainingState = {
   occurredAt: string;
   mode: "strength" | "cardio";
@@ -39,11 +40,13 @@ const MAX_SETS = 30;
 const MAX_EXERCISES = 20;
 const DEFAULT_SETS = 3;
 const builtInExerciseNames = ["深蹲", "卧推", "硬拉", "肩推", "划船", "引体向上", "弓步蹲", "腿举"];
-const emptySet = (unit: SetState["unit"] = "kg"): SetState => ({ reps: "", weight: "", unit, warmup: false });
+let rowSeq = 0;
+const rowId = () => `row-${++rowSeq}`;
+const emptySet = (unit: SetState["unit"] = "kg"): SetState => ({ id: rowId(), reps: "", weight: "", unit, warmup: false });
 const emptyBlock = (unit: SetState["unit"] = "kg", name = "", count = DEFAULT_SETS): BlockState =>
-  ({ name, sets: Array.from({ length: count }, () => emptySet(unit)) });
+  ({ id: rowId(), name, sets: Array.from({ length: count }, () => emptySet(unit)) });
 const toSetState = (set: ExerciseSet): SetState =>
-  ({ reps: String(set.reps), weight: String(set.weight), unit: set.unit, warmup: Boolean(set.isWarmup) });
+  ({ id: rowId(), reps: String(set.reps), weight: String(set.weight), unit: set.unit, warmup: Boolean(set.isWarmup) });
 const sessionTitle = (initial: TrainingRecord, exercises: TrainingExercise[]) => {
   // Titles derived from exercise names are not shown as a separate session name.
   const derived = exercises.map((item) => item.name).join("、");
@@ -64,6 +67,7 @@ const trainingState = (initial?: TrainingRecord): TrainingState => {
         : String(initial.durationMinutes),
     blocks: exercises.length
       ? exercises.map((item) => ({
+          id: rowId(),
           name: item.name,
           sets: item.sets.length ? item.sets.map(toSetState) : [emptySet()],
         }))
@@ -99,6 +103,13 @@ export function restoreTrainingDraft(value: unknown, reference: TrainingState): 
   }
   if (!compatibleDraft(reference, draft))
     throw new Error("草稿字段不兼容，当前表单保留原始记录内容");
+  // Drafts saved before rows carried ids get fresh ones.
+  if (Array.isArray(draft.blocks))
+    draft.blocks = (draft.blocks as Array<Partial<BlockState>>).map((block) => ({
+      ...block,
+      id: rowId(),
+      sets: (block.sets ?? []).map((set) => ({ ...set, id: rowId() })),
+    }));
   return draft as Partial<TrainingState>;
 }
 
@@ -175,7 +186,7 @@ export function TrainingForm({
       ...current,
       sets: next < current.sets.length
         ? current.sets.slice(0, next)
-        : [...current.sets, ...Array.from({ length: next - current.sets.length }, () => ({ ...last, warmup: false }))],
+        : [...current.sets, ...Array.from({ length: next - current.sets.length }, () => ({ ...last, id: rowId(), warmup: false }))],
     }));
   };
   const addBlock = () => {
@@ -403,7 +414,7 @@ export function TrainingForm({
     const setAll = (patch: Partial<SetState>) =>
       updateBlock(index, (current) => ({ ...current, sets: current.sets.map((set) => ({ ...set, ...patch })) }));
     return (
-      <View key={`block-${index}`} style={st.block}>
+      <View key={block.id} style={st.block}>
         <View style={st.blockHead}>
           <Text style={st.blockIndex}>{n}</Text>
           <Pressable
@@ -554,7 +565,7 @@ export function TrainingForm({
         {detail && (
           <View style={st.detailList}>
             {block.sets.map((set, setIndex) => (
-              <View key={`set-${setIndex}`} style={st.setRow}>
+              <View key={set.id} style={st.setRow}>
                 <Text style={st.setNumber}>{setIndex + 1}</Text>
                 <TextInput
                   style={st.setInput}
