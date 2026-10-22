@@ -192,7 +192,8 @@ test('追加和删除会取消旧分析，迟到响应不打开确认页或覆�
   await confirmReview(page);
   expect(provider.responses()).toHaveLength(3);
   expect(provider.responses()[2].record?.data.photoRoles).toEqual(['before']);
-  await expect(page.getByLabel('食物名称', { exact: true })).toHaveValue('保留手填餐名');
+  // Explicit confirmation syncs the dish name (product spec F-08); only the late responses above must not.
+  await expect(page.getByLabel('食物名称', { exact: true })).toHaveValue('熟米饭');
   expect(errors).toEqual([]);
 });
 
