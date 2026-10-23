@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import ts from 'typescript';
 import * as review from '../../src/meal-review';
 import * as portions from '../../src/meal-portion-reference';
+import * as reviewRefresh from '../../src/meal-review-refresh';
 import * as photos from '../../src/meal-photos';
 import * as nutritionFields from '../../src/meal-nutrition-fields';
 import * as analysisDraft from '../../src/meal-analysis-draft';
@@ -104,7 +105,7 @@ export function mealFormHarness(options: Options = {}) {
     react, 'react-native': { Pressable: 'Pressable', Text: 'Text', View: 'View', StyleSheet: { create: (value: unknown) => value, hairlineWidth: 1 } },
     'expo-image-picker': {}, '@expo/vector-icons': { Ionicons: 'Ionicons' }, '../storage': storage,
     '../ai': { getAiSettingsVersion: () => options.settingsVersion?.() ?? 1, isAiConfigured: () => true },
-    '../meal-review': review, '../meal-portion-reference': portions, '../meal-photos': photos,
+    '../meal-review': review, '../meal-portion-reference': portions, '../meal-review-refresh': reviewRefresh, '../meal-photos': photos,
     '../../shared/nutrition.mjs': sharedNutrition, '../meal-nutrition-fields': nutritionFields,
     '../meal-analysis-draft': analysisDraft, './useFormDraft': hooks,
     './components': { ...components, useBaseStyles: () => ({}) },

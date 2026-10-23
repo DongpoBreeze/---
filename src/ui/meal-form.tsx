@@ -6,9 +6,9 @@ import type { MealRecord, NutrientRanges, Profile } from "../types";
 import { persistMedia } from "../storage";
 import { getAiSettingsVersion, isAiConfigured } from "../ai";
 import { applyEstimatedMealQuantities, buildMealReviewAnalysis, createEmptyMealReviewRow, createMealReviewRows, mealReviewConfirmationMessage, mergeReviewedQuantities, updateMealReviewRow, type MealReviewRow } from "../meal-review";
-import { estimateMealPortion, hasIncompleteMealRecognition } from "../meal-portion-reference";
+import { estimateMealPortion } from "../meal-portion-reference";
+import { LOCAL_REVIEW_MODEL, keepEditedGrams, keepUserNutrition, nutritionEstimateText, nutritionRows, reviewRefreshOutcome, withPortionAssumption } from "../meal-review-refresh";
 import { MAX_MEAL_PHOTOS, mealBeforePhotoUris } from "../meal-photos";
-import { hasMealIdentityConflict, resolveStoredNutritionReference } from "../../shared/nutrition.mjs";
 import { nutritionFieldsFromAnalysis, nutritionFieldsFromMeal, parseMealNutritionFields } from "../meal-nutrition-fields";
 import { createMealAnalysisDraft, photoAnalysisSnapshot, prepareMealAnalysisForSave, restoreMealFormDraft, type MealAnalysisDraft } from "../meal-analysis-draft";
 import { type FormSession, useFormDraft, useFormSession } from "./useFormDraft";
@@ -55,22 +55,6 @@ const mealState = (initial?: MealRecord): MealState => ({
   ...nutritionFieldsFromMeal(initial),
   analysisDraft: createMealAnalysisDraft(initial),
 });
-const normalizedDishName = (value: string) => value.normalize('NFKC').replace(/\s+/gu, '').toLowerCase();
-const nutritionRows = [
-  ['calories', '热量', 'kcal'], ['protein', '蛋白质', 'g'],
-  ['carbs', '碳水', 'g'], ['fat', '脂肪', 'g'],
-] as const;
-
-function nutritionEstimateText(value: NutrientRanges[keyof NutrientRanges] | null, key: typeof nutritionRows[number][0]) {
-  if (!value) return { estimate: '未知', range: '' };
-  const step = key === 'calories' ? 10 : 1;
-  const rounded = (amount: number) => String(Math.round(amount / step) * step);
-  const estimate = rounded((value.min + value.max) / 2);
-  const min = rounded(value.min);
-  const max = rounded(value.max);
-  return { estimate: `约 ${estimate}`, range: min === max ? '' : `${min}～${max}` };
-}
-
 export function MealForm({
   initial,
   profile = {},
@@ -212,24 +196,10 @@ export function MealForm({
     formRef.current.analysisDraft.preserveEstimatedQuantities ? rows
       : applyEstimatedMealQuantities(profile, formRef.current.mealType, analysis, rows);
   const confirmReviewedAnalysis = (analysis: ReturnType<typeof buildMealReviewAnalysis>, note: string) => {
-    if (!formRef.current.analysisDraft.preserveEstimatedQuantities
-      && analysis.components?.some((component) => component.userQuantity?.origin === 'estimated')) {
-      const reference = estimateMealPortion(profile, formRef.current.mealType, analysis);
-      if (reference.status === 'ready') {
-        const prefix = '食用量参考：';
-        const range = (value: { min: number; max: number } | null) => value ? `${value.min}～${value.max}` : '未知';
-        const detail = `${prefix}每日 ${range(reference.dailyCalories)} kcal，${formRef.current.mealType} ${range(reference.mealCalories)} kcal；`
-          + `整餐参考 ${range(reference.totalGrams)} g，各菜参考 ${range(reference.dishes[0]?.grams ?? null)} g，默认采用各菜区间中点整数克。`
-          + reference.assumptions.join('');
-        const assumptions = (analysis.assumptions ?? []).filter((item) => !item.startsWith(prefix));
-        // Keep both the leading estimate disclosure and the trailing subtotal
-        // disclosure when the model already used the full assumption budget.
-        const retained = assumptions.length > 79 ? [assumptions[0], ...assumptions.slice(-78)] : assumptions;
-        analysis = { ...analysis, assumptions: [...retained, detail.slice(0, 1000)] };
-      }
-    }
+    if (!formRef.current.analysisDraft.preserveEstimatedQuantities)
+      analysis = withPortionAssumption(analysis, profile, formRef.current.mealType);
     const result: PhotoAnalysisResult = {
-      model: "local/meal-review", createdAt: new Date().toISOString(), analysis,
+      model: LOCAL_REVIEW_MODEL, createdAt: new Date().toISOString(), analysis,
     };
     appendPhotoSnapshot(result);
     // Confirmation is the user's explicit instruction to apply the edited dishes,
@@ -287,7 +257,7 @@ export function MealForm({
       imageUri: photoUris[0], beforeImageUris: photoUris, afterImageUri: snapshot.afterImageUri, remaining: snapshot.remaining.trim() || undefined,
       source: "photo", estimateStatus: "unknown",
       ...(previousAnalysis ? { revision: 1, analyses: [{
-        id: `review-${generation}`, sourceVersion: 1, createdAt: new Date().toISOString(), model: "local/meal-review",
+        id: `review-${generation}`, sourceVersion: 1, createdAt: new Date().toISOString(), model: LOCAL_REVIEW_MODEL,
         analysis: reviewedInput ? { ...reviewedInput, components: reviewedInput.components?.map((component) => ({ ...component, nutritionReferenceStale: true })) } : previousAnalysis,
       }] } : {}),
     };
@@ -298,31 +268,11 @@ export function MealForm({
       appendPhotoSnapshot(result);
       const next = previousAnalysis ? { ...result, analysis: mergeReviewedQuantities(result.analysis, previousAnalysis) } : result;
       if (confirmAfterReview && reviewedInput) {
-        // A targeted refresh for a renamed dish must not discard nutrition that
-        // the user has explicitly entered for another, uniquely matched dish.
-        next.analysis = { ...next.analysis, components: next.analysis.components?.map((component) => {
-          const name = normalizedDishName(component.label);
-          const previous = reviewedInput.components?.filter((item) => normalizedDishName(item.label) === name) ?? [];
-          const unique = next.analysis.components?.filter((item) => normalizedDishName(item.label) === name).length === 1;
-          const saved = previous.length === 1 && unique ? previous[0] : undefined;
-          if (!saved || saved.userNutritionPer100g === undefined
-            || (saved.nutritionReferenceStale && saved.userNutritionPer100g === null)) return component;
-          return { ...component, userNutritionPer100g: saved.userNutritionPer100g };
-        }) };
+        next.analysis = keepUserNutrition(next.analysis, reviewedInput);
       }
       let freshRows = createMealReviewRows(next.analysis, previousRows);
       if (confirmAfterReview && previousRows) {
-        freshRows = freshRows.map((row) => {
-          const name = normalizedDishName(row.label);
-          const previous = previousRows.filter((item) => normalizedDishName(item.label) === name);
-          if (previous.length !== 1 || freshRows.filter((item) => normalizedDishName(item.label) === name).length !== 1) return row;
-          const edited = previous[0];
-          // A gram value or an explicit exclusion survives a refreshed cooking
-          // description. Household counts still require the core measure match.
-          if (!edited.quantityEdited || (edited.quantity.trim() && edited.quantityUnit !== 'g')) return row;
-          return { ...row, quantity: edited.quantity, quantityUnit: 'g' as const,
-            quantityOrigin: 'user' as const, quantityEdited: true };
-        });
+        freshRows = keepEditedGrams(freshRows, previousRows);
       }
       setPreserveQuantities(preserveSavedQuantities);
       const rows = estimatedRows(next.analysis, freshRows);
@@ -333,26 +283,14 @@ export function MealForm({
         updateReviewDraft({ mainNote: snapshot.note });
       }
       if (confirmAfterReview && reviewedInput) {
-        const names = (analysis: ReturnType<typeof buildMealReviewAnalysis>) =>
-          (analysis.components ?? []).map((component) => normalizedDishName(component.label)).sort();
-        const sameDishes = JSON.stringify(names(reviewedInput)) === JSON.stringify(names(next.analysis));
         const analysis = buildMealReviewAnalysis(next.analysis, rows);
-        const unknownNutrition = new Set((analysis.coverage?.unknownNutritionLabels ?? []).map(normalizedDishName));
-        const missingNutrition = unknownNutrition.size > 0
-          || analysis.components?.some((component) => resolveStoredNutritionReference(component) === null);
-        const identityUnconfirmed = analysis.components?.some(hasMealIdentityConflict)
-          || (analysis.unresolved ?? []).some((item) => /重复|身份(?:待确认|不明|不确定|不清|冲突|无法确认)|(?:菜品|食材|菜名|种类).*(?:无法识别|无法确认|无法辨认|待确认|不明|不确定|冲突|疑似|看不清)|无法(?:识别|辨认).*(?:菜品|食材)|duplicate|identity|(?:dish|food|ingredient).*(?:ambiguous|conflict|uncertain)/iu.test(item));
-        const incompleteRecognition = hasIncompleteMealRecognition(analysis);
-        if (sameDishes && !missingNutrition && !identityUnconfirmed && !incompleteRecognition) {
+        const outcome = reviewRefreshOutcome(reviewedInput, next.analysis, analysis);
+        if (outcome.kind === 'confirm') {
           confirmReviewedAnalysis(analysis, confirmedNote);
           return;
         }
-        setReviewStatus(!sameDishes ? "AI 复核后的菜品有变化，请核对后确认。"
-          : identityUnconfirmed ? "AI 复核后仍有菜品身份待确认，请核对。"
-            : incompleteRecognition ? "AI 复核后仍有菜品遗漏，请核对。" : "修改后的菜品营养仍待补充，请核对。");
-        if (missingNutrition) setReviewError("部分菜品仍缺少营养参考，请补充每 100 g 营养，未知项不会按零计算。");
-        else if (identityUnconfirmed) setReviewError("菜品身份仍有不确定项，请核对名称和做法后再确认，原表格尚未更新。");
-        else if (incompleteRecognition) setReviewError("本餐菜品仍有遗漏或记录不完整，请补全后再确认，原表格尚未更新。");
+        setReviewStatus(outcome.status);
+        if (outcome.error) setReviewError(outcome.error);
       } else setReviewStatus(reviewedInput ? "AI 复核完成，请核对。" : "照片识别完成，请核对。");
       setPhotoStatus("识别结果待确认。");
       setReviewOpen(true);
@@ -377,7 +315,7 @@ export function MealForm({
     if (!reviewResult || !lifecycle.isIdle() || photoController.current) return;
     try {
       const analysis = buildMealReviewAnalysis(reviewResult.analysis, currentRows());
-      appendPhotoSnapshot({ model: "local/meal-review", createdAt: new Date().toISOString(), analysis });
+      appendPhotoSnapshot({ model: LOCAL_REVIEW_MODEL, createdAt: new Date().toISOString(), analysis });
       void requestPhotoAnalysis(analysis);
     } catch (e) { setReviewError(errorText(e)); }
   };
@@ -387,7 +325,7 @@ export function MealForm({
       const rows = estimatedRows(reviewResult.analysis, currentRows());
       const analysis = buildMealReviewAnalysis(reviewResult.analysis, rows);
       if (analysis.components?.some((component) => component.nutritionReferenceStale && component.userNutritionPer100g == null)) {
-        appendPhotoSnapshot({ model: "local/meal-review", createdAt: new Date().toISOString(), analysis });
+        appendPhotoSnapshot({ model: LOCAL_REVIEW_MODEL, createdAt: new Date().toISOString(), analysis });
         void requestPhotoAnalysis(analysis, true);
         return;
       }

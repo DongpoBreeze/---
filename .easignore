@@ -58,6 +58,7 @@
 !/src/meal-photo-autofill.ts
 !/src/meal-photos.ts
 !/src/meal-portion-reference.ts
+!/src/meal-review-refresh.ts
 !/src/meal-review.ts
 !/src/nutrition-correction.ts
 !/src/nutrition-schema.ts
