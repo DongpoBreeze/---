@@ -47,6 +47,7 @@ export const IOS_SOURCE_FILES = Object.freeze([
   'src/meal-photos.ts',
   'src/meal-portion-reference.ts',
   'src/meal-review.ts',
+  'src/meal-review-refresh.ts',
   'src/nutrition-correction.ts',
   'src/nutrition-schema.ts',
   'src/nutrition.ts',
