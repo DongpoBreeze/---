@@ -1,8 +1,24 @@
 # Android phone test build
 
-Updated: 2026-10-22. This file identifies built APKs and their observed device scope. Current-source features and other verification records are indexed in [the documentation guide](README.md).
+Updated: 2026-10-23. This file identifies built APKs and their observed device scope. Current-source features and other verification records are indexed in [the documentation guide](README.md).
 
-## Latest integrated build (2026-10-22)
+## Latest integrated build (2026-10-23, 0.1.4)
+
+This standalone Android test APK packages the optimized runtime at commit `ff19de3c25c1d7c2e650d1471656be2678650629`, with the `app.json` version increment to 0.1.4 / code 5. It includes the separated app data/AI settings hooks, record update and meal review modules, shared review decisions and storage optimizations, together with the current BMI layout, optional sex/age, four-tab navigation and multi-exercise training templates. No iOS build was performed for this release.
+
+- Download: [GitHub Android test release v0.1.4](https://github.com/DongpoBreeze/health-compass/releases/tag/v0.1.4). Local APK: [health-compass-0.1.4-code5-arm64-v8a-x86_64.apk](../artifacts/android-package-20261023-101145/health-compass-0.1.4-code5-arm64-v8a-x86_64.apk), 54,063,439 bytes.
+- SHA-256: `66a6d2252378d608c99a1bf66246f3c6b5174d47fa004693b16070086f4d5cc5`.
+- Package: `com.healthcompass.app`, versionName `0.1.4`, versionCode `5`, minSdk `24`, targetSdk `36`, ABIs `arm64-v8a` and `x86_64`. Release is nondebuggable, contains its own Hermes bundle and disallows cleartext traffic.
+- APK Signature Scheme v2 verified. Signing-certificate SHA-256 is `fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c`, matching the 0.1.3 test APK. The existing keystore was retained; this is a test signing identity, not a store-release key.
+- The packaged bundle matches the fresh generated output. All 37 checked runtime source files match the build-bound source map and the frozen working tree. The native app label, embedded Expo config and launcher/adaptive/monochrome icons match the user's current assets.
+- All 1,540 APK entries and extracted Hermes strings passed the credential/development-endpoint scan. All 392 raster resources were classified as branding or dependencies; no saved health records, profile values, personal meal media, databases or private AI configuration were found. Packaged initialization starts with empty health data and null AI settings. The public default API URL is retained; no Key, model or reasoning choice is embedded. Actual user secrets and browser health stores were not read.
+- `npm run test:all` passed on Windows: typecheck, client **342/342**, server **80/80**, tools **150/150**, with no failures or skipped tests. This does not claim a full Web suite or real AI run.
+- An isolated offline Android 15 / API 35 x86_64 fresh installation confirmed empty records, unset body profile and empty/unconfigured AI settings. All four tabs opened. Synthetic sex, age, height and weight saved and survived cold launch; a two-exercise training record also remained visible after cold launch. Upgrading from 0.1.3 / code 4 with `adb install -r` retained a synthetic meal and its 500 kcal / 20 g protein / 60 g carbs / 15 g fat values. Fresh launch took 594 ms; later profile/training launches took 632 / 416 ms, and the upgrade cold launch took 550 ms.
+- Package evidence: [verification.json](../artifacts/android-package-20261023-101145/verification.json), [name/icon checks](../artifacts/android-package-20261023-101145/name-icon-verification.json), [data isolation audit](../artifacts/android-package-20261023-101145/apk-data-audit.json), [native release summary](../artifacts/android-package-20261023-101145/native-release-summary.json), [original native attempts](../artifacts/android-package-20261023-101145/native-verification.json) and [test results](../artifacts/android-publish-20261023/tests.json).
+
+The native test used only task-owned emulator disks, synthetic inputs and disabled network/backup restore. Earlier screenshot-protection, action-picker and offscreen-control automation failures remain in the original logs and attempt reports; the APK and production source were not changed to resolve them. Physical arm64 devices, current real AI, camera capture and full native backup/restore were not tested in this run.
+
+## Previous integrated build (2026-10-22)
 
 This standalone test APK includes BMI classification and its current/target scale, stage weight advice and adjustable daily-calorie starting recommendations. It preserves the user's latest app name “有节” and icon assets, together with the current local UI changes. It is based on commit `2bffb6f` plus the uncommitted working tree; it has not been pushed to GitHub.
 

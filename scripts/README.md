@@ -15,7 +15,7 @@ npm run test:scripts
 
 前三项分别检查类型、App 核心逻辑和诊断服务。`test:scripts` 覆盖本目录全部 `*.test.mjs`，使用 `tsx` 加载被引用的 TypeScript；每项 Node 测试设置 30 秒上限，避免前置失败后无限等待。这个限制只作用于离线测试，不修改 App 或真实模型请求的等待时间。部分图片处理测试会启动隔离浏览器，Windows 使用本机 Edge。
 
-**最新脚本专项：132/132 通过。** 普通 App 默认超时测试使用当前 120 秒配置；每个历史实验继续显式传入并验证其冻结的 90 秒参数，历史源码指纹仅约束对应真实实验的复现，不再阻止隔离的合成离线测试。修复前的 131 项失败轮次仍保存在 `artifacts/project-maintenance-20261021/script-tests.log`，不覆盖或改写历史结果。
+**2026-10-23 Android 打包前脚本专项：150/150 通过。** 本轮随 `npm run test:all` 执行，日志和分组结果见 `artifacts/android-publish-20261023/test-all.log` 与 `tests.json`；先前维护轮次为 132/132。普通 App 默认超时测试使用当前 120 秒配置；每个历史实验继续显式传入并验证其冻结的 90 秒参数，历史源码指纹仅约束对应真实实验的复现，不再阻止隔离的合成离线测试。修复前的 131 项失败轮次仍保存在 `artifacts/project-maintenance-20261021/script-tests.log`，不覆盖或改写历史结果。
 
 ## 按用途查找
 
