@@ -29,6 +29,10 @@ jobs:
 
       - run: npm ci
 
+      # The script suite includes a real local JPEG cropper backed by Chromium.
+      - name: Install the browser required by script tests
+        run: npx playwright install --with-deps chromium
+
       # Typecheck plus unit, gateway and script tests. Browser (Playwright) tests
       # need a running Expo web server and stay local for now.
       - run: npm run test:all
