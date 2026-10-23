@@ -2,17 +2,18 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { RealMealTestLedger, REAL_MEAL_LIMITS } from './real-meal-test-ledger.mjs';
 import { discoverMealImages, runBatch, runLiveBatch, selectValidationMeals } from './batch-real-food-image.mjs';
 
 async function fixture(count = 3) {
-  const root = await mkdtemp(join(process.env.TEMP ?? 'C:/Temp', 'batch-real-'));
+  const root = await mkdtemp(join(tmpdir(), 'batch-real-'));
   for (let i = 0; i < count; i += 1) { const dir = join(root, `meal-${i}`); await mkdir(dir); await writeFile(join(dir, 'photo.jpg'), 'fixture'); }
   return root;
 }
 
 test('batch accepts first pass and performs adaptive review, writing anonymous reports', async () => {
-  const input = await fixture(1); const output = await mkdtemp(join(process.env.TEMP ?? 'C:/Temp', 'batch-out-'));
+  const input = await fixture(1); const output = await mkdtemp(join(tmpdir(), 'batch-out-'));
   try {
     const calls = [];
     const result = await runBatch({ inputDir: input, outputDir: output, ledger: new RealMealTestLedger(':memory:'), callMeal: async (request) => { calls.push(request.stage); return request.stage === 'whole' ? { lowConfidence: true, analysis: { ingredients: [] } } : { analysis: { ingredients: [{ name: 'egg' }] } }; } });
@@ -23,7 +24,7 @@ test('batch accepts first pass and performs adaptive review, writing anonymous r
 });
 
 test('batch classifies timeout/schema failures and continues subsequent meals', async () => {
-  const input = await fixture(3); const output = await mkdtemp(join(process.env.TEMP ?? 'C:/Temp', 'batch-out-'));
+  const input = await fixture(3); const output = await mkdtemp(join(tmpdir(), 'batch-out-'));
   try {
     const result = await runBatch({ inputDir: input, outputDir: output, ledger: new RealMealTestLedger(':memory:'), callMeal: async ({ mealId }) => { if (mealId.endsWith('-0')) throw Object.assign(new Error('upstream timeout'), { code: 'upstream_timeout' }); if (mealId.endsWith('-1')) throw Object.assign(new Error('invalid schema'), { code: 'invalid_model_response' }); return { analysis: {} }; } });
     assert.equal(result.reports.length, 3); assert.deepEqual(result.reports.map((r) => r.status), ['timeout', 'schema_error', 'accepted']);
@@ -31,7 +32,7 @@ test('batch classifies timeout/schema failures and continues subsequent meals', 
 });
 
 test('ledger budget rejection is reported and does not stop later meals', async () => {
-  const input = await fixture(2); const output = await mkdtemp(join(process.env.TEMP ?? 'C:/Temp', 'batch-out-')); const ledger = new RealMealTestLedger(':memory:');
+  const input = await fixture(2); const output = await mkdtemp(join(tmpdir(), 'batch-out-')); const ledger = new RealMealTestLedger(':memory:');
   try {
     for (let i = 0; i < REAL_MEAL_LIMITS.reviewMeals; i += 1) {
       for (const stage of ['whole', 'crop_review', 'final_merge']) {
@@ -45,7 +46,7 @@ test('ledger budget rejection is reported and does not stop later meals', async 
 });
 
 test('discovery descends breakfast/dinner folders, identifies meal directories, and rejects duplicate ids', async () => {
-  const root = await mkdtemp(join(process.env.TEMP ?? 'C:/Temp', 'meal-discovery-'));
+  const root = await mkdtemp(join(tmpdir(), 'meal-discovery-'));
   try {
     for (const [group, meal] of [['breakfast', 'oatmeal'], ['dinner', 'salad']]) {
       const folder = join(root, group, meal); await mkdir(folder, { recursive: true }); await writeFile(join(folder, 'plate.PNG'), 'photo');
@@ -70,7 +71,7 @@ test('validation cohort selects the first five meals from each group in natural 
 });
 
 test('live batch calls one single-meal runner per meal, continues failure, and summarizes its ledger once', async () => {
-  const output = await mkdtemp(join(process.env.TEMP ?? 'C:/Temp', 'batch-live-out-'));
+  const output = await mkdtemp(join(tmpdir(), 'batch-live-out-'));
   const meals = [{ mealId: 'breakfast_a', imagePath: 'private/path-a.jpg' }, { mealId: 'dinner_b', imagePath: 'private/path-b.jpg' }];
   let calls = 0;
   try {
@@ -87,7 +88,7 @@ test('live batch calls one single-meal runner per meal, continues failure, and s
 });
 
 test('live batch retains accepted whole-image analysis when a later review times out', async () => {
-  const output = await mkdtemp(join(process.env.TEMP ?? 'C:/Temp', 'batch-live-out-'));
+  const output = await mkdtemp(join(tmpdir(), 'batch-live-out-'));
   const meals = [{ mealId: 'breakfast_a', imagePath: 'private/path-a.jpg' }];
   const accepted = { status: 'approximate', foodName: '米饭和鸡肉', calories: { min: 500, max: 800 } };
   try {

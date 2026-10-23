@@ -15,6 +15,7 @@
 - 冻结当前优化后运行代码 `ff19de3`，仅递增 Android 版本为 0.1.4 / code 5；以既有测试签名构建 arm64-v8a / x86_64 双架构独立 APK。包含当前 BMI 布局、选填性别年龄、四 Tab 和整次训练模板，以及本次拆分的数据/AI Hook、记录更新、复核规则与媒体保存优化。本轮没有构建 iOS。
 - `npm run test:all` 通过：类型检查、客户端 **342/342**、服务端 **80/80**、工具 **150/150**，无失败或跳过。实际 APK 的签名、源码对应、名称图标和个人数据隔离检查通过；没有读取本机真实健康数据或 AI Key，没有新增真实模型请求。
 - 隔离、离线 x86_64 模拟器验证首次安装为空、四 Tab 导航，以及选填性别年龄/身体资料和双动作训练的保存与冷启动恢复；0.1.3 覆盖升级至 0.1.4 后合成餐食及其四项营养值保留。首轮截图保护检查、训练动作选择器脚本中断保留原始失败记录，随后仅调整验证工具并续做；生产源码与 APK 不变。包身份、下载、升级验证与未验范围统一见 [Android 测试说明](android-testing.md#latest-integrated-build-2026-10-23-014)。
+- 上传后首次 Ubuntu CI 的脚本测试为 144/150：六项批量验证测试在 Linux 上回退到不存在的 `C:/Temp`。统一改用 `node:os.tmpdir()`，Windows 定向回归 7/7 通过；CI 同时补充图片裁剪单测所需的 Chromium 安装。原失败日志保留于 `artifacts/android-release-upload-20261023/ci-first-failure.log`，后续云端结果见 [CI 工作流](https://github.com/DongpoBreeze/health-compass/actions/workflows/ci.yml)。这些变更仅涉及测试与工作流，已发布 APK 不变。
 
 ## 四 Tab 导航与整次训练模板（2026-10-22）
 
