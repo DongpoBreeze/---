@@ -30,5 +30,3 @@ https://github.com/user-attachments/assets/47463215-2006-49ff-99ef-32e74380905e
 ## 文档入口
 
 [文档与验证索引](docs/README.md) 汇总现行规格、技术说明、设计参考和历史证据。主要约定见 [产品规格](docs/product-spec-v0.1.md)、[营养实现规格](docs/nutrition-implementation.md)、[AI 服务设置](docs/user-ai-settings.md)；实现结构见 [技术路线图](docs/technical-roadmap.md) 与 [P2 技术报告](docs/p2-meal-analysis-technical-report.md)。
-
-50 餐人工营养真值仍待采集，不能用协议成功或模拟数据证明营养准确率。本地健康数据、真实 Key 和导出备份不应提交到 Git。
