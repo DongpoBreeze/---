@@ -49,7 +49,7 @@ export function createAiSettingsStore(storage: AiSettingsStorage) {
         current = null; loaded = true; invalidate();
       });
     },
-    beginRequest: (externalSignal?: AbortSignal) => {
+    beginRequest: (externalSignal?: AbortSignal, maximumDurationMs = AI_REQUEST_TIMEOUT_MS * MAX_MEAL_ANALYSIS_STAGES + 5_000) => {
       const settings = snapshot();
       if (!settings) throw new Error('AI 服务尚未连接，原始记录已保留。');
       const revision = version;
@@ -59,7 +59,7 @@ export function createAiSettingsStore(storage: AiSettingsStorage) {
       externalSignal?.addEventListener('abort', abort, { once: true });
       if (externalSignal?.aborted) abort();
       let timedOut = false;
-      const timer = setTimeout(() => { timedOut = true; abort(); }, AI_REQUEST_TIMEOUT_MS * MAX_MEAL_ANALYSIS_STAGES + 5_000);
+      const timer = setTimeout(() => { timedOut = true; abort(); }, maximumDurationMs);
       return {
         settings,
         signal: controller.signal,

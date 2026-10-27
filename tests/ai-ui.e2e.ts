@@ -109,7 +109,7 @@ test('已保存餐食实时显示等待时间，110秒后仍可接收完整分�
   await page.getByLabel('请求饮食分析', { exact: true }).click();
   await expect.poll(() => provider.responses().length).toBe(1);
   await page.clock.fastForward(110_000);
-  await expect(page.getByTestId('analysis-wait-time')).toHaveText(/已等待 11[0-2] 秒 · 单次请求上限 120 秒/);
+  await expect(page.getByTestId('analysis-wait-time')).toHaveText(/已等待 11[0-2] 秒 · 单次请求上限 180 秒/);
   expect(typeof finishProvider).toBe('function');
   await finishProvider!();
   await confirmAndSaveMealReview(page, { clearQuantities: true, foodName: '已保存慢响应餐食' });
@@ -120,4 +120,45 @@ test('已保存餐食实时显示等待时间，110秒后仍可接收完整分�
   await expect(page.getByTestId('current-meal-analysis').getByText('完整响应已收到。', { exact: true })).toHaveCount(0);
   expect(provider.responses()).toHaveLength(1);
   expect(errors).toEqual([]);
+});
+
+test('每日总结显示180秒总时限，并接受180秒内返回的完整结果', async ({ page }) => {
+  page.on('dialog', (dialog) => { void dialog.accept(); });
+  let finishProvider: (() => Promise<void>) | undefined;
+  const provider = await installMockAiProvider(page, {
+    onResponse: async (route) => new Promise<void>((resolve) => {
+      finishProvider = async () => {
+        await fulfillProviderResponse(route, { text: '三分钟内返回的完整总结' });
+        resolve();
+      };
+    }),
+  });
+  await page.goto('/');
+  await configureMockAi(page);
+  await page.clock.install();
+  await page.getByText('请求 AI 综合分析', { exact: true }).click();
+  await expect.poll(() => provider.responses().length).toBe(1);
+  await page.clock.fastForward(170_000);
+  await expect(page.getByTestId('analysis-wait-time')).toHaveText(/已等待 17[0-2] 秒 · 总时限 180 秒/);
+  expect(typeof finishProvider).toBe('function');
+  await finishProvider!();
+  await expect(page.getByText('AI 总结已保存为独立版本。', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('analysis-wait-time')).toHaveCount(0);
+  expect(provider.responses()).toHaveLength(1);
+});
+
+test('每日总结180秒总时限到期后终止且不会自动重试', async ({ page }) => {
+  page.on('dialog', (dialog) => { void dialog.accept(); });
+  const provider = await installMockAiProvider(page, {
+    onResponse: async () => new Promise<void>(() => {}),
+  });
+  await page.goto('/');
+  await configureMockAi(page);
+  await page.clock.install();
+  await page.getByText('请求 AI 综合分析', { exact: true }).click();
+  await expect.poll(() => provider.responses().length).toBe(1);
+  await page.clock.fastForward(180_000);
+  await expect(page.getByText('分析等待超时，记录已保留。', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('analysis-wait-time')).toHaveCount(0);
+  expect(provider.responses()).toHaveLength(1);
 });

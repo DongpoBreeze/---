@@ -17,8 +17,12 @@ export class AiProviderError extends Error {
 }
 
 const MAX_MODELS = 1000;
-// Apply the same 120-second deadline to each analysis stage.
+// Generic provider calls keep a 120-second default. Meal stages and the full
+// daily-summary request use their explicit feature-level deadlines.
 export const AI_REQUEST_TIMEOUT_MS = 120_000;
+export const MEAL_ANALYSIS_STAGE_TIMEOUT_MS = 180_000;
+export const DAILY_SUMMARY_TIMEOUT_MS = 180_000;
+export const AI_CONNECTION_TEST_TIMEOUT_MS = 20_000;
 export const MAX_MEAL_ANALYSIS_STAGES = 3;
 export const MAX_MEAL_SOURCE_PHOTOS = MAX_MEAL_PHOTOS;
 export const MAX_MEAL_REVIEW_PHOTOS = 4;
@@ -45,7 +49,7 @@ export type MealProviderDiagnostic =
 export type MealProviderOptions = {
   /** An experiment may cap review stages; normal app calls retain all three. */
   maxStages?: 1 | 2 | 3;
-  /** Diagnostic per-stage deadline; ordinary app calls retain the 90-second default. */
+  /** Optional per-stage deadline; defaults to 120 seconds, while App meal recognition uses 180 seconds. */
   timeoutMs?: number;
   /** The controlled A/B direct arm uses the same transport but an independent minimal contract. */
   contract?: 'app' | 'direct';
@@ -546,7 +550,7 @@ function parseRecognition(content: string): any {
     const recognition = validateMealRecognition(value);
     if (recognition.components.some((component) => component.foodId !== null && !allowedFoods.has(component.foodId)
       || component.candidates?.some((candidate) => candidate.foodId !== null && !allowedFoods.has(candidate.foodId)))) throw new Error('unknown food');
-    const modelFields = new Set(['foodId', 'label', 'uncertainty', 'confidence', 'category', 'preparation', 'cookingMethod', 'candidates', 'evidence', 'region', 'nutritionEstimate']);
+    const modelFields = new Set(['foodId', 'label', 'uncertainty', 'confidence', 'category', 'preparation', 'cookingMethod', 'candidates', 'evidence', 'region', 'nutritionEstimate', 'recommendedShare']);
     const components = recognition.components.map((component) => {
       const normalized = component.foodId === null || !hasMealIdentityConflict(component) ? component : { ...component, foodId: null };
       return Object.fromEntries(Object.entries(normalized).filter(([key]) => modelFields.has(key)));
@@ -640,6 +644,39 @@ async function providerContent(settings: AiSettings, kind: 'meal' | 'summary', p
   transport({ type: 'transport_complete', ...(usage ? { usage } : {}) });
   checkAbort(signal);
   return content;
+}
+
+/** Send a tiny generation request to verify the selected model and protocol end to end. */
+export async function testAiConnection(settings: AiSettings, signal?: AbortSignal): Promise<{ model: string; protocol: AiConnection['protocol']; elapsedMs: number }> {
+  const normalized = validateAiSettings(settings);
+  const startedAt = Date.now();
+  return bounded(signal, AI_CONNECTION_TEST_TIMEOUT_MS, async (requestSignal) => {
+    const body: Record<string, unknown> = normalized.protocol === 'responses'
+      ? {
+        model: normalized.model,
+        input: 'Reply with a short connection check response.',
+        max_output_tokens: 256,
+        stream: true,
+        store: false,
+        ...(normalized.reasoningEffort ? { reasoning: { effort: normalized.reasoningEffort } } : {}),
+      }
+      : {
+        model: normalized.model,
+        messages: [{ role: 'user', content: 'Reply with a short connection check response.' }],
+        max_completion_tokens: 256,
+        stream: false,
+        ...(normalized.reasoningEffort ? { reasoning_effort: normalized.reasoningEffort } : {}),
+      };
+    const endpoint = `${normalized.baseUrl}/${normalized.protocol === 'responses' ? 'responses' : 'chat/completions'}`;
+    const response = await checkedFetch(endpoint, normalized, requestSignal, body);
+    const isSse = /^text\/event-stream(?:\s*;|$)/i.test(response.headers.get('content-type') ?? '');
+    const content = isSse
+      ? await streamContent(response, normalized.protocol, requestSignal)
+      : responseContent(parseJson(await boundedText(response, 128 * 1024, requestSignal)), normalized.protocol);
+    checkAbort(requestSignal);
+    if (!content.trim()) return modelError();
+    return { model: normalized.model, protocol: normalized.protocol, elapsedMs: Math.max(0, Date.now() - startedAt) };
+  });
 }
 
 export async function requestProvider(settings: AiSettings, kind: 'meal' | 'summary', payload: Record<string, unknown>, signal?: AbortSignal, options: MealProviderOptions = {}): Promise<{ analysis: unknown; model: string; createdAt: string; stageCount: number }> {

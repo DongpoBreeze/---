@@ -18,7 +18,7 @@ const ranges: NutrientRanges = { calories: { min: 200, max: 200 }, protein: { mi
 const estimate: NonNullable<ModelNutritionEstimate> = { basisGrams: 100, method: 'typical_recipe', per100g: ranges,
   recipeBasis: '通常成品配方，油和酱包含在内。', assumptions: [], confidence: 0.8 };
 const rawDish = (changes: Record<string, unknown> = {}) => ({ foodId: null, label: '鸡肉烩菜', cookingMethod: '炖',
-  confidence: 0.9, uncertainty: [], nutritionEstimate: estimate, ...changes });
+  confidence: 0.9, recommendedShare: 1, uncertainty: [], nutritionEstimate: estimate, ...changes });
 const recognition = (components = [rawDish()]) => ({ foodName: '午餐', components, unresolved: [], assumptions: [], advice: '核实食用量。' });
 const analysis = (components = [rawDish()]): MealAnalysis => calculateShared(recognition(components), nutritionDataset, {
   mode: 'ai-per100g-v3', provenance: { model: 'configured/vision-model', createdAt: now },
@@ -72,15 +72,15 @@ test('estimated amounts recalculate for body weight, meal type and a valid daily
   assert.equal(rows[0].quantity, String(Math.round((reference.dishes[0].grams.min + reference.dishes[0].grams.max) / 2)));
 });
 
-test('all current dishes share the estimate while existing and edited user quantities retain priority', () => {
-  const base = analysis([rawDish(), rawDish({ label: '蒸米饭', cookingMethod: '蒸' })]);
+test('AI-recommended dish shares control estimates while existing and edited user quantities retain priority', () => {
+  const base = analysis([rawDish({ recommendedShare: 1 / 3 }), rawDish({ label: '蒸米饭', cookingMethod: '蒸', recommendedShare: 2 / 3 })]);
   const rows = defaultRows(base);
-  assert.deepEqual(rows.map((row) => row.quantity), ['158', '158']);
+  assert.deepEqual(rows.map((row) => row.quantity), ['105', '210']);
   const edited = updateMealReviewRow(rows[0], { quantity: '123' });
   assert.equal(edited.quantityEdited, true);
   assert.equal(edited.quantityOrigin, 'user');
   const changed = applyEstimatedMealQuantities({ weightKg: 90 }, '午餐', base, [edited, rows[1]]);
-  assert.deepEqual(changed.map((row) => row.quantity), ['123', '236']);
+  assert.deepEqual(changed.map((row) => row.quantity), ['123', '315']);
   assert.deepEqual(buildMealReviewAnalysis(base, changed).components!.map((component) => component.userQuantity?.origin), ['user', 'estimated']);
   const legacyUser = analysis([rawDish({ userQuantity: { amount: 127, unit: 'g' } })]);
   const restored = createMealReviewRows(legacyUser)[0];
@@ -89,6 +89,26 @@ test('all current dishes share the estimate while existing and edited user quant
   assert.equal(applyEstimatedMealQuantities({}, '午餐', legacyUser, [restored])[0].quantity, '127');
   const compatible = { ...rows[0], quantity: '111', quantityOrigin: undefined, quantityEdited: undefined };
   assert.equal(applyEstimatedMealQuantities({}, '午餐', base, [compatible, rows[1]])[0].quantity, '111');
+});
+
+test('reopening a saved meal fills eligible blank quantities without changing saved estimates, user quantities, or explicit clears', () => {
+  const base = analysis([
+    rawDish({ recommendedShare: 0.7, userQuantity: { amount: 88, unit: 'g', origin: 'user' } }),
+    rawDish({ label: '蒸米饭', recommendedShare: 0.3 }),
+    rawDish({ label: '煎蛋', recommendedShare: 0.2, userQuantity: { amount: 65, unit: 'g', origin: 'estimated' } }),
+  ]);
+  const rows = createMealReviewRows(base);
+  const reopened = applyEstimatedMealQuantities({ weightKg: 90 }, '午餐', base, rows, { preserveExistingEstimates: true });
+
+  assert.equal(reopened[0].quantity, '88');
+  assert.ok(Number(reopened[1].quantity) > 0);
+  assert.equal(reopened[2].quantity, '65');
+  assert.deepEqual(reopened.map((row) => row.quantityOrigin), ['user', 'estimated', 'estimated']);
+
+  const cleared = updateMealReviewRow(reopened[1], { quantity: '' });
+  const afterClear = applyEstimatedMealQuantities({}, '午餐', base, [reopened[0], cleared, reopened[2]], { preserveExistingEstimates: true });
+  assert.equal(afterClear[1].quantity, '');
+  assert.equal(afterClear[1].quantityEdited, true);
 });
 
 test('explicitly cleared quantities and changed units never acquire another default', () => {
@@ -173,7 +193,7 @@ test('editing a per-100 g reference recalculates only estimated quantities and p
   assert.equal(applyEstimatedMealQuantities({}, '午餐', base, [user])[0].quantity, '100');
 });
 
-test('legacy photo grams are kept in the original analysis and never treated as entered or estimated intake', () => {
+test('legacy photo grams are kept as photo data and do not become intake or new portion recommendations', () => {
   const source = { provider: 'usda-fdc' as const, dataset: 'saved snapshot', per100g: { calories: 200, protein: 10, carbs: 20, fat: 5 } };
   const legacy: MealAnalysis = { status: 'unknown', foodName: '旧照片', calories: null, protein: null, carbs: null, fat: null,
     assumptions: [], unresolved: [], advice: '原始记录。', components: [{ foodId: null, label: '鸡肉烩菜',
@@ -181,8 +201,8 @@ test('legacy photo grams are kept in the original analysis and never treated as 
   const rows = createMealReviewRows(legacy);
   assert.equal(rows[0].quantity, '');
   const saved = buildMealReviewAnalysis(legacy, applyEstimatedMealQuantities({}, '午餐', legacy, rows));
-  assert.deepEqual(saved.components![0].userQuantity, { amount: 315, unit: 'g', origin: 'estimated' });
-  assert.deepEqual(saved.calories, { min: 630, max: 630 });
+  assert.equal(saved.components![0].userQuantity, null);
+  assert.equal(saved.calories, null);
   assert.deepEqual(legacy.components![0].grams, { min: 3, max: 9999 });
   assert.equal(legacy.components![0].quantitySource, 'visual');
   assert.equal(legacy.components![0].userQuantity, undefined);

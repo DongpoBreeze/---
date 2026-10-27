@@ -4,15 +4,29 @@ import { localDate, mealCalories, parseSleepTimes, recordLocalDate, refreshSumma
 import { emptyData, MealRecord, TrainingRecord } from '../src/types';
 import { calculateMealNutrition } from '../shared/nutrition.mjs';
 
-test('sleep crosses midnight and preserves unknown waking duration', () => {
+test('sleep crosses midnight and uses entered times when optional waking duration is absent', () => {
   const times = parseSleepTimes('2026-10-10', '23:30', '07:00');
   assert.equal(localDate(times.wokeAt), '2026-10-10');
   assert.deepEqual(sleepStats({ ...times, awakeMinutes: 30 }), { intervalMinutes: 450, asleepMinutes: 420 });
-  assert.equal(sleepStats({ ...times, awakeMinutes: null }).asleepMinutes, null);
+  const record = { ...times, awakeMinutes: null };
+  assert.equal(sleepStats(record).asleepMinutes, 450);
+  assert.equal(record.awakeMinutes, null);
   assert.equal(sleepStats({ ...times, awakeMinutes: 0 }).asleepMinutes, 450);
   assert.throws(() => sleepStats({ ...times, awakeMinutes: 451 }));
   assert.throws(() => parseSleepTimes('2026-02-30', '23:00', '07:00'));
   assert.throws(() => parseSleepTimes('2026-10-10', '29:00', '07:00'));
+});
+
+test('sleep summaries use valid times and omit missing optional fields without changing raw records', () => {
+  const times = parseSleepTimes('2026-10-10', '23:30', '07:00');
+  const record = { id: 'sleep-optional', type: 'sleep' as const, createdAt: times.wokeAt,
+    occurredAt: times.wokeAt, ...times, awakeMinutes: null, note: '' };
+  const summary = summaryMarkdown({ ...emptyData(), sleeps: [record] }, '2026-10-10');
+  assert.match(summary, /估算睡眠 7\.5 小时/);
+  assert.doesNotMatch(summary, /未知|未填写|主观质量|清醒/);
+  assert.equal(record.awakeMinutes, null);
+  const adjusted = summaryMarkdown({ ...emptyData(), sleeps: [{ ...record, awakeMinutes: 30, quality: 4 }] }, '2026-10-10');
+  assert.match(adjusted, /估算睡眠 7\.0 小时；清醒 30 分钟；主观质量 4\/5/);
 });
 
 function training(reps = [12, 12, 12]): TrainingRecord {
@@ -29,6 +43,18 @@ test('training increases only with comparable history and safe feedback', () => 
   const noExternalWeight = { ...training(), sets: training().sets.map((set) => ({ ...set, weight: 0 })) };
   assert.doesNotMatch(trainingAdvice(noExternalWeight, [{ ...noExternalWeight, id: 'prior', occurredAt: prior.occurredAt }]), /下次可尝试/);
   assert.match(trainingAdvice(training([14, 10, 8]), [prior]), /12\/11\/9/);
+});
+
+test('training summaries retain actual work and supplied feedback while omitting missing optional feedback', () => {
+  const original = { ...training(), pain: 'unknown' as const, controlled: 'unknown' as const, rir: 'unknown' as const,
+    targetMin: undefined, targetMax: undefined, increment: undefined };
+  const summary = summaryMarkdown({ ...emptyData(), trainings: [original] }, localDate(original.occurredAt));
+  assert.match(summary, /哑铃卧推：工作组 20 kg × 12 次/);
+  assert.doesNotMatch(summary, /未填写|疼痛：|动作可控：|最少剩余次数：/);
+  assert.match(trainingAdvice(original, []), /补充目标/);
+  const supplied = summaryMarkdown({ ...emptyData(), trainings: [{ ...original, pain: 'yes', controlled: 'no', rir: '1' }] }, localDate(original.occurredAt));
+  assert.match(supplied, /疼痛：有；动作可控：否；最少剩余次数：1/);
+  assert.match(supplied, /暂停增加负荷/);
 });
 
 test('summary changes become stale and deletion removes dependent AI history', () => {
@@ -88,7 +114,7 @@ test('v3 daily summary counts only entered quantities and discloses unknown refe
   assert.deepEqual(mealCalories(partialMeal), { min: 500, max: 600 });
   const summary = summaryMarkdown({ ...emptyData(), meals: [referenceMeal, partialMeal] }, '2026-10-17');
   assert.match(summary, /已填写菜品小计 500～600 kcal/);
-  assert.match(summary, /1 餐没有可汇总数量/);
+  assert.match(summary, /1 餐未记录热量或可计算的食用量/);
   assert.match(summary, /未计入：未知配菜/);
   assert.match(summary, /有效营养参考/);
   assert.doesNotMatch(summary, /700～840 kcal/);

@@ -1,6 +1,63 @@
 # Android phone test build
 
-Updated: 2026-10-23. This file identifies built APKs and their observed device scope. Current-source features and other verification records are indexed in [the documentation guide](README.md).
+Updated: 2026-10-27. This file identifies built APKs and their observed device scope. Current-source features and other verification records are indexed in [the documentation guide](README.md).
+
+## Latest local build (2026-10-27, 0.1.8)
+
+This standalone APK includes the height/weight-based meal portion reference, a fresh draft session for every new training record, and the optional-field fixes for sleep, manual meal nutrients and training targets. Valid sleep endpoints now produce a duration without requiring waking minutes; supplied waking minutes are subtracted. Missing optional inputs remain absent in storage. Homepage, records, trends and summaries share the corrected behavior. Partial manual nutrients aggregate independently; partial optional training targets no longer prevent saving actual work sets.
+
+- APK: [health-compass-arm64-v8a-x86_64-release-20261027-035020.apk](../artifacts/health-compass-arm64-v8a-x86_64-release-20261027-035020.apk), 54,077,311 bytes.
+- SHA-256: `4d579106f1b311d72d495cb5215c066ff1cb468646bbe706cd4ceefb7daf70e0`.
+- Package: `com.healthcompass.app`, versionName `0.1.8`, versionCode `9`, minSdk `24`, targetSdk `36`, ABIs `arm64-v8a` and `x86_64`, label “有节”. Nondebuggable, cleartext traffic disabled.
+- Gradle release build succeeded in 45 seconds. APK v2 signature verified; certificate matches the previous 0.1.7 test APK (`fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c`). This establishes signing compatibility for an update; device upgrade/data retention still needs a phone check.
+- Embedded Hermes bundle (2,949,608 bytes) matches the generated Gradle output. All 56 project sources in the packager map match the current working tree, and targeted assertions confirm the new features are included.
+- All 1,540 package entries passed generic credential, developer-endpoint, compiled AI configuration and saved-data checks. All 392 raster resources have app-branding or dependency provenance. Packaged initial health records/profile are empty and AI settings are null. Actual local health data and credentials were not opened for this audit.
+- Verification: typecheck, client **368/368**, server **80/80**, scripts **150/150**; mobile/desktop Web optional records **8/8**, sleep controls **4/4**, fresh training/body-size portions **6/6**. Optional-record screenshot checks were rerun **8/8** after fixing the test clock and visually inspected. No real AI calls were needed for these changes.
+- Evidence: [report](../artifacts/optional-records-20261027/report.md), [source and package audit](../artifacts/optional-records-20261027/verification.json), [signature and metadata](../artifacts/optional-records-20261027/native-verification.json), [data/resource audit](../artifacts/optional-records-20261027/apk-data-audit.json), [build log](../artifacts/android-release-20261027-035020.log) and [SHA-256 file](../artifacts/health-compass-arm64-v8a-x86_64-release-20261027-035020.apk.sha256).
+
+No native installation, physical-phone test, real AI request or iOS build was performed for this package. Camera permissions, native backup/restore and upgrade retention remain device acceptance tasks.
+
+## Previous local build (2026-10-27, 0.1.7)
+
+This standalone Android test APK includes the complete current working tree, including the daily-summary 180-second overall deadline, the matching total-wait label and removal of the earlier 125-second App guard. Meal analysis keeps its explicit per-request wait label. It also contains the current meal quantity fixes, independent new-meal draft sessions and time-based default meal type. The app version is 0.1.7 / code 8; the prior test APK and signing identity are preserved.
+
+- APK: [health-compass-arm64-v8a-x86_64-release-20261027-022746.apk](../artifacts/health-compass-arm64-v8a-x86_64-release-20261027-022746.apk), 54,076,571 bytes.
+- SHA-256: `8dbfb31e903990dd37911256ef997ca2b8d6589de2482c7650cbe43b4c988728`.
+- Package: `com.healthcompass.app`, versionName `0.1.7`, versionCode `8`, minSdk `24`, targetSdk `36`, ABIs `arm64-v8a` and `x86_64`. The label is “有节”; the release build is nondebuggable and disallows cleartext traffic.
+- Gradle release build completed successfully in 1m 10s. APK Signature Scheme v2 verified; the certificate matches the 0.1.6 test APK (`fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c`). The existing test keystore was retained.
+- The embedded 2,948,868-byte Hermes bundle matches the fresh Gradle output. All 56 project source entries compared against the packager source map match the working tree, including `src/ai.ts`, `src/ai-provider.ts`, `App.tsx`, `src/ui/analysis-wait-time.tsx` and the new `src/meal-time.ts`. Direct bytecode inspection confirms the compiled `180000` value and both summary lifecycle/provider references to the shared timeout.
+- All 1,540 APK entries and the Hermes dump passed generic key-pattern, development-endpoint, compiled-AI-environment, private-config, database/backup and media checks. All 392 raster images are traced to app branding or resolved dependency resources. Packaged initialization has an empty profile/records and null AI settings; no literal height/weight, inline user image or embedded AI key was found. The audit did not open local user secrets, health storage or browser stores.
+- Existing feature evidence remains scoped to its original checks: typecheck, provider/settings unit tests **94/94**, summary mobile/desktop Web checks **4/4** (170-second completion and 180-second expiry without retry), and meal waiting Web checks **2/2**. These checks were completed before packaging and were not rerun by the build task. This APK's acceptance adds build and static package checks only.
+- Evidence: [package/source checks](../artifacts/android-summary-timeout-20261027-022735/verification.json), [native metadata/signature checks](../artifacts/android-summary-timeout-20261027-022735/native-verification.json), [data and media provenance audit](../artifacts/android-summary-timeout-20261027-022735/apk-data-audit.json), [Hermes bytecode checks](../artifacts/android-summary-timeout-20261027-022735/bytecode-verification.json), [build log](../artifacts/android-release-20261027-022746.log) and [SHA-256 file](../artifacts/health-compass-arm64-v8a-x86_64-release-20261027-022746.apk.sha256).
+
+No real AI request, native installation, physical-phone test or iOS build was performed for this package. Upgrade signing compatibility is verified statically; native upgrade data retention, camera, backup/restore and AI behavior remain unverified for this build.
+
+## Previous local build (2026-10-27, 0.1.6)
+
+This standalone Android test APK contains the saved-meal quantity fix: when an older meal already has some suggested quantities, the app preserves those values and fills eligible blank dishes from the saved AI shares. It retains explicit user edits and clears, and explains when missing shares or other limits prevent a local estimate. The app version is 0.1.6 / code 7; the prior test APK is preserved. No real AI request or physical-device installation was performed.
+
+- APK: [health-compass-arm64-v8a-x86_64-release-20261027-000319.apk](../artifacts/health-compass-arm64-v8a-x86_64-release-20261027-000319.apk), 54,075,279 bytes.
+- SHA-256: `054522d78f094d6ba09b67f3a5e01f5afe91a1ce192a48e3af0a8d47ef48c9a9`.
+- Package: `com.healthcompass.app`, versionName `0.1.6`, versionCode `7`, minSdk `24`, targetSdk `36`, ABIs `arm64-v8a` and `x86_64`. The label is “有节”; the release build is nondebuggable and disallows cleartext traffic.
+- APK Signature Scheme v2 verified. Its signing certificate matches the prior test build (`fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c`), so it can update that test installation without changing its signing identity.
+- The packaged Hermes bundle matches the fresh Gradle output; all 55 project sources compared against the packager source map match the working tree. All 1,540 APK entries passed the key-pattern, development-endpoint, compiled-AI-environment, private-config, personal-database and nested-archive checks with zero matches.
+- Verification records: [package/source/data scan](../artifacts/android-meal-portion-fix-20261027/verification.json), [native metadata/signature check](../artifacts/android-meal-portion-fix-20261027/native-verification.json), [build log](../artifacts/android-release-20261027-000319.log), and [SHA-256 file](../artifacts/health-compass-arm64-v8a-x86_64-release-20261027-000319.apk.sha256).
+
+Phone installation and native camera/AI behavior remain unverified. The previous package and signing identity were retained; this build did not access local health records or AI credentials.
+
+## Latest local build (2026-10-26, 0.1.5)
+
+This standalone Android test APK was built from the current working tree after adding AI-proposed dish shares and automatic per-dish meal quantity estimates. The build increments the app version to 0.1.5 / code 6 and uses the existing test-signing identity so it can update the prior 0.1.4 test installation. No iOS build, GitHub upload, real AI request, or physical-device installation was performed.
+
+- APK: [health-compass-arm64-v8a-x86_64-release-20261026-221711.apk](../artifacts/health-compass-arm64-v8a-x86_64-release-20261026-221711.apk), 54,066,099 bytes.
+- SHA-256: `f34e80b6e4789481e8963660981d17bf54af48572e76ad270a8d92534c49b1a1`.
+- Package: `com.healthcompass.app`, versionName `0.1.5`, versionCode `6`, minSdk `24`, targetSdk `36`, ABIs `arm64-v8a` and `x86_64`. The app label is “有节”; the release build is nondebuggable and disallows cleartext traffic.
+- APK Signature Scheme v2 verified. The certificate matches the prior test build (`fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c`); this is not a Google Play release key.
+- The packaged Hermes bundle matches the fresh Gradle bundle, and all 55 project source entries checked against the packager source map match the current working tree. The 1,540 APK entries contain no common API-key patterns, known local development endpoints, compiled AI environment names, private configuration files, app databases, health backups, or nested archives. The audit did not open local health storage or AI credentials.
+- Build checks passed: typecheck, client **345/345**, server **80/80**, and script tools **150/150**. The 18 relevant mobile Web-flow cases passed across the full run and the targeted rerun after correcting an outdated test fixture. These checks do not establish native runtime behavior.
+- Signature, package/version, ABI, standalone-bundle, source-map, and static package-data checks: [native verification](../artifacts/android-package-20261026-221711/native-verification.json) and [package verification](../artifacts/android-package-20261026-221711/verification.json). Build log: [android-release-20261026-221711.log](../artifacts/android-release-20261026-221711.log).
+
+The APK is ready for Android installation. A physical phone install and on-device camera, backup/restore, and real AI checks remain unverified.
 
 ## Latest integrated build (2026-10-23, 0.1.4)
 
@@ -124,8 +181,12 @@ $sdk = 'C:\Users\14360\AppData\Local\Android\Sdk'
 & "$sdk\cmdline-tools\latest\bin\apkanalyzer.bat" manifest min-sdk $apk
 & "$sdk\cmdline-tools\latest\bin\apkanalyzer.bat" apk summary $apk
 Get-FileHash -Algorithm SHA256 $apk
-node C:\health-compass\artifacts\verify-android-build.mjs $apk
+node C:\health-compass\artifacts\android-summary-timeout-20261027-022735\package-audit.mjs $apk
+node C:\health-compass\artifacts\android-summary-timeout-20261027-022735\native-package-audit.mjs $apk
+node C:\health-compass\artifacts\android-summary-timeout-20261027-022735\audit-apk-data.mjs $apk
 ```
+
+These audit scripts are bound to the latest 0.1.7 / code 8 build and compare its matching generated bundle, source map and resource provenance. Update the expected version and use a new evidence directory for later builds. They use generic scans and packaged-source checks without reading local health storage or actual user credentials.
 
 Install only when a phone is intentionally connected with USB debugging enabled:
 

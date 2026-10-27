@@ -351,15 +351,12 @@ export function TrainingForm({
         const single = exercises.length === 1;
         // Progression targets only apply to a single-exercise session.
         const values = single ? [form.targetSets, form.targetMin, form.targetMax, form.increment] : [];
-        const has = values.some((value) => value.trim());
-        if (has && values.some((value) => !value.trim()))
-          throw new Error("目标组数、次数区间和最小加重请完整填写。");
-        const nums = has ? values.map(Number) : [];
-        if (nums.some((value) => !Number.isFinite(value) || value <= 0))
+        const nums = values.map((value) => value.trim() ? Number(value) : undefined);
+        if (nums.some((value) => value !== undefined && (!Number.isFinite(value) || value <= 0)))
           throw new Error("训练目标必须是大于 0 的数字。");
-        if (nums.slice(0, 3).some((value) => !Number.isInteger(value)))
+        if (nums.slice(0, 3).some((value) => value !== undefined && !Number.isInteger(value)))
           throw new Error("目标组数和目标次数需要是整数。");
-        if (has && nums[1] > nums[2])
+        if (nums[1] !== undefined && nums[2] !== undefined && nums[1] > nums[2])
           throw new Error("目标次数下限不能大于上限。");
         const exercise = form.exercise.trim() || exercises.map((item) => item.name).join("、");
         draft = {
@@ -373,10 +370,10 @@ export function TrainingForm({
           pain: form.pain,
           controlled: form.controlled,
           rir: form.rir,
-          targetSets: has ? nums[0] : undefined,
-          targetMin: has ? nums[1] : undefined,
-          targetMax: has ? nums[2] : undefined,
-          increment: has ? nums[3] : undefined,
+          targetSets: nums[0],
+          targetMin: nums[1],
+          targetMax: nums[2],
+          increment: nums[3],
           weightBasis: form.basis,
           videoUri: form.videoUri || undefined,
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,

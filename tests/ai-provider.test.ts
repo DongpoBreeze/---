@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  AI_REQUEST_TIMEOUT_MS, AiProviderError, decideMealReview, discoverModel, discoverModels, isValidReasoningEffort, MAX_MEAL_ANALYSIS_STAGES, MAX_MEAL_SOURCE_PHOTOS, MAX_MEAL_REVIEW_PHOTOS, normalizeBaseUrl, normalizeConnection,
-  requestProvider, validateAiSettings, type AiConnection, type AiModel, type AiSettings, type MealProviderDiagnostic, type MealProviderTransport,
+  AI_CONNECTION_TEST_TIMEOUT_MS, AI_REQUEST_TIMEOUT_MS, DAILY_SUMMARY_TIMEOUT_MS, MEAL_ANALYSIS_STAGE_TIMEOUT_MS, AiProviderError, decideMealReview, discoverModel, discoverModels, isValidReasoningEffort, MAX_MEAL_ANALYSIS_STAGES, MAX_MEAL_SOURCE_PHOTOS, MAX_MEAL_REVIEW_PHOTOS, normalizeBaseUrl, normalizeConnection,
+  requestProvider, testAiConnection, validateAiSettings, type AiConnection, type AiModel, type AiSettings, type MealProviderDiagnostic, type MealProviderTransport,
 } from '../src/ai-provider';
 import { modelRequest } from '../server/protocol.mjs';
 import { mealAnalysisSchema } from '../src/nutrition-schema';
@@ -57,6 +57,58 @@ test('custom effort validation preserves tokens exactly and rejects unsupported 
     assert.equal(isValidReasoningEffort(effort), false);
     assert.throws(() => validateAiSettings({ ...settings, reasoningEffort: effort }));
   }
+});
+
+test('connection test verifies the selected model through both supported protocols using minimal requests', async (t) => {
+  const sent: Array<{ url: string; init?: RequestInit }> = [];
+  t.mock.method(globalThis, 'fetch', async (url: string | URL | Request, init?: RequestInit) => {
+    sent.push({ url: String(url), init });
+    const body = JSON.parse(String(init?.body));
+    if (body.stream) {
+      return new Response(sseEvent({ type: 'response.completed', response: output({ text: 'connected' }) }), {
+        headers: { 'Content-Type': 'text/event-stream' },
+      });
+    }
+    return response(chatOutput({ text: 'connected' }));
+  });
+  const result = await testAiConnection({ ...settings, reasoningEffort: 'high' });
+  assert.deepEqual(result, { model: settings.model, protocol: 'responses', elapsedMs: result.elapsedMs });
+  assert.equal(sent[0].url, `${connection.baseUrl}/responses`);
+  const responsesBody = JSON.parse(String(sent[0].init?.body));
+  assert.deepEqual(responsesBody, {
+    model: settings.model, input: 'Reply with a short connection check response.', max_output_tokens: 256,
+    stream: true, store: false, reasoning: { effort: 'high' },
+  });
+  assert.equal((sent[0].init?.headers as Record<string, string>).Authorization, `Bearer ${connection.apiKey}`);
+
+  const chatConnection = { ...connection, protocol: 'chat_completions' as const };
+  const chatSettings = { ...settings, ...chatConnection, reasoningEffort: 'medium' };
+  const chatResult = await testAiConnection(chatSettings);
+  assert.deepEqual(chatResult, { model: settings.model, protocol: 'chat_completions', elapsedMs: chatResult.elapsedMs });
+  assert.equal(sent[1].url, `${connection.baseUrl}/chat/completions`);
+  assert.deepEqual(JSON.parse(String(sent[1].init?.body)), {
+    model: settings.model, messages: [{ role: 'user', content: 'Reply with a short connection check response.' }],
+    max_completion_tokens: 256, stream: false, reasoning_effort: 'medium',
+  });
+});
+
+test('connection test reports authentication errors without exposing credentials and supports cancellation and timeout', async (t) => {
+  t.mock.method(globalThis, 'fetch', async () => response({ error: { message: settings.apiKey } }, 401));
+  await assert.rejects(testAiConnection(settings), (error: unknown) => error instanceof AiProviderError
+    && error.code === 'authentication_rejected' && !error.message.includes(settings.apiKey));
+
+  const controller = new AbortController();
+  t.mock.method(globalThis, 'fetch', () => new Promise<Response>(() => {}));
+  const cancelled = testAiConnection(settings, controller.signal);
+  controller.abort(new Error(settings.apiKey));
+  await assert.rejects(cancelled, (error: unknown) => error instanceof AiProviderError && error.name === 'AbortError'
+    && !error.message.includes(settings.apiKey));
+
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const timedOut = testAiConnection(settings);
+  const timedOutRejected = assert.rejects(timedOut, (error: unknown) => error instanceof AiProviderError && error.code === 'timeout');
+  t.mock.timers.tick(AI_CONNECTION_TEST_TIMEOUT_MS);
+  await timedOutRejected;
 });
 
 test('official-style basic model metadata does not invent effort or vision choices', async (t) => {
@@ -176,6 +228,32 @@ test('complete analysis received after 110 seconds is accepted within the 120-se
   assert.equal(calls, 1);
 });
 
+test('daily summary has a single 180-second total provider window', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let calls = 0;
+  t.mock.method(globalThis, 'fetch', () => {
+    calls += 1;
+    return new Promise<Response>((resolve) => setTimeout(() => resolve(response(output({ text: '慢速完整总结' }))), 170_000));
+  });
+  const pending = requestProvider(settings, 'summary', {}, undefined, { timeoutMs: DAILY_SUMMARY_TIMEOUT_MS });
+  t.mock.timers.tick(170_000);
+  assert.deepEqual((await pending).analysis, { text: '慢速完整总结' });
+  assert.equal(calls, 1);
+  assert.equal(DAILY_SUMMARY_TIMEOUT_MS, 180_000);
+  assert.equal(AI_REQUEST_TIMEOUT_MS, 120_000);
+});
+
+test('daily summary fails at 180 seconds without retrying an incomplete response', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let calls = 0;
+  t.mock.method(globalThis, 'fetch', () => { calls += 1; return new Promise<Response>(() => {}); });
+  const pending = requestProvider(settings, 'summary', {}, undefined, { timeoutMs: DAILY_SUMMARY_TIMEOUT_MS });
+  const rejected = assert.rejects(pending, (error: unknown) => error instanceof AiProviderError && error.code === 'timeout');
+  t.mock.timers.tick(DAILY_SUMMARY_TIMEOUT_MS);
+  await rejected;
+  assert.equal(calls, 1);
+});
+
 test('each adaptive analysis stage receives its own 120-second window', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const first = modelMeal([reviewComponent({ confidence: 0.4, candidates: [
@@ -198,6 +276,24 @@ test('each adaptive analysis stage receives its own 120-second window', async (t
   assert.equal(result.stageCount, 2);
   assert.equal(AI_REQUEST_TIMEOUT_MS, 120_000);
   assert.equal(calls, 2);
+});
+
+test('meal recognition can use a 180-second per-stage window without changing the shared default', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let calls = 0;
+  t.mock.method(globalThis, 'fetch', () => {
+    calls += 1;
+    return new Promise<Response>((resolve) => setTimeout(() => resolve(response(output(modelMeal()))), 170_000));
+  });
+  const pending = requestProvider(settings, 'meal', { photos: [photo] }, undefined, {
+    maxStages: 1, timeoutMs: MEAL_ANALYSIS_STAGE_TIMEOUT_MS,
+  });
+  t.mock.timers.tick(170_000);
+  const result = await pending;
+  assert.equal(result.stageCount, 1);
+  assert.equal(calls, 1);
+  assert.equal(MEAL_ANALYSIS_STAGE_TIMEOUT_MS, 180_000);
+  assert.equal(AI_REQUEST_TIMEOUT_MS, 120_000);
 });
 
 const photo = 'data:image/png;base64,iVBORw0KGgo=';
@@ -369,7 +465,7 @@ for (const protocol of ['responses', 'chat_completions'] as const) {
     const effort = 'Vendor.Ultra-2_0';
     const sent: Record<string, any>[] = [];
     const { basisGrams: _basis, ...estimate } = modelNutritionEstimate();
-    const meal = { components: [{ label: '熟米饭', cookingMethod: '蒸煮', confidence: 0.95,
+    const meal = { components: [{ label: '熟米饭', cookingMethod: '蒸煮', confidence: 0.95, recommendedShare: 1,
       nutritionEstimate: estimate, uncertainty: [] }], uncertainty: [] };
     let reply: unknown = meal;
     let reject = false;

@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test';
 import { nutritionInput } from './helpers/meal-nutrition';
-import type { MealRecord } from '../src/types';
+import { adaptFrontendMealRecognition } from '../shared/nutrition.mjs';
+import { calculateMealNutrition, nutritionDataset } from '../src/nutrition';
+import type { MealAnalysis, MealRecord } from '../src/types';
 import {
   configureMockAi, fulfillProviderJson, fulfillProviderResponse, installMockAiProvider, MOCK_AI_MODEL,
 } from './helpers/mock-ai-provider';
@@ -17,6 +19,23 @@ test.beforeEach(async ({ page }) => {
   test.setTimeout(120_000);
   page.on('dialog', (dialog) => { void dialog.accept(); });
 });
+
+async function openSavedPortionReview(page: import('@playwright/test').Page, dish: ReturnType<typeof portionDish>, profile = {}) {
+  const now = new Date().toISOString();
+  const photoUri = `file:///saved-${encodeURIComponent(dish.label)}.png`;
+  const recognition = adaptFrontendMealRecognition({ components: [dish], uncertainty: [] });
+  const analysis = calculateMealNutrition(recognition as unknown as MealAnalysis, nutritionDataset, 'ai-per100g-v3', {
+    provenance: { model: MOCK_AI_MODEL, createdAt: now },
+  });
+  const meal: MealRecord = { id: 'saved-portion-boundary', type: 'meal', createdAt: now, occurredAt: now,
+    revision: 1, mealType: '午餐', foodName: dish.label, portion: '', note: '', source: 'photo', estimateStatus: 'unknown',
+    imageUri: photoUri, beforeImageUris: [photoUri],
+    analyses: [{ id: 'saved-portion-boundary-analysis', sourceVersion: 1, model: MOCK_AI_MODEL, createdAt: now, analysis }],
+  };
+  await restorePortionMeals(page, [meal], profile, [{ uri: photoUri, kind: 'image', bytes: portionPng, mimeType: 'image/png', extension: 'png' }]);
+  await reopenPortionMeal(page, dish.label);
+  await reopenPortionReview(page);
+}
 
 test('默认成人自动估填，保存体重改变估值且有效目标优先；确认、刷新和 ZIP 恢复保留估计来源', async ({ page, browser }, info) => {
   const errors = capturePortionErrors(page);
@@ -102,7 +121,7 @@ test('默认成人自动估填，保存体重改变估值且有效目标优先�
       components: [{ userQuantity: { amount: grams, unit: 'g', origin: 'estimated' } }] });
     expect(confirmed.assumptions.join('\n')).toContain('食用量参考：');
     expect(confirmed.assumptions.join('\n')).toContain('kcal');
-    expect(confirmed.assumptions.join('\n')).toContain('等克数');
+    expect(confirmed.assumptions.join('\n')).toContain('按 AI 对本次菜品组合的建议分配');
     const original = meal.analyses!.find((version) => version.model === MOCK_AI_MODEL)!;
     expect(original.analysis.components![0].userQuantity).toBeNull();
     for (const [key] of portionNutrients) expect(original.analysis[key]).toBeNull();
@@ -123,6 +142,153 @@ test('默认成人自动估填，保存体重改变估值且有效目标优先�
   } finally { await restoredContext.close(); }
   expect(provider.responses()).toHaveLength(3);
   expect(provider.legacyRequests).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test('旧分析已有估计数量但缺少份额时提示复核，补估空白项并保留原数量', async ({ page }) => {
+  const errors = capturePortionErrors(page);
+  const now = new Date().toISOString();
+  const photoUri = 'file:///meal-with-empty-portion.png';
+  const riceReference = pointRanges(130, 2, 28, 0.3);
+  const eggReference = pointRanges(155, 13, 1, 11);
+  const provider = await installMockAiProvider(page, { onResponse: async (route) => fulfillProviderResponse(route, {
+    components: [
+      portionDish('熟米饭', riceReference, '蒸煮', 0.65),
+      portionDish('卤鸡蛋', eggReference, '卤', 0.35),
+    ], uncertainty: [],
+  }) });
+  const oldRecognition = adaptFrontendMealRecognition({ components: [
+    portionDish('熟米饭', riceReference, '蒸煮', 0.65),
+    portionDish('卤鸡蛋', eggReference, '卤', 0.35),
+  ], uncertainty: [] });
+  const oldInput = {
+    ...oldRecognition,
+    status: 'unknown', calories: null, protein: null, carbs: null, fat: null,
+    components: oldRecognition.components.map(({ recommendedShare: _share, ...component }, index) => ({
+      ...component,
+      userQuantity: index === 0 ? { amount: 120, unit: 'g', origin: 'estimated' as const } : null,
+    })),
+  } as unknown as MealAnalysis;
+  const oldAnalysis = calculateMealNutrition(oldInput, nutritionDataset, 'ai-per100g-v3', {
+    provenance: { model: MOCK_AI_MODEL, createdAt: now },
+  });
+  const oldMeal: MealRecord = {
+    id: 'meal-with-empty-portion', type: 'meal', createdAt: now, occurredAt: now, revision: 1,
+    mealType: '午餐', foodName: '熟米饭、卤鸡蛋', portion: '', note: '', source: 'photo', estimateStatus: 'unknown',
+    imageUri: photoUri, beforeImageUris: [photoUri],
+    analyses: [{ id: 'old-analysis-with-empty-portion', sourceVersion: 1, model: MOCK_AI_MODEL, createdAt: now, analysis: oldAnalysis }],
+  };
+  await restorePortionMeals(page, [oldMeal], {}, [{ uri: photoUri, kind: 'image', bytes: portionPng, mimeType: 'image/png', extension: 'png' }]);
+  await configureMockAi(page);
+  await reopenPortionMeal(page, oldMeal.foodName);
+  await reopenPortionReview(page);
+
+  await expect(portionQuantity(page, 1)).toHaveValue('120');
+  await expect(portionQuantity(page, 2)).toHaveValue('');
+  const guidance = portionReview(page).getByTestId('meal-portion-estimate');
+  await expect(guidance).toContainText('AI 复核');
+  await expect(guidance).not.toContainText('并为可估算的空白菜品填入建议量');
+  await portionReview(page).getByRole('button', { name: 'AI 复核', exact: true }).click();
+  await expect(portionReview(page).getByText('AI 复核完成，请核对。', { exact: true })).toBeVisible();
+
+  const riceGrams = Number(await portionQuantity(page, 1).inputValue());
+  const eggGrams = Number(await portionQuantity(page, 2).inputValue());
+  expect(riceGrams).toBe(120);
+  expect(eggGrams).toBeGreaterThan(0);
+  await confirmPortionReview(page);
+  await expectPortionFormula(page, [
+    { grams: riceGrams, per100g: riceReference },
+    { grams: eggGrams, per100g: eggReference },
+  ]);
+  expect(provider.responses()).toHaveLength(1);
+  expect(errors).toEqual([]);
+});
+
+test('打开旧餐食时给已有建议份额的空白菜品补估量并保留已保存数量', async ({ page }) => {
+  const errors = capturePortionErrors(page);
+  const now = new Date().toISOString();
+  const photoUri = 'file:///saved-meal-with-empty-quantity.png';
+  const riceReference = pointRanges(130, 2, 28, 0.3);
+  const eggReference = pointRanges(155, 13, 1, 11);
+  const originalRecognition = adaptFrontendMealRecognition({ components: [
+    portionDish('熟米饭', riceReference, '蒸煮', 0.65),
+    portionDish('卤鸡蛋', eggReference, '卤', 0.35),
+  ], uncertainty: [] });
+  const oldInput = {
+    ...originalRecognition,
+    status: 'unknown', calories: null, protein: null, carbs: null, fat: null,
+    components: originalRecognition.components.map((component, index) => ({ ...component,
+      userQuantity: index === 0 ? { amount: 120, unit: 'g', origin: 'estimated' as const } : null,
+    })),
+  } as unknown as MealAnalysis;
+  const oldAnalysis = calculateMealNutrition(oldInput, nutritionDataset, 'ai-per100g-v3', {
+    provenance: { model: MOCK_AI_MODEL, createdAt: now },
+  });
+  const oldMeal: MealRecord = {
+    id: 'saved-meal-with-empty-quantity', type: 'meal', createdAt: now, occurredAt: now, revision: 1,
+    mealType: '午餐', foodName: '熟米饭、卤鸡蛋', portion: '', note: '', source: 'photo', estimateStatus: 'unknown',
+    imageUri: photoUri, beforeImageUris: [photoUri],
+    analyses: [{ id: 'saved-analysis-with-empty-quantity', sourceVersion: 1, model: MOCK_AI_MODEL, createdAt: now, analysis: oldAnalysis }],
+  };
+  const provider = await installMockAiProvider(page, { onResponse: async (route) => fulfillProviderResponse(route, portionAnswer) });
+  await restorePortionMeals(page, [oldMeal], {}, [{ uri: photoUri, kind: 'image', bytes: portionPng, mimeType: 'image/png', extension: 'png' }]);
+  await reopenPortionMeal(page, oldMeal.foodName);
+  await reopenPortionReview(page);
+
+  const riceGrams = Number(await portionQuantity(page, 1).inputValue());
+  const eggGrams = Number(await portionQuantity(page, 2).inputValue());
+  expect(riceGrams).toBe(120);
+  expect(eggGrams).toBeGreaterThan(0);
+  await expect(page.getByTestId('meal-portion-estimate')).toContainText('为新补估菜品填入建议量');
+  await confirmPortionReview(page);
+  await expectPortionFormula(page, [
+    { grams: riceGrams, per100g: riceReference },
+    { grams: eggGrams, per100g: eggReference },
+  ]);
+  expect(provider.responses()).toHaveLength(0);
+  expect(errors).toEqual([]);
+});
+
+test('已知未成年时解释成人参考不适用，不建议为补量发起AI复核', async ({ page }) => {
+  await openSavedPortionReview(page, portionDish('熟米饭'), { ageYears: 16 });
+  await expect(portionQuantity(page)).toHaveValue('');
+  const guidance = page.getByTestId('meal-portion-estimate');
+  await expect(guidance).toContainText('未成年人');
+  await expect(guidance).toContainText('请手动填写食用量');
+  await expect(guidance).not.toContainText('AI 复核');
+});
+
+test('热量密度低于换算边界时说明原因，不建议无效的AI复核', async ({ page }) => {
+  await openSavedPortionReview(page, portionDish('清汤蔬菜', pointRanges(40, 1, 8, 1), '煮'));
+  await expect(portionQuantity(page)).toHaveValue('');
+  const guidance = page.getByTestId('meal-portion-estimate');
+  await expect(guidance).toContainText('热量密度');
+  await expect(guidance).toContainText('请手动填写食用量');
+  await expect(guidance).not.toContainText('AI 复核');
+});
+
+test('份额把握较低时仍采用 AI 的最佳估计并自动填入每道菜', async ({ page }) => {
+  const errors = capturePortionErrors(page);
+  const rice = portionDish('米饭', pointRanges(130, 2, 28, 0.3), '蒸煮', 0.75);
+  rice.uncertainty = ['餐盘中各菜实际份额不清，按主食与主菜组合尽力估计。'];
+  const main = portionDish('煎鱼', pointRanges(220, 24, 0, 13), '煎', 0.25);
+  const provider = await installMockAiProvider(page, { onResponse: async (route) => fulfillProviderResponse(route,
+    { components: [rice, main], uncertainty: [] }) });
+  await openPortionMeal(page);
+  await uploadPortionPhoto(page);
+
+  const riceGrams = Number(await portionQuantity(page, 1).inputValue());
+  const mainGrams = Number(await portionQuantity(page, 2).inputValue());
+  expect(riceGrams).toBeGreaterThan(0);
+  expect(mainGrams).toBeGreaterThan(0);
+  expect(riceGrams).toBeGreaterThan(mainGrams);
+  await expect(page.getByTestId('meal-portion-estimate')).toContainText('按实际情况修改');
+  await confirmPortionReview(page);
+  await expectPortionFormula(page, [
+    { grams: riceGrams, per100g: pointRanges(130, 2, 28, 0.3) },
+    { grams: mainGrams, per100g: pointRanges(220, 24, 0, 13) },
+  ]);
+  expect(provider.responses()).toHaveLength(1);
   expect(errors).toEqual([]);
 });
 
@@ -284,13 +450,15 @@ test('确认触发的复核失败保留编辑和旧表单，不自动重试，�
 test('用户覆盖和主动清空优先，显式复核及刷新重开保持清空，部分小计只计入有数量的菜', async ({ page }) => {
   const errors = capturePortionErrors(page);
   const chicken = pointRanges(100, 20, 5, 3);
-  const answer = { components: [portionDish('熟米饭'), portionDish('清蒸鸡肉', chicken, '清蒸')], uncertainty: [] };
+  const answer = { components: [portionDish('熟米饭', pointRanges(), '蒸煮', 0.7), portionDish('清蒸鸡肉', chicken, '清蒸', 0.3)], uncertainty: [] };
   const provider = await installMockAiProvider(page, { onResponse: async (route) => fulfillProviderResponse(route, answer) });
   await openPortionMeal(page);
   await uploadPortionPhoto(page);
   const first = Number(await portionQuantity(page).inputValue());
   expect(first).toBeGreaterThan(0);
-  await expect(portionQuantity(page, 2)).toHaveValue(String(first));
+  const second = Number(await portionQuantity(page, 2).inputValue());
+  expect(second).toBeGreaterThan(0);
+  expect(first).toBeGreaterThan(second);
   await portionQuantity(page).fill('120');
   await portionQuantity(page, 2).fill('');
   await portionReview(page).getByLabel('补充说明（用于复核）', { exact: true }).fill('第二道菜没有吃，不计入本餐。');

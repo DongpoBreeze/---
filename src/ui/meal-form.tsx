@@ -2,21 +2,23 @@ import React, { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
-import type { MealRecord, NutrientRanges, Profile } from "../types";
+import type { MealRecord, Profile } from "../types";
 import { persistMedia } from "../storage";
 import { getAiSettingsVersion, isAiConfigured } from "../ai";
 import { applyEstimatedMealQuantities, buildMealReviewAnalysis, createEmptyMealReviewRow, createMealReviewRows, mealReviewConfirmationMessage, mergeReviewedQuantities, updateMealReviewRow, type MealReviewRow } from "../meal-review";
 import { estimateMealPortion } from "../meal-portion-reference";
 import { LOCAL_REVIEW_MODEL, keepEditedGrams, keepUserNutrition, nutritionEstimateText, nutritionRows, reviewRefreshOutcome, withPortionAssumption } from "../meal-review-refresh";
 import { MAX_MEAL_PHOTOS, mealBeforePhotoUris } from "../meal-photos";
-import { nutritionFieldsFromAnalysis, nutritionFieldsFromMeal, parseMealNutritionFields } from "../meal-nutrition-fields";
+import { nutritionFieldsFromAnalysis, nutritionFieldsFromMeal, parseMealNutritionFields, type MealNutritionRanges } from "../meal-nutrition-fields";
 import { createMealAnalysisDraft, photoAnalysisSnapshot, prepareMealAnalysisForSave, restoreMealFormDraft, type MealAnalysisDraft } from "../meal-analysis-draft";
 import { type FormSession, useFormDraft, useFormSession } from "./useFormDraft";
 import { Banner, Choice, DraftStatus, Field, MediaPreview, Note, Sheet, SmallButton, useBaseStyles } from "./components";
 import { MealAnalysisList } from "./meal-analysis";
 import { MealReviewPage } from "./meal-review";
 import { AnalysisWaitTime } from "./analysis-wait-time";
+import { MEAL_ANALYSIS_STAGE_TIMEOUT_MS } from "../ai-provider";
 import { confirmAction, errorText, localDateTime, notify, parseDateTime, today } from "./format";
+import { defaultMealTypeForNow } from "../meal-time";
 import { radius, space, type ThemeTokens } from "./theme";
 import { useTheme, useThemedStyles } from "./theme-provider";
 import type { DraftKey, MealDraft, PhotoAnalysisResult, PhotoAnalysisSnapshot, SaveNutritionCorrection } from "./app-types";
@@ -42,7 +44,7 @@ const mealState = (initial?: MealRecord): MealState => ({
   occurredAt:
     localDateTime(initial?.occurredAt) ||
     localDateTime(new Date().toISOString()),
-  mealType: initial?.mealType ?? "午餐",
+  mealType: initial?.mealType ?? defaultMealTypeForNow(),
   foodName: initial?.foodName ?? "",
   // Keep the saved title until an explicit review confirmation replaces it.
   foodNameSource: initial?.foodNameSource ?? (initial?.foodName.trim() ? 'user' : undefined),
@@ -193,11 +195,24 @@ export function MealForm({
     }
   };
   const estimatedRows = (analysis: ReturnType<typeof buildMealReviewAnalysis>, rows: MealReviewRow[]) =>
-    formRef.current.analysisDraft.preserveEstimatedQuantities ? rows
-      : applyEstimatedMealQuantities(profile, formRef.current.mealType, analysis, rows);
-  const confirmReviewedAnalysis = (analysis: ReturnType<typeof buildMealReviewAnalysis>, note: string) => {
-    if (!formRef.current.analysisDraft.preserveEstimatedQuantities)
+    applyEstimatedMealQuantities(profile, formRef.current.mealType, analysis, rows, {
+      preserveExistingEstimates: formRef.current.analysisDraft.preserveEstimatedQuantities,
+    });
+  const confirmReviewedAnalysis = (analysis: ReturnType<typeof buildMealReviewAnalysis>, note: string, rows = currentRows()) => {
+    if (!formRef.current.analysisDraft.preserveEstimatedQuantities) {
       analysis = withPortionAssumption(analysis, profile, formRef.current.mealType);
+    } else {
+      const newlyEstimated = rows.flatMap((row, index) => {
+        if (row.quantityOrigin !== 'estimated' || !row.quantity.trim()) return [];
+        const previous = row.component.userQuantity;
+        const oldMethod = row.component.cookingMethod ?? row.component.preparation ?? '';
+        const changedIdentity = row.label.trim() !== row.component.label.trim()
+          || row.cookingMethod.trim() !== oldMethod.trim();
+        return !previous || changedIdentity || previous.unit !== 'g' || Number(row.quantity) !== previous.amount ? [index] : [];
+      });
+      if (newlyEstimated.length) analysis = withPortionAssumption(analysis, profile, formRef.current.mealType,
+        { append: true, componentIndices: newlyEstimated });
+    }
     const result: PhotoAnalysisResult = {
       model: LOCAL_REVIEW_MODEL, createdAt: new Date().toISOString(), analysis,
     };
@@ -239,7 +254,7 @@ export function MealForm({
     }
     const previousAnalysis = reviewedInput ?? snapshot.analysisDraft.confirmed?.analysis ?? latestAnalysis?.analysis;
     const previousRows = reviewedInput ? currentRows() : undefined;
-    const preserveSavedQuantities = !reviewedInput && Boolean(previousAnalysis?.components?.length);
+    const preserveSavedQuantities = Boolean(previousAnalysis?.components?.length);
     const confirmedNote = reviewedInput ? reviewNote.trim() : snapshot.note.trim();
     const generation = ++photoGeneration.current;
     const settingsVersion = getAiSettingsVersion();
@@ -286,7 +301,7 @@ export function MealForm({
         const analysis = buildMealReviewAnalysis(next.analysis, rows);
         const outcome = reviewRefreshOutcome(reviewedInput, next.analysis, analysis);
         if (outcome.kind === 'confirm') {
-          confirmReviewedAnalysis(analysis, confirmedNote);
+          confirmReviewedAnalysis(analysis, confirmedNote, rows);
           return;
         }
         setReviewStatus(outcome.status);
@@ -329,7 +344,7 @@ export function MealForm({
         void requestPhotoAnalysis(analysis, true);
         return;
       }
-      confirmReviewedAnalysis(analysis, reviewNote.trim());
+      confirmReviewedAnalysis(analysis, reviewNote.trim(), rows);
     } catch (e) { setReviewError(errorText(e)); }
   };
   const editConfirmed = () => {
@@ -515,7 +530,7 @@ export function MealForm({
   const portionReference = estimateMealPortion(profile, form.mealType, reviewPreview);
   const confirmedAnalysis = photoAnalysis?.analysis ?? latestAnalysis?.analysis;
   const showNutritionSummary = Boolean(confirmedAnalysis?.components?.length) && !nutritionEditing;
-  let nutritionRanges: NutrientRanges | null = null;
+  let nutritionRanges: MealNutritionRanges | null = null;
   let nutritionIncomplete = false;
   try { nutritionRanges = parseMealNutritionFields(form); }
   catch { nutritionIncomplete = true; }
@@ -645,7 +660,7 @@ export function MealForm({
                 <Text accessibilityRole="alert" style={st.photoStatus}>{visiblePhotoStatus}</Text>
               </View>
             )}
-            {photoBusy && photoStartedAt !== null && <Text style={st.photoText}><AnalysisWaitTime startedAt={photoStartedAt} /></Text>}
+    {photoBusy && photoStartedAt !== null && <Text style={st.photoText}><AnalysisWaitTime startedAt={photoStartedAt} timeoutMs={MEAL_ANALYSIS_STAGE_TIMEOUT_MS} limitLabel="单次请求上限" /></Text>}
             {photoBusy && <SmallButton icon="close-circle-outline" label="取消照片分析" onPress={() => {
               cancelPhotoRequest();
               setPhotoStatus("照片分析已取消，照片和输入已保留。");
@@ -707,7 +722,7 @@ export function MealForm({
           </View>
           {showNutritionSummary ? <>
             <Text style={st.nutritionHelp}>按当前菜品营养参考和食用量估算；范围反映营养参考的不确定性。</Text>
-            {nutritionIncomplete && <Text style={st.nutritionIncomplete}>四项营养尚未填完整，请点击“修改营养值”补齐或全部清空。</Text>}
+            {nutritionIncomplete && <Text style={st.nutritionIncomplete}>营养值格式无效，请点击“修改营养值”检查已填写的项目。</Text>}
             <View testID="meal-nutrition-summary" style={st.nutritionSummary}>
               {nutritionRows.map(([key, label, unit]) => {
                 const display = nutritionEstimateText(nutritionRanges?.[key] ?? null, key);
@@ -720,7 +735,7 @@ export function MealForm({
               })}
             </View>
           </> : <>
-            <Text style={st.nutritionHelp}>填写数值或区间（如 450～550）；全部留空表示未知。</Text>
+            <Text style={st.nutritionHelp}>各项可单独填写数值或区间（如 450～550）；未填项不计入汇总。</Text>
             <View style={st.two}>
               <Field label="热量 kcal" value={form.calories} onChangeText={(value) => update({ calories: value })} placeholder="例如 500 或 450～550" />
               <Field label="蛋白质 g" value={form.protein} onChangeText={(value) => update({ protein: value })} placeholder="例如 20 或 18～22" />

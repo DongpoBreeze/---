@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { calculateMealNutrition } from '../shared/nutrition.mjs';
 import { createBackupArchive, parseBackupArchive } from '../src/backup';
-import { mealCalories } from '../src/domain';
+import { localDate, mealCalories, summaryMarkdown } from '../src/domain';
 import {
   createManualNutritionAnalysis, emptyMealNutritionFields, equalMealNutritionRanges, exactNutritionEstimate,
   nutritionFieldsFromAnalysis, nutritionFieldsFromMeal, parseMealNutritionFields, type MealNutritionFields,
@@ -62,10 +62,22 @@ test('whole-meal values are not constrained by per-100g nutrient limits', () => 
     carbs: '150～175', fat: '105～115' }), manualRanges);
 });
 
-test('partial totals and malformed values cannot silently become unknown or truncated numbers', () => {
+test('partial totals retain supplied values while missing optional nutrients stay null', () => {
+  const complete = parseMealNutritionFields(fields)!;
   for (const key of nutrientKeys) {
-    assert.throws(() => parseMealNutritionFields({ ...fields, [key]: '' }), /完整填写四项/);
-    assert.throws(() => parseMealNutritionFields({ ...fields, [key]: ' ' }), /完整填写四项/);
+    assert.deepEqual(parseMealNutritionFields({ ...fields, [key]: '' }), { ...complete, [key]: null });
+    assert.deepEqual(parseMealNutritionFields({ ...fields, [key]: ' ' }), { ...complete, [key]: null });
+  }
+  assert.deepEqual(parseMealNutritionFields({ ...emptyMealNutritionFields(), calories: '350～450' }), {
+    calories: { min: 350, max: 450 }, protein: null, carbs: null, fat: null,
+  });
+  assert.deepEqual(parseMealNutritionFields({ ...emptyMealNutritionFields(), fat: '0' }), {
+    calories: null, protein: null, carbs: null, fat: { min: 0, max: 0 },
+  });
+});
+
+test('malformed supplied totals cannot silently become unknown or truncated numbers', () => {
+  for (const key of nutrientKeys) {
     for (const invalid of ['NaN', 'Infinity', '-Infinity', '-1', '-0', '+1', '1e3', '1E-3', '1.', '.',
       '1～', '～2', '1--2', '1-2-3', '2～1', '1 ~ -2', '1,000', '100 kcal', '0x10', '1_000', '1 / 2',
       '1 to 2', '1 2', '1～NaN', '9'.repeat(400)]) {
@@ -191,6 +203,26 @@ test('calorie aggregation uses a whole-meal manual version independently of dish
   assert.equal(mealCalories({ ...record, revision: 2 }), null);
 });
 
+test('partial manual totals survive backup, reopening and calorie aggregation without filling gaps', async () => {
+  for (const supplied of [{ calories: '350～450' }, { protein: '20.5', fat: '0' }]) {
+    const entered = { ...emptyMealNutritionFields(), ...supplied };
+    const ranges = parseMealNutritionFields(entered)!;
+    const analysis = createManualNutritionAnalysis(undefined, ranges, '手动午餐', now);
+    assert.equal(analysis.status, 'estimated');
+    assert.deepEqual(exactNutritionEstimate(ranges), undefined);
+    const record = meal({ source: 'manual', analyses: [version('partial-manual', analysis)] });
+    const parsed = await parseBackupArchive(await createBackupArchive({ ...emptyData(), meals: [record] }, [], now));
+    assert.deepEqual(parsed.data.meals[0], record);
+    assert.deepEqual(nutritionFieldsFromMeal(parsed.data.meals[0]), entered);
+    assert.deepEqual(mealCalories(parsed.data.meals[0]), ranges.calories);
+    const summary = summaryMarkdown(parsed.data, localDate(now));
+    assert.match(summary, /午餐：鸡肉烩菜/);
+    assert.doesNotMatch(summary, /剩余：|备注：|未知|未填写|数量记录完整或无已识别菜品/);
+    for (const key of nutrientKeys) assert.deepEqual(analysis[key], ranges[key]);
+    assert.match(analysis.advice, /仅汇总已填写项目/);
+  }
+});
+
 test('range equality compares numeric bounds, and exact estimates never collapse uncertainty', () => {
   const ranges = parseMealNutritionFields(fields)!;
   assert.equal(equalMealNutritionRanges(ranges, parseMealNutritionFields({ ...fields, calories: '650～650' })), true);
@@ -198,8 +230,12 @@ test('range equality compares numeric bounds, and exact estimates never collapse
   assert.equal(equalMealNutritionRanges(null, null), true);
   assert.equal(equalMealNutritionRanges(null, ranges), false);
   assert.equal(equalMealNutritionRanges(ranges, null), false);
+  assert.equal(equalMealNutritionRanges({ ...ranges, fat: null }, { ...ranges, fat: null }), true);
+  assert.equal(equalMealNutritionRanges({ ...ranges, fat: null }, ranges), false);
+  assert.equal(equalMealNutritionRanges(ranges, { ...ranges, fat: null }), false);
   assert.deepEqual(exactNutritionEstimate(ranges), { calories: 650, protein: 40.25, carbs: 80, fat: 18.5 });
   assert.equal(exactNutritionEstimate({ ...ranges, protein: { min: 40.25, max: 40.3 } }), undefined);
   assert.equal(exactNutritionEstimate(manualRanges), undefined);
   assert.equal(exactNutritionEstimate(null), undefined);
+  assert.equal(exactNutritionEstimate({ ...ranges, fat: null }), undefined);
 });

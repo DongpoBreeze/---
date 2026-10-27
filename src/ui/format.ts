@@ -94,8 +94,7 @@ export function nutritionRangeLabel(
 
 export function sleepHours(record: SleepRecord) {
   try {
-    const value = sleepStats(record);
-    return value.asleepMinutes === null ? null : value.asleepMinutes / 60;
+    return sleepStats(record).asleepMinutes / 60;
   } catch {
     return null;
   }

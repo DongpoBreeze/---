@@ -12,6 +12,7 @@ export type FrontendMealRecognition = {
   components: Array<{
     label: string;
     cookingMethod: string | null;
+    recommendedShare?: number;
     confidence: number;
     nutritionEstimate: Omit<NonNullable<ModelNutritionEstimate>, 'basisGrams'> | null;
     uncertainty: string[];

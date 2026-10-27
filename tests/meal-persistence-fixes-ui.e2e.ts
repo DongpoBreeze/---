@@ -101,12 +101,12 @@ test('确认识别后主表单显示新菜名和营养范围，保存后记录�
   expect(errors).toEqual([]);
 });
 
-test('确认草稿经关闭、刷新、再次修改和备份恢复保留菜品、主动清空及模型历史', async ({ page, browser }, info) => {
+test('未保存的新餐关闭、刷新及从备份恢复后再次打开均为全新记录', async ({ page }) => {
   test.setTimeout(120_000);
   const errors = capturePortionErrors(page);
   page.on('dialog', (dialog) => { void dialog.accept(); });
   const answer = { components: [portionDish('熟米饭', pointRanges(200)), portionDish('蒸蛋', pointRanges(100), '蒸')], uncertainty: [] };
-  const provider = await installMockAiProvider(page, { onResponse: async (route) => fulfillProviderResponse(route, answer) });
+  await installMockAiProvider(page, { onResponse: async (route) => fulfillProviderResponse(route, answer) });
   await openPortionMeal(page);
   await uploadPortionPhoto(page);
   await portionQuantity(page).fill('250');
@@ -117,68 +117,38 @@ test('确认草稿经关闭、刷新、再次修改和备份恢复保留菜品�
   await expect(page.getByLabel('热量 kcal', { exact: true })).toHaveValue('550');
   await closeMeal(page);
   const draftBackup = await exportPortionBackup(page);
-  const draft = draftBackup.archive.drafts['meal-new'] as any;
+  const abandonedKey = Object.keys(draftBackup.archive.drafts).find((key) => key.startsWith('meal-new-'));
+  expect(abandonedKey).toBeTruthy();
+  const draft = draftBackup.archive.drafts[abandonedKey!] as any;
   expect(draft.analysisDraft).toMatchObject({ version: 1, confirmed: { model: 'local/meal-review' }, review: { pending: false } });
   expect(draft.analysisDraft.confirmed.analysis.components[0]).toMatchObject({ userQuantity: { amount: 250, unit: 'g', origin: 'user' },
     userNutritionPer100g: { calories: { min: 220, max: 220 } }, source: { per100gRange: { calories: { min: 200, max: 200 } } } });
   expect(draft.analysisDraft.confirmed.analysis.components[1].userQuantityCleared).toBe(true);
+
+  const expectBlankNewMeal = async () => {
+    await expect(page.getByLabel('食物名称', { exact: true })).toHaveValue('');
+    await expect(page.getByTestId('ai-meal-review')).toHaveCount(0);
+    await expect(page.getByLabel('热量 kcal', { exact: true })).toHaveValue('');
+  };
+  await page.getByRole('tab', { name: '今天', exact: true }).click();
+  await page.getByText('记饮食', { exact: true }).click();
+  await expectBlankNewMeal();
+  await closeMeal(page);
+
   await page.reload();
   await page.getByRole('tab', { name: '今天', exact: true }).click();
   await page.getByText('记饮食', { exact: true }).click();
-  await reopenPortionReview(page);
-  await expect(portionQuantity(page)).toHaveValue('250');
-  await expect(portionQuantity(page, 2)).toHaveValue('');
-  await portionQuantity(page).fill('300');
-  await portionReview(page).getByRole('button', { name: '返回饮食', exact: true }).click();
-  await editPortionNutrition(page);
-  await expect(page.getByLabel('热量 kcal', { exact: true })).toHaveValue('550');
+  await expectBlankNewMeal();
   await closeMeal(page);
-  await page.reload();
-  await page.getByText('记饮食', { exact: true }).click();
-  await editPortionNutrition(page);
-  await expect(page.getByLabel('热量 kcal', { exact: true })).toHaveValue('550');
-  await reopenPortionReview(page);
-  await expect(portionQuantity(page)).toHaveValue('300');
-  await expect(portionQuantity(page, 2)).toHaveValue('');
-  await confirmPortionReview(page);
-  await expect(page.getByLabel('热量 kcal', { exact: true })).toHaveValue('660');
-  await savePortionMeal(page);
-  const final = await exportPortionBackup(page);
-  const versions = final.archive.data.meals[0].analyses!;
-  expect(versions[0].analysis.components![0].userQuantity).toBeNull();
-  expect(versions[0].analysis.components![0].source).toMatchObject({ model: 'mock-model', reasoningEffort: 'high' });
-  expect(versions.some((version) => version.analysis.components?.[0].userQuantity?.amount === 250)).toBe(true);
-  expect(versions.at(-1)!.analysis.components![0].userQuantity?.amount).toBe(300);
-  expect(versions.at(-1)!.analysis.components![1].userQuantityCleared).toBe(true);
-  expect(final.archive.media.some((entry) => Buffer.from(entry.bytes).equals(portionPng))).toBe(true);
-  expect(provider.responses()).toHaveLength(1);
 
-  const context = await browser.newContext({ baseURL: new URL(page.url()).origin, viewport: page.viewportSize()!, locale: 'zh-CN', timezoneId: 'Asia/Shanghai' });
-  try {
-    const restored = await context.newPage();
-    restored.on('dialog', (dialog) => { void dialog.accept(); });
-    await restored.goto('/');
-    await importPortionBackup(restored, draftBackup.bytes);
-    await restored.getByRole('tab', { name: '今天', exact: true }).click();
-    await restored.getByText('记饮食', { exact: true }).click();
-    await reopenPortionReview(restored);
-    await expect(portionQuantity(restored)).toHaveValue('250');
-    await expect(portionQuantity(restored, 2)).toHaveValue('');
-    await expectPortionRanges(restored, 1, pointRanges(220));
-    await portionReview(restored).getByRole('button', { name: '返回饮食', exact: true }).click();
-    await closeMeal(restored);
-    await restored.getByRole('tab', { name: '设置', exact: true }).click();
-    await restored.getByText('删除本机数据', { exact: true }).click();
-    await restored.getByRole('tab', { name: '我的', exact: true }).click();
-    await restored.getByRole('button', { name: '全部记录', exact: true }).click();
-    await expect(restored.getByText('熟米饭、蒸蛋', { exact: true })).toHaveCount(0);
-    await importPortionBackup(restored, final.bytes);
-    await reopenPortionMeal(restored, '熟米饭、蒸蛋');
-    await reopenPortionReview(restored);
-    await expect(portionQuantity(restored)).toHaveValue('300');
-    await expect(portionQuantity(restored, 2)).toHaveValue('');
-    await restored.screenshot({ path: info.outputPath('restored-confirmed-meal-quantities.png'), fullPage: true });
-  } finally { await context.close(); }
+  await importPortionBackup(page, draftBackup.bytes);
+  await page.getByRole('tab', { name: '今天', exact: true }).click();
+  await page.getByText('记饮食', { exact: true }).click();
+  await expectBlankNewMeal();
+  await closeMeal(page);
+  await page.getByRole('tab', { name: '我的', exact: true }).click();
+  await page.getByRole('button', { name: '全部记录', exact: true }).click();
+  await expect(page.getByText('熟米饭、蒸蛋', { exact: true })).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 
@@ -304,9 +274,35 @@ test('重新分析失败与取消不改原记录，关闭会话后迟到结果�
   await expect(page.getByLabel('食物名称', { exact: true })).toHaveValue('新会话的手动餐食');
   await closeMeal(page);
   expect((await stored(page)).data.meals[0]).toEqual(initial);
-  const draft = (await stored(page)).drafts['meal-new'] as any;
+  const snapshots = await stored(page);
+  const newMealDraftKey = Object.keys(snapshots.drafts).find((key) => key.startsWith('meal-new-'));
+  expect(newMealDraftKey).toBeTruthy();
+  const draft = snapshots.drafts[newMealDraftKey!] as any;
   expect(draft.foodName).toBe('新会话的手动餐食');
   expect(draft.analysisDraft.history).toHaveLength(0);
   expect(draft.analysisDraft.review).toBeNull();
   expect(provider.responses().length).toBeGreaterThanOrEqual(2);
+});
+
+test('新建饮食按本地 24 小时进食时段默认选中餐次', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-10-27T00:30:00.000Z') });
+  await page.goto('/');
+
+  const cases: Array<[string, string]> = [
+    ['2026-10-27T00:30:00.000Z', '早餐'],
+    ['2026-10-27T03:30:00.000Z', '午餐'],
+    ['2026-10-27T10:30:00.000Z', '晚餐'],
+    ['2026-10-27T15:00:00.000Z', '加餐'],
+  ];
+
+  for (const [instant, mealType] of cases) {
+    await page.clock.setFixedTime(new Date(instant));
+    await page.getByText('记饮食', { exact: true }).click();
+    const selectedWeight = await page.getByText(mealType, { exact: true }).evaluate((element) => getComputedStyle(element).fontWeight);
+    const unselected = cases.find(([, candidate]) => candidate !== mealType)![1];
+    const unselectedWeight = await page.getByText(unselected, { exact: true }).evaluate((element) => getComputedStyle(element).fontWeight);
+    expect(Number(selectedWeight)).toBeGreaterThan(Number(unselectedWeight));
+    await page.getByRole('dialog').getByRole('button', { name: '关闭', exact: true }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+  }
 });
