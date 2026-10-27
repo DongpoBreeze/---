@@ -1,10 +1,10 @@
 # iOS 测试版
 
-更新：2026-10-23。iOS 复用当前 Expo / React Native 客户端，名称为“有节”，包标识 `com.healthcompass.app`，版本 `0.1.3`、iOS build number `1`。当前源码包含新的 BMI 布局和选填性别、年龄；已交付的 Android 0.1.3 包仍是此前快照。
+更新：2026-10-27。iOS 复用当前 Expo / React Native 客户端，名称为“有节”，包标识 `com.healthcompass.app`，版本 `0.1.3`、iOS build number `1`。当前源码包含新的 BMI 布局和选填性别、年龄；已交付的 Android 0.1.3 包仍是此前快照。
 
 ## 本轮产物
 
-[下载有节 0.1.3 iOS 未签名 IPA](../artifacts/ios-cloud-20261022T101837Z/ipa/youjie-0.1.3-1-ios-arm64-UNSIGNED.ipa)，11,649,723 字节，arm64 真机架构，最低 iOS **16.4**。SHA-256：
+本地产物 [有节 0.1.3 iOS 未签名 IPA](../artifacts/ios-cloud-20261022T101837Z/ipa/youjie-0.1.3-1-ios-arm64-UNSIGNED.ipa)（`artifacts/` 不进入 Git，此包未上传 GitHub Release），11,649,723 字节，arm64 真机架构，最低 iOS **16.4**。SHA-256：
 
 ```text
 79ea65f9e4d22bce1af4f247d0b47c1739b3ea2ec6ab2ee77b3cecd6666b4765
