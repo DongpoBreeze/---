@@ -12,18 +12,6 @@ https://github.com/user-attachments/assets/47463215-2006-49ff-99ef-32e74380905e
 - 
 未配置 AI 时仍可记录、查看本地反馈和导出。外部 AI 的费用、额度和数据保留政策由所选供应商决定。
 
-## 检查
-
-```powershell
-npm run typecheck
-npm test
-npm run test:server
-npm run test:scripts
-```
-
-`test:scripts` 补充诊断、实验与评估工具的专项检查，每项上限 30 秒。2026-10-23 打包前检查为 150/150 通过；历史试验仍冻结各自的 90 秒请求参数，与当前餐食每阶段 180 秒、每日总结整体 180 秒上限相互独立。修复与验证记录见 [脚本说明](scripts/README.md) 和 [维护审查](docs/maintenance-review.md)。
-
-Web 交互及移动端、桌面端视口验证范围见[文档与验证索引](docs/README.md)；各轮结果只对对应代码快照和测试范围负责。
 
 ## Android 测试包
 
