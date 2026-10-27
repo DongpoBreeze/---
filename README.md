@@ -4,7 +4,6 @@
 
 https://github.com/user-attachments/assets/47463215-2006-49ff-99ef-32e74380905e
 
-82 秒宣传动画（720p，有配乐，可在页面内播放）
 
 
 ## 使用注意
