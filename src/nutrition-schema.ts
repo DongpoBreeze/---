@@ -46,6 +46,7 @@ const userQuantity = z.object({ amount: positive.max(100_000), unit: z.enum(['g'
 
 export const mealComponentSchema = z.object({
   foodId: text(128).nullable(), label: text(300), grams: bounds(100_000).nullable(),
+  recommendedShare: z.number().finite().positive().max(1).optional(),
   userQuantity: userQuantity.nullable().optional(), householdMeasure: householdMeasure.nullable().optional(),
   userQuantityCleared: z.boolean().optional(),
   userNutritionPer100g: modelPer100g.nullable().optional(),

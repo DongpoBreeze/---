@@ -11,6 +11,8 @@ import { clearDraft, loadDraft, saveDraft } from "../storage";
 export type FormSession = {
   id: number;
   epoch: number;
+  mealDraftKey?: string;
+  trainingDraftKey?: string;
   isActive: () => boolean;
   requestClose?: () => void;
 };

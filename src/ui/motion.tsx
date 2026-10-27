@@ -59,6 +59,9 @@ export function Reveal({ index = 0, distance = 14, style, children }: {
   }, [index, value]);
   return (
     <Animated.View
+      // Fade the card, its contents and its elevation shadow as one group on Android.
+      // Per-child alpha exposes the shadow beneath the translucent card surface.
+      needsOffscreenAlphaCompositing={Platform.OS === "android"}
       style={[style, {
         opacity: value,
         transform: [{ translateY: value.interpolate({ inputRange: [0, 1], outputRange: [distance, 0] }) }],

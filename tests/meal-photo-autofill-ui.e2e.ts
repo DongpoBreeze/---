@@ -26,6 +26,7 @@ test('餐前照片分析经过确认回填表单并作为独立版本导出', as
         {
           foodId: null,
           label: '鸡肉',
+          recommendedShare: 0.4,
           category: 'meat',
           confidence: 0.45,
           nutritionEstimate: mockNutritionEstimate({
@@ -45,6 +46,7 @@ test('餐前照片分析经过确认回填表单并作为独立版本导出', as
         {
           foodId: 'rice_white_long_grain_cooked',
           label: '熟米饭',
+          recommendedShare: 0.6,
           confidence: 0.86,
           category: 'grain',
           nutritionEstimate: mockNutritionEstimate(),
@@ -77,7 +79,8 @@ test('餐前照片分析经过确认回填表单并作为独立版本导出', as
     Number(await page.getByLabel('菜品 2 食用量', { exact: true }).inputValue()),
   ];
   expect(quantities[0]).toBeGreaterThan(0);
-  expect(quantities[1]).toBe(quantities[0]);
+  // The model proposes different shares for the meat and staple in this meal.
+  expect(quantities[1]).toBeGreaterThan(quantities[0]);
   await page.getByRole('button', { name: '确认填入', exact: true }).click();
   await expect(page.getByTestId('meal-confirmation-summary')).toHaveCount(0);
   await expect(page.getByTestId('meal-edit-portions')).toBeVisible();
@@ -172,11 +175,11 @@ test('实时显示等待秒数，110 秒后收到完整响应仍可确认餐食�
   await expect.poll(() => provider.responses().length).toBe(1);
 
   const waitTime = page.getByTestId('analysis-wait-time');
-  await expect(waitTime).toContainText('单次请求上限 120 秒');
+  await expect(waitTime).toContainText('单次请求上限 180 秒');
   await page.clock.fastForward(35_000);
-  await expect(waitTime).toHaveText(/已等待 3[5-7] 秒 · 单次请求上限 120 秒/);
+  await expect(waitTime).toHaveText(/已等待 3[5-7] 秒 · 单次请求上限 180 秒/);
   await page.clock.fastForward(75_000);
-  await expect(waitTime).toHaveText(/已等待 11[0-2] 秒 · 单次请求上限 120 秒/);
+  await expect(waitTime).toHaveText(/已等待 11[0-2] 秒 · 单次请求上限 180 秒/);
   await expect(page.getByText('照片识别完成，请核对。', { exact: true })).toHaveCount(0);
   expect(typeof finishProvider).toBe('function');
   await finishProvider!();
@@ -191,7 +194,7 @@ test('实时显示等待秒数，110 秒后收到完整响应仍可确认餐食�
   expect(errors).toEqual([]);
 });
 
-test('取消后计时停止，新请求重新计时并在120秒超时，迟到结果不回填', async ({ page }) => {
+test('取消后计时停止，新请求重新计时并在180秒超时，迟到结果不回填', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('dialog', (dialog) => { void dialog.accept(); });
@@ -215,7 +218,7 @@ test('取消后计时停止，新请求重新计时并在120秒超时，迟到�
   await expect.poll(() => provider.responses().length).toBe(1);
   const waitTime = page.getByTestId('analysis-wait-time');
   await page.clock.fastForward(7_000);
-  await expect(waitTime).toHaveText(/已等待 [7-9] 秒 · 单次请求上限 120 秒/);
+  await expect(waitTime).toHaveText(/已等待 [7-9] 秒 · 单次请求上限 180 秒/);
   await page.getByRole('button', { name: '取消照片分析', exact: true }).click();
   await expect(waitTime).toHaveCount(0);
   await expect(page.getByText('照片分析已取消，照片和输入已保留。', { exact: true })).toBeVisible();
@@ -226,8 +229,8 @@ test('取消后计时停止，新请求重新计时并在120秒超时，迟到�
 
   await page.getByRole('button', { name: '重新识别照片', exact: true }).click();
   await expect.poll(() => provider.responses().length).toBe(2);
-  await expect(waitTime).toHaveText(/已等待 [0-2] 秒 · 单次请求上限 120 秒/);
-  await page.clock.fastForward(119_000);
+  await expect(waitTime).toHaveText(/已等待 [0-2] 秒 · 单次请求上限 180 秒/);
+  await page.clock.fastForward(179_000);
   await expect(page.getByRole('button', { name: '取消照片分析', exact: true })).toBeVisible();
   await page.clock.fastForward(1_001);
   await expect(page.getByText(/照片识别失败：服务等待超时/)).toBeVisible();

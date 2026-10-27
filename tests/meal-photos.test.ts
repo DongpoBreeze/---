@@ -6,7 +6,7 @@ import ts from 'typescript';
 import { z } from 'zod';
 import * as mealPhotos from '../src/meal-photos';
 import { mealAnalysisSchema } from '../src/nutrition-schema';
-import type { MealProviderOptions } from '../src/ai-provider';
+import { MEAL_ANALYSIS_STAGE_TIMEOUT_MS, MAX_MEAL_ANALYSIS_STAGES, type MealProviderOptions } from '../src/ai-provider';
 import type { MealRecord } from '../src/types';
 
 const { MAX_MEAL_PHOTOS, mealBeforePhotoUris, mealAnalysisPhotoSources, canCropMealPhotoRegions } = mealPhotos;
@@ -59,11 +59,14 @@ const adapterCode = ts.transpileModule(readFileSync(resolve(process.cwd(), 'src/
 }).outputText;
 function adapter(options: {
   manipulate?: (uri: string, index: number) => Promise<{ uri: string; base64?: string; width: number; height: number }>;
+  getSize?: (uri: string) => Promise<{ width: number; height: number }>;
   request?: (payload: Record<string, unknown>, options: MealProviderOptions) => Promise<void>;
 } = {}) {
   const transforms: Array<{ uri: string; actions: unknown; options: unknown }> = [];
   const requests: Array<Record<string, unknown>> = [];
   const deleted: string[] = [];
+  const lifecycleDurations: Array<number | undefined> = [];
+  const providerOptions: MealProviderOptions[] = [];
   let disposed = 0;
   const mocks: Record<string, unknown> = {
     'expo-image-manipulator': { SaveFormat: { JPEG: 'jpeg' }, manipulateAsync: async (uri: string, actions: unknown, save: unknown) => {
@@ -73,18 +76,26 @@ function adapter(options: {
       };
     } },
     'expo-file-system/legacy': { cacheDirectory: 'file:///cache/', deleteAsync: async (uri: string) => { deleted.push(uri); } },
-    'react-native': { Platform: { OS: 'ios' } },
+    'react-native': { Image: { getSize: (uri: string, success: (width: number, height: number) => void, failure: (error: unknown) => void) => {
+      const result = options.getSize?.(uri) ?? Promise.resolve({ width: 1600, height: 2400 });
+      void result.then(({ width, height }) => success(width, height), failure);
+      // React Native Web returns void; callers must wait for the callback.
+    } }, Platform: { OS: 'ios' } },
     zod: { z },
     './domain': {},
     './nutrition-schema': { mealAnalysisSchema },
     './meal-photos': mealPhotos,
-    './ai-settings': { getAiSettings: () => null, beginAiSettingsRequest: (signal?: AbortSignal) => ({
-      settings: { model: 'test/model', reasoningEffort: 'Vendor.High' }, signal: signal ?? new AbortController().signal,
-      assertCurrent: () => { if (signal?.aborted) throw new DOMException('cancelled', 'AbortError'); }, dispose: () => { disposed += 1; },
-    }) },
-    './ai-provider': { requestProvider: async (_settings: unknown, _kind: unknown, payload: Record<string, unknown>, _signal: unknown, providerOptions: MealProviderOptions) => {
+    './ai-settings': { getAiSettings: () => null, beginAiSettingsRequest: (signal?: AbortSignal, maximumDurationMs?: number) => {
+      lifecycleDurations.push(maximumDurationMs);
+      return {
+        settings: { model: 'test/model', reasoningEffort: 'Vendor.High' }, signal: signal ?? new AbortController().signal,
+        assertCurrent: () => { if (signal?.aborted) throw new DOMException('cancelled', 'AbortError'); }, dispose: () => { disposed += 1; },
+      };
+    } },
+    './ai-provider': { MEAL_ANALYSIS_STAGE_TIMEOUT_MS, MAX_MEAL_ANALYSIS_STAGES, requestProvider: async (_settings: unknown, _kind: unknown, payload: Record<string, unknown>, _signal: unknown, providerRequestOptions: MealProviderOptions) => {
       requests.push(payload);
-      await options.request?.(payload, providerOptions);
+      providerOptions.push(providerRequestOptions);
+      await options.request?.(payload, providerRequestOptions);
       return { analysis, model: 'test/model', createdAt: now, stageCount: 1 };
     } },
   };
@@ -93,7 +104,7 @@ function adapter(options: {
     if (!(id in mocks)) throw new Error(`Unexpected adapter dependency: ${id}`);
     return mocks[id];
   }, module, module.exports);
-  return { analyzeMeal: (module.exports as typeof import('../src/ai')).analyzeMeal, transforms, requests, deleted, disposed: () => disposed };
+  return { analyzeMeal: (module.exports as typeof import('../src/ai')).analyzeMeal, transforms, requests, deleted, lifecycleDurations, providerOptions, disposed: () => disposed };
 }
 
 test('analysis preprocesses every original once as JPEG and submits ordered before views in one request', async () => {
@@ -102,7 +113,7 @@ test('analysis preprocesses every original once as JPEG and submits ordered befo
   const h = adapter();
   await h.analyzeMeal(original, {});
   assert.deepEqual(h.transforms.map((call) => call.uri), ['file:///original-1.heic', 'file:///original-2.png', 'file:///original-3.jpg', 'file:///legacy-after.jpg']);
-  assert.ok(h.transforms.every((call) => JSON.stringify(call.actions) === JSON.stringify([{ resize: { width: 1200 } }])));
+  assert.ok(h.transforms.every((call) => JSON.stringify(call.actions) === JSON.stringify([{ resize: { height: 1200 } }])));
   assert.ok(h.transforms.every((call) => JSON.stringify(call.options) === JSON.stringify({ compress: 0.75, format: 'jpeg', base64: true })));
   assert.equal(h.requests.length, 1);
   assert.deepEqual(h.requests[0].photoRoles, ['before', 'before', 'before', 'after']);
@@ -110,6 +121,90 @@ test('analysis preprocesses every original once as JPEG and submits ordered befo
   assert.deepEqual(original, snapshot);
   assert.equal(h.deleted.length, 4);
   assert.equal(h.disposed(), 1);
+  assert.equal(h.lifecycleDurations[0], MEAL_ANALYSIS_STAGE_TIMEOUT_MS * MAX_MEAL_ANALYSIS_STAGES + 5_000);
+  assert.equal(h.providerOptions[0].timeoutMs, MEAL_ANALYSIS_STAGE_TIMEOUT_MS);
+});
+
+test('source photos use one longest-side limit and compression while at most two preprocess concurrently in source order', async () => {
+  const uris = ['wide', 'portrait', 'small', 'last'];
+  const dimensions = new Map([
+    ['wide', { width: 2400, height: 1600 }], ['portrait', { width: 900, height: 1800 }],
+    ['small', { width: 600, height: 400 }], ['last', { width: 1400, height: 2100 }],
+  ]);
+  const releases = new Map<number, () => void>();
+  const started: number[] = [];
+  let active = 0, maxActive = 0;
+  const h = adapter({
+    getSize: async (uri) => dimensions.get(uri)!,
+    manipulate: async (uri, index) => {
+      started.push(index); active += 1; maxActive = Math.max(maxActive, active);
+      return new Promise((resolve) => releases.set(index, () => {
+        active -= 1;
+        resolve({ uri: `file:///cache/processed-${index}.jpg`, base64: Buffer.from([255, 216, 255, index]).toString('base64'), width: 100, height: 100 });
+      }));
+    },
+  });
+  const pending = h.analyzeMeal(meal({ imageUri: uris[0], beforeImageUris: uris }), {});
+  const waitForStarts = async (count: number) => {
+    for (let attempt = 0; attempt < 50 && started.length < count; attempt += 1) await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(started.length, count);
+  };
+  await waitForStarts(2);
+  assert.deepEqual(started, [1, 2]);
+  assert.equal(maxActive, 2);
+  releases.get(2)!();
+  await waitForStarts(3);
+  assert.deepEqual(started, [1, 2, 3]);
+  releases.get(3)!();
+  await waitForStarts(4);
+  assert.deepEqual(started, [1, 2, 3, 4]);
+  releases.get(4)!(); releases.get(1)!();
+  await pending;
+  assert.equal(maxActive, 2);
+  assert.deepEqual(h.transforms.map((call) => call.actions), [
+    [{ resize: { width: 1200 } }], [{ resize: { height: 1200 } }],
+    [{ resize: { width: 600 } }], [{ resize: { height: 1200 } }],
+  ]);
+  assert.ok(h.transforms.every((call) => JSON.stringify(call.options) === JSON.stringify({ compress: 0.75, format: 'jpeg', base64: true })));
+  assert.deepEqual(h.requests[0].photos, [1, 2, 3, 4].map((index) => `data:image/jpeg;base64,${Buffer.from([255, 216, 255, index]).toString('base64')}`));
+  assert.deepEqual(h.requests[0].photoRoles, ['before', 'before', 'before', 'before']);
+  assert.equal(h.requests.length, 1);
+});
+
+test('a failed parallel image transform waits for sibling cleanup and does not start later photos or call the provider', async () => {
+  const uris = ['first', 'second', 'third', 'fourth'];
+  let releaseSibling!: () => void;
+  const siblingGate = new Promise<void>((resolve) => { releaseSibling = resolve; });
+  const calls: string[] = [];
+  const h = adapter({
+    manipulate: async (uri, index) => {
+      calls.push(uri);
+      if (uri === 'first') throw new Error('image decode failed');
+      if (uri === 'second') await siblingGate;
+      return { uri: `file:///cache/${index}.jpg`, base64: '/9j/AA==', width: 1200, height: 900 };
+    },
+  });
+  const pending = h.analyzeMeal(meal({ imageUri: uris[0], beforeImageUris: uris }), {});
+  for (let attempt = 0; attempt < 50 && calls.length < 2; attempt += 1) await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(calls, ['first', 'second']);
+  releaseSibling();
+  await assert.rejects(pending, /image decode failed/);
+  assert.deepEqual(calls, ['first', 'second']);
+  assert.deepEqual(h.deleted, ['file:///cache/2.jpg']);
+  assert.equal(h.requests.length, 0);
+  assert.equal(h.disposed(), 1);
+});
+
+test('image-size callback failures send no provider request or resize and keep the original intact', async () => {
+  const original = meal({ imageUri: 'file:///unreadable.png' });
+  const snapshot = structuredClone(original);
+  const h = adapter({ getSize: async () => { throw new Error('image decode failed'); } });
+  await assert.rejects(h.analyzeMeal(original, {}), /image decode failed/);
+  assert.equal(h.transforms.length, 0);
+  assert.equal(h.requests.length, 0);
+  assert.deepEqual(h.deleted, []);
+  assert.equal(h.disposed(), 1);
+  assert.deepEqual(original, snapshot);
 });
 
 test('invalid or excessive originals are rejected before preprocessing and before requests', async () => {

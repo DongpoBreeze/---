@@ -1,6 +1,6 @@
 # iOS 测试版
 
-更新：2026-10-22。iOS 复用当前 Expo / React Native 客户端，名称为“有节”，包标识 `com.healthcompass.app`，版本 `0.1.3`、iOS build number `1`。当前源码包含新的 BMI 布局和选填性别、年龄；已交付的 Android 0.1.3 包仍是此前快照。
+更新：2026-10-23。iOS 复用当前 Expo / React Native 客户端，名称为“有节”，包标识 `com.healthcompass.app`，版本 `0.1.3`、iOS build number `1`。当前源码包含新的 BMI 布局和选填性别、年龄；已交付的 Android 0.1.3 包仍是此前快照。
 
 ## 本轮产物
 
@@ -16,7 +16,9 @@
 
 ## 本次使用方式
 
-用户目前只有 Windows、iPhone 和免费 Apple 账号。使用云端 Mac 编译 **arm64 真机用未签名 IPA**，再在 Windows 上由用户使用自己的 Apple 账号签名安装。未签名 IPA 不能直接安装；生成 IPA、完成签名和真机测试分别验收。
+用户目前只有 Windows 和普通免费 Apple 账号，没有苹果设备。现有产物是云端 Mac 编译的 **arm64 真机用未签名 IPA**，取得 iPhone 后才可在 Windows 上签名安装。未签名 IPA 不能直接安装；生成 IPA、完成签名和真机测试分别验收。
+
+没有苹果设备时，可另外构建 iOS 模拟器专用 `.app`，在云端 Mac 的 iOS 模拟器中运行，保存测试结果、截图或录屏。模拟器不需要 Apple 设备签名，不受免费真机签名的 7 天限制；当前真机 IPA 不适用于模拟器。项目的 `eas.json` 已有 `ios-simulator` 配置，模拟器原生包和运行测试尚未完成。Windows 本机可用安卓模拟器运行已有 Android APK。
 
 Apple 的免费 Personal Team 设备签名有效期通常为 7 天，到期后需重新签名安装。Windows 可使用 [Sideloadly 官网](https://sideloadly.io/) 提供的工具；Apple 账号和验证码只在用户自己的签名工具中输入，不交给项目脚本、GitHub 或聊天。该路线不需要购买 Apple Developer Program，也不提供 TestFlight 分发。
 

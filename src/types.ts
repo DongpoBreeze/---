@@ -54,6 +54,8 @@ export type MealHouseholdMeasure = { label: string; grams: number; approximate: 
 export type MealComponent = {
   foodId: string | null;
   label: string;
+  /** Model-proposed share of the planned meal; never measured from the photo. */
+  recommendedShare?: number;
   grams: NutrientRange | null;
   /** Local intake amount; omitted origin means user-entered. Legacy photo grams remain separate. */
   userQuantity?: MealUserQuantity | null;

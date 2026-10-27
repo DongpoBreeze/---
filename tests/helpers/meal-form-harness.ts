@@ -26,6 +26,7 @@ type Options = {
   profile?: Profile;
   drafts?: Map<string, unknown>;
   draftKey?: string;
+  defaultMealType?: MealRecord['mealType'];
   analyzeOnOpen?: boolean;
   analyze?: (meal: MealRecord, signal: AbortSignal) => Promise<PhotoAnalysisResult>;
   load?: () => Promise<unknown>;
@@ -105,9 +106,11 @@ export function mealFormHarness(options: Options = {}) {
     react, 'react-native': { Pressable: 'Pressable', Text: 'Text', View: 'View', StyleSheet: { create: (value: unknown) => value, hairlineWidth: 1 } },
     'expo-image-picker': {}, '@expo/vector-icons': { Ionicons: 'Ionicons' }, '../storage': storage,
     '../ai': { getAiSettingsVersion: () => options.settingsVersion?.() ?? 1, isAiConfigured: () => true },
+    '../ai-provider': { MEAL_ANALYSIS_STAGE_TIMEOUT_MS: 120_000 },
     '../meal-review': review, '../meal-portion-reference': portions, '../meal-review-refresh': reviewRefresh, '../meal-photos': photos,
     '../../shared/nutrition.mjs': sharedNutrition, '../meal-nutrition-fields': nutritionFields,
     '../meal-analysis-draft': analysisDraft, './useFormDraft': hooks,
+    '../meal-time': { defaultMealTypeForNow: () => options.defaultMealType ?? '午餐' },
     './components': { ...components, useBaseStyles: () => ({}) },
     './meal-analysis': { MealAnalysisList: 'MealAnalysisList' }, './meal-review': { MealReviewPage: 'MealReviewPage' },
     './analysis-wait-time': { AnalysisWaitTime: 'AnalysisWaitTime' },

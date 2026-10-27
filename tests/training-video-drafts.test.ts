@@ -33,6 +33,7 @@ const now = '2026-10-21T03:00:00.000Z';
 const originalUri = 'file:///original-training.mp4';
 const replacementUri = 'file:///replacement-training.mp4';
 const videoBytes = new Uint8Array([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70, 4, 3, 2, 1]);
+let draftSessionSequence = 0;
 
 function record(mode: 'strength' | 'cardio' = 'strength'): TrainingRecord {
   return {
@@ -68,7 +69,7 @@ const sameDeps = (a: readonly unknown[] | undefined, b: readonly unknown[] | und
 async function mount(
   store: ReturnType<typeof stored>,
   initial?: TrainingRecord,
-  options: { workoutTemplates?: WorkoutTemplate[]; history?: TrainingRecord[] } = {},
+  options: { workoutTemplates?: WorkoutTemplate[]; history?: TrainingRecord[]; draftKey?: string } = {},
 ) {
   const savedTemplates: Array<Omit<WorkoutTemplate, 'id'>> = [];
   const slots: HookSlot[] = [];
@@ -125,8 +126,9 @@ async function mount(
     './motion': { animateLayout: () => {} }, './date-time-field': { DateTimeField: 'DateTimeField' },
     './theme': {}, './theme-provider': { useTheme: () => ({ color: {}, type: {}, scheme: 'light' }), useThemedStyles: () => ({}) },
   });
-  const draftKey = `training-${initial?.id ?? 'new'}`;
-  const session = { id: 1, epoch: 0, isActive: () => active };
+  const draftSessionId = ++draftSessionSequence;
+  const draftKey = options.draftKey ?? (initial ? `training-${initial.id}` : `training-new-test-${draftSessionId}`);
+  const session = { id: draftSessionId, epoch: 0, isActive: () => active };
   const props = {
     initial, draftKey, session, history: options.history ?? [], workoutTemplates: options.workoutTemplates ?? [], exerciseTemplates: [],
     onSaveTemplate: async (template: Omit<WorkoutTemplate, 'id'>) => { savedTemplates.push(template); },
@@ -172,7 +174,8 @@ async function mount(
   return {
     draftKey, submitted, savedTemplates, closed: () => closed,
     press: (label: string) => act(() => labelled(label).props.onPress()),
-    input: (label: string, value: string) => act(() => labelled(label).props.onChangeText(value)),
+    input: (label: string, value: string) => act(() => find((element) =>
+      element.props.accessibilityLabel === label || (element.type === 'Field' && element.props.label === label)).props.onChangeText(value)),
     value: (label: string) => labelled(label).props.value,
     blockName: (n: number) => labelled(`选择动作${n}`).props.children[0].props.children[0],
     has: (label: string) => elements().some((element) => element.props.accessibilityLabel === label),
@@ -190,6 +193,40 @@ async function mount(
     dispose: () => { active = false; slots.forEach((slot) => slot.cleanup?.()); },
   };
 }
+
+test('partial optional progression targets preserve actual work and survive backup and editing', async (t) => {
+  for (const change of [{ targetSets: 3 }, { targetMin: 8 }, { targetMax: 12 }, { increment: 2.5 }, { targetSets: 3, targetMin: 8 }]) {
+    const original = { ...record(), ...change, videoUri: undefined };
+    const imported = await backup.parseBackupArchive(await backup.createBackupArchive({ ...emptyData(), trainings: [original] }, [], now));
+    const store = stored(imported.data);
+    const form = await mount(store, imported.data.trainings[0]); t.after(form.dispose);
+    await form.save();
+    assert.equal(form.submitted.length, 1);
+    const saved = form.submitted[0];
+    assert.deepEqual(saved.sets, original.sets.map((set) => ({ ...set, isWarmup: false })));
+    for (const key of ['targetSets', 'targetMin', 'targetMax', 'increment'] as const) assert.equal(saved[key], original[key]);
+    assert.equal(saved.pain, 'unknown');
+    assert.equal(saved.controlled, 'unknown');
+    assert.equal(saved.rir, 'unknown');
+    assert.match(domain.trainingAdvice({ ...original, ...saved }, []), /补充目标/);
+    assert.doesNotMatch(domain.summaryMarkdown(store.snapshot().data, domain.localDate(now)), /未填写/);
+    form.dispose();
+  }
+});
+
+test('supplied invalid progression targets are rejected without discarding saved work', async (t) => {
+  for (const change of [{ targetSets: 1.5 }, { increment: -1 }, { targetMin: 12, targetMax: 8 }]) {
+    const original = record();
+    const draft = Object.fromEntries(Object.entries(change).map(([key, value]) => [key, String(value)]));
+    const store = stored({ ...emptyData(), trainings: [original] }, { [`training-${original.id}`]: draft });
+    const form = await mount(store, original); t.after(form.dispose);
+    await form.trySave();
+    assert.equal(form.submitted.length, 0);
+    assert.ok(form.error());
+    assert.deepEqual(store.snapshot().data.trainings[0].sets, original.sets);
+    form.dispose();
+  }
+});
 
 for (const mode of ['strength', 'cardio'] as const) {
   test(`${mode}: removing a saved video survives close/reopen and saves an absent record URI`, async (t) => {
@@ -264,14 +301,30 @@ test('legacy partial drafts without video fields retain the existing video and o
   assert.equal(store.snapshot().data.trainings[0].note, '旧草稿备注');
 });
 
-test('new forms persist a JSON-safe empty video state without inventing a media reference', async (t) => {
-  const store = stored(emptyData());
+test('each new training form starts blank instead of restoring an earlier unfinished session', async (t) => {
+  const oldDraft = { mode: 'strength', exercise: '旧训练', note: '上次未完成', videoUri: '' };
+  const store = stored(emptyData(), {
+    'training-new': oldDraft,
+    'training-new-previous-session': { exercise: '旧会话', note: '不应带入' },
+  });
   const first = await mount(store); t.after(first.dispose);
-  assert.equal(first.video(), undefined); await first.close(); first.dispose();
-  assert.equal((store.snapshot().drafts['training-new'] as { videoUri: string }).videoUri, '');
+  assert.notEqual(first.draftKey, 'training-new');
+  assert.equal(first.video(), undefined);
+  assert.equal(first.value('训练名称'), '');
+  assert.equal(first.blockName(1), '选择动作');
+  assert.equal(first.note(), '');
+  await first.input('备注（可选）', '本次尚未完成');
+  await first.close(); first.dispose();
+  assert.equal((store.snapshot().drafts[first.draftKey] as { videoUri: string }).videoUri, '');
   assert.deepEqual(backup.collectDraftMediaReferences(store.snapshot().drafts), []);
+
   const reopened = await mount(store); t.after(reopened.dispose);
+  assert.notEqual(reopened.draftKey, first.draftKey);
+  assert.equal(reopened.value('训练名称'), '');
+  assert.equal(reopened.blockName(1), '选择动作');
+  assert.equal(reopened.note(), '');
   assert.equal(reopened.video(), undefined);
+  assert.deepEqual(store.snapshot().drafts['training-new'], oldDraft, 'older incomplete drafts are left intact but never auto-restored');
 });
 
 test('a multi-exercise session saves every exercise and can be stored as one workout template', async (t) => {
@@ -349,15 +402,16 @@ test('applying a workout template fills every exercise with its set count and un
   assert.equal(form.has('选择动作2'), false);
 });
 
-test('legacy single-exercise drafts and records open as one exercise block', async (t) => {
+test('legacy incomplete new-training drafts are not restored, while saved records still open for editing', async (t) => {
   const store = stored(emptyData(), { 'training-new': { mode: 'strength', exercise: '深蹲', sets: [
     { reps: '5', weight: '60', unit: 'kg', warmup: false }, { reps: '5', weight: '60', unit: 'kg', warmup: false },
   ] } });
   const restored = await mount(store); t.after(restored.dispose);
   assert.equal(restored.value('训练名称'), '');
-  assert.equal(restored.blockName(1), '深蹲');
-  assert.equal(restored.has('动作1 共 2 组'), true);
-  assert.equal(restored.value('动作1 每组重量'), '60');
+  assert.equal(restored.blockName(1), '选择动作');
+  assert.equal(restored.has('动作1 共 3 组'), true);
+  assert.equal(restored.value('动作1 每组重量'), '');
+  assert.ok(store.snapshot().drafts['training-new'], 'the legacy draft is preserved without being loaded into a new record');
   restored.dispose();
 
   const original = record();

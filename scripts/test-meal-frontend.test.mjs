@@ -13,9 +13,9 @@ import { FRONTEND_CONFIG, archivedOutput, frontendLedgerOptions, prepareFrontend
 
 const json = async (path) => JSON.parse(await readFile(path, 'utf8'));
 const optionsFor = async (directory) => ({ ...await syntheticTrialHistory(directory, 'nutrition'), runId: 'offline-frontend', outputDir: join(directory, 'frontend') });
-const wire = (withDrink = false) => ({ components: [{ label: '玉米', cookingMethod: '水煮', confidence: 0.9,
+const wire = (withDrink = false) => ({ components: [{ label: '玉米', cookingMethod: '水煮', confidence: 0.9, recommendedShare: withDrink ? 0.8 : 1,
   nutritionEstimate: { method: 'typical_recipe', per100g: structuredClone(ranges), recipeBasis: '按熟玉米的典型含水量估计，不含玉米芯。', assumptions: ['未加油糖。'], confidence: 0.8 }, uncertainty: [] },
-...(withDrink ? [{ label: '红色饮品', cookingMethod: null, confidence: 0.4, nutritionEstimate: null, uncertainty: ['种类和糖量无法从颜色确认。'] }] : [])], uncertainty: [] });
+...(withDrink ? [{ label: '红色饮品', cookingMethod: null, confidence: 0.4, recommendedShare: 0.2, nutritionEstimate: null, uncertainty: ['种类和糖量无法从颜色确认。'] }] : [])], uncertainty: [] });
 function supplier(t) {
   const calls = [];
   t.mock.method(globalThis, 'fetch', async (url, init) => {

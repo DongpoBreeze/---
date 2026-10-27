@@ -184,3 +184,35 @@ test('changing connection cancels late discovery and absent upstream effort uses
   expect(provider.legacyRequests).toEqual([]);
   expect(errors).toEqual([]);
 });
+
+test('selected model connection test sends a minimal request and reports success without saving settings', async ({ page }) => {
+  let rejectProbe = false;
+  const provider = await installMockAiProvider(page, {
+    models: [{ id: 'claude-opus-5-5', supported_reasoning_efforts: ['high'] }],
+    onResponse: async (route) => rejectProbe
+      ? fulfillProviderJson(route, { error: { message: 'private synthetic provider detail' } }, 401)
+      : fulfillProviderResponse(route, { text: 'connection ok' }),
+  });
+  await page.goto('/');
+  const dialog = await openAiSettings(page);
+  await dialog.getByLabel('API 地址', { exact: true }).fill(MOCK_AI_URL);
+  await dialog.getByLabel('API Key', { exact: true }).fill(MOCK_AI_KEY);
+  await dialog.getByText('获取模型列表', { exact: true }).click();
+  await dialog.getByRole('radio', { name: '模型 claude-opus-5-5', exact: true }).click();
+  await dialog.getByRole('radio', { name: '推理强度 high', exact: true }).click();
+  await dialog.getByRole('button', { name: '测试连接', exact: true }).click();
+  await expect(dialog.getByText(/^连接可用：claude-opus-5-5 已返回响应，用时 \d+ 秒。$/)).toBeVisible();
+  const request = provider.requests.find((item) => item.url.endsWith('/responses'))!;
+  expect(request.method).toBe('POST');
+  expect(request.authorization).toBe(`Bearer ${MOCK_AI_KEY}`);
+  expect(request.body).toMatchObject({ model: 'claude-opus-5-5', max_output_tokens: 256, stream: true, store: false, reasoning: { effort: 'high' } });
+  expect(request.body).not.toHaveProperty('data');
+  expect(JSON.stringify(request.body)).not.toContain(MOCK_AI_KEY);
+  rejectProbe = true;
+  await dialog.getByRole('button', { name: '测试连接', exact: true }).click();
+  await expect(dialog.getByText('连接测试失败：服务拒绝了 Key 或访问权限。', { exact: true })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: '保存', exact: true })).toBeEnabled();
+  await dialog.getByLabel('关闭', { exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(provider.requests.filter((item) => item.method === 'POST')).toHaveLength(2);
+});

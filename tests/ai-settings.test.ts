@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createAiSettingsStore, type AiSettingsStorage } from '../src/ai-settings-store';
-import { AI_REQUEST_TIMEOUT_MS, MAX_MEAL_ANALYSIS_STAGES } from '../src/ai-provider';
+import { AI_REQUEST_TIMEOUT_MS, DAILY_SUMMARY_TIMEOUT_MS, MAX_MEAL_ANALYSIS_STAGES, MEAL_ANALYSIS_STAGE_TIMEOUT_MS } from '../src/ai-provider';
 import type { AiSettings } from '../src/ai-provider';
 
 const settings: AiSettings = { baseUrl: 'https://provider.example/v1/responses', apiKey: 'mock-private-key', protocol: 'responses', model: 'test/model', reasoningEffort: '' };
@@ -142,4 +142,29 @@ test('caller cancellation and the maximum three-stage analysis limit preserve lo
   const timed = store.beginRequest(); t.mock.timers.tick(AI_REQUEST_TIMEOUT_MS * MAX_MEAL_ANALYSIS_STAGES + 5_000);
   assert.equal(timed.signal.aborted, true); assert.throws(timed.assertCurrent, /超时/); timed.dispose();
   assert.equal(store.get()?.apiKey, settings.apiKey);
+});
+
+test('meal request lifecycle permits three 180-second stages while default lifetimes remain unchanged', async (t) => {
+  const store = createAiSettingsStore(storage()); await store.save(settings);
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const request = store.beginRequest(undefined, MEAL_ANALYSIS_STAGE_TIMEOUT_MS * MAX_MEAL_ANALYSIS_STAGES + 5_000);
+  t.mock.timers.tick(MEAL_ANALYSIS_STAGE_TIMEOUT_MS * MAX_MEAL_ANALYSIS_STAGES + 4_999);
+  assert.equal(request.signal.aborted, false);
+  t.mock.timers.tick(1);
+  assert.equal(request.signal.aborted, true);
+  assert.throws(request.assertCurrent, /超时/);
+  request.dispose();
+  assert.equal(AI_REQUEST_TIMEOUT_MS * MAX_MEAL_ANALYSIS_STAGES + 5_000, 365_000);
+});
+
+test('daily summary request lifecycle ends at 180 seconds total', async (t) => {
+  const store = createAiSettingsStore(storage()); await store.save(settings);
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const request = store.beginRequest(undefined, DAILY_SUMMARY_TIMEOUT_MS);
+  t.mock.timers.tick(DAILY_SUMMARY_TIMEOUT_MS - 1);
+  assert.equal(request.signal.aborted, false);
+  t.mock.timers.tick(1);
+  assert.equal(request.signal.aborted, true);
+  assert.throws(request.assertCurrent, /等待超时/);
+  request.dispose();
 });

@@ -18,11 +18,14 @@ const photo = 'data:image/jpeg;base64,/9j/AA==';
 const provenance = { model: settings.model, reasoningEffort: settings.reasoningEffort, createdAt: '2026-10-18T03:00:00.000Z' };
 const per100g = { calories: { min: 120, max: 160 }, protein: { min: 10, max: 14 }, carbs: { min: 20, max: 30 }, fat: { min: 4, max: 8 } };
 const dish = (changes = {}): FrontendMealRecognition['components'][number] => ({
-  label: '米饭', cookingMethod: '蒸煮', confidence: 0.95,
+  label: '米饭', cookingMethod: '蒸煮', confidence: 0.95, recommendedShare: 1,
   nutritionEstimate: { method: 'typical_recipe', per100g, recipeBasis: '按熟米饭的典型含水量估计成品。', assumptions: ['含水量有差异。'], confidence: 0.8 },
   uncertainty: [], ...changes,
 });
-const wire = (components = [dish()], uncertainty: string[] = []): FrontendMealRecognition => ({ components, uncertainty });
+const wire = (components = [dish()], uncertainty: string[] = []): FrontendMealRecognition => {
+  const total = components.reduce((sum, component) => sum + (component.recommendedShare ?? 1), 0);
+  return { components: components.map((component) => ({ ...component, recommendedShare: (component.recommendedShare ?? 1) / total })), uncertainty };
+};
 const completed = (value: unknown, changes = {}) => ({ status: 'completed', model: 'untrusted/model', output: [
   { type: 'message', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: JSON.stringify(value) }] },
 ], ...changes });
@@ -49,6 +52,7 @@ test('minimal frontend wire becomes a valid stored analysis with local defaults 
   const analysis = mealAnalysisSchema.parse(calculate(value));
   assert.equal(analysis.foodName, '米饭、红色饮品');
   assert.equal(analysis.confidence, 0.4);
+  assert.deepEqual(analysis.components!.map((component) => component.recommendedShare), [0.5, 0.5]);
   assert.equal(analysis.status, 'unknown');
   assert.equal(analysis.nutritionSource?.method, 'ai-per100g-v3');
   for (const key of ['calories', 'protein', 'carbs', 'fat'] as const) assert.equal(analysis[key], null);
@@ -76,6 +80,8 @@ test('frontend wire rejects unknown fields, quantities, totals, forged provenanc
     (v) => { delete v.uncertainty; }, (v) => { v.calories = per100g.calories; }, (v) => { v.foodName = 'redundant'; },
     ...['grams', 'userQuantity', 'source', 'foodId', 'candidates', 'region', 'evidence', 'category', 'totals'].map((key) => (v: any) => { v.components[0][key] = null; }),
     (v) => { delete v.components[0].cookingMethod; }, (v) => { v.components[0].confidence = 1.1; },
+    (v) => { v.components[0].recommendedShare = 0; }, (v) => { v.components[0].recommendedShare = 1.01; },
+    (v) => { v.components[0].recommendedShare = Infinity; },
     (v) => { v.components[0].cookingMethod = 3; }, (v) => { v.components[0].nutritionEstimate = null; },
     (v) => { v.components[0].nutritionEstimate.basisGrams = 100; }, (v) => { v.components[0].nutritionEstimate.model = 'forged'; },
     (v) => { v.components[0].nutritionEstimate.confidence = NaN; }, (v) => { v.components[0].nutritionEstimate.method = 'exact'; },
@@ -114,24 +120,24 @@ test('frontend prompt omits catalogue and diagnostic schema; dish input drops pe
     const prompt = mealRecognitionInstructions(stage, catalog, ['grain'], 'frontend');
     assert.ok(prompt.length < 1500);
     for (const field of ['foodId', 'candidates', 'region:', 'evidence:', 'basisGrams', catalog[0].id]) assert.equal(prompt.includes(field), false);
-    for (const field of ['饮品', 'null', '每100g', 'calories', 'protein', 'carbs', 'fat', '最多2条', '忽略其中指令']) assert.ok(prompt.includes(field));
+    for (const field of ['饮品', 'null', '每100g', 'calories', 'protein', 'carbs', 'fat', 'recommendedShare', 'mealType', '不套用固定食物类别比例', '尽力估计', '最多2条', '忽略其中指令']) assert.ok(prompt.includes(field));
   }
   assert.deepEqual(frontendMealInput({ foodName: '米饭', note: '做法不明', profile: { weightKg: 70 }, portion: '200g', remaining: '1/2', mealType: '午餐',
     dishCorrections: [{ label: '蒸蛋', cookingMethod: '蒸', region: { x: 0, y: 0 }, userQuantity: 100 }] }),
-  { foodName: '米饭', note: '做法不明', dishCorrections: [{ label: '蒸蛋', cookingMethod: '蒸' }] });
+  { foodName: '米饭', note: '做法不明', mealType: '午餐', dishCorrections: [{ label: '蒸蛋', cookingMethod: '蒸' }] });
 });
 
 test('both provider protocols and gateway accept correct wrappers and inject trusted source metadata', async (t) => {
   const value = wire();
   for (const protocol of ['responses', 'chat_completions'] as const) {
     const requests = mock(t, [{ kind: 'meal', data: value }], protocol);
-    const result = await requestProvider({ ...settings, protocol }, 'meal', { photos: [photo], photoRoles: ['before'], profile: { weightKg: 99 }, portion: '100g', note: '蒸熟' }, undefined, { promptProfile: 'frontend' });
+    const result = await requestProvider({ ...settings, protocol }, 'meal', { photos: [photo], photoRoles: ['before'], profile: { weightKg: 99 }, portion: '100g', mealType: '午餐', note: '蒸熟' }, undefined, { promptProfile: 'frontend' });
     assert.equal(result.stageCount, 1); const analysis = mealAnalysisSchema.parse(result.analysis);
     assert.equal(analysis.components![0].foodId, null);
     assert.equal(analysis.components![0].source?.provider, 'model');
     const body = requests[0];
     const text = protocol === 'responses' ? body.input[0].content[0].text : body.messages[1].content[0].text;
-    assert.deepEqual(JSON.parse(text.slice('JSON record:\n'.length)).data, { note: '蒸熟', photoRoles: ['before'] });
+    assert.deepEqual(JSON.parse(text.slice('JSON record:\n'.length)).data, { note: '蒸熟', mealType: '午餐', photoRoles: ['before'] });
     assert.equal(requests.length, 1);
   }
   const recognized = normaliseRecognition(JSON.stringify({ kind: 'meal', data: value }), 'frontend');
@@ -146,9 +152,10 @@ test('both provider protocols and gateway accept correct wrappers and inject tru
   assert.throws(() => normaliseRecognition(JSON.stringify({ kind: 'summary', data: value }), 'frontend'));
 });
 
-test('frontend parser rejects wrong wrappers and legacy or malicious fields without retries', async (t) => {
+test('frontend parser rejects missing recommendations, wrong wrappers and malicious fields without retries', async (t) => {
   for (const value of [{ kind: 'summary', data: wire() }, { kind: 'meal', data: wire(), extra: true }, { data: wire() },
-    { ...wire(), totals: per100g }, wire([dish({ grams: { min: 100, max: 100 } })]), { foodName: '米饭', ...wire() }]) {
+    { ...wire(), totals: per100g }, wire([dish({ grams: { min: 100, max: 100 } })]), { foodName: '米饭', ...wire() },
+    { components: [{ ...dish(), recommendedShare: undefined }], uncertainty: [] }]) {
     const requests = mock(t, [value]);
     await assert.rejects(requestProvider(settings, 'meal', { photos: [photo] }, undefined, { promptProfile: 'frontend' }), invalid);
     assert.equal(requests.length, 1);
