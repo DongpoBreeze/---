@@ -174,7 +174,7 @@ export function Today({
   const sleepValue = knownSleeps.length ? knownSleeps.reduce((sum, value) => sum + value, 0).toFixed(1) : "—";
   const sleepNote = !sleeps.length ? "暂无睡眠"
     : knownSleeps.length < sleeps.length ? (sleeps.length - knownSleeps.length) + " 段时长未知"
-    : "已知时长合计 · 非设备测量";
+    : "按记录时间估算 · 非设备测量";
   const quality = [...sleeps].sort((a, b) => Date.parse(b.wokeAt) - Date.parse(a.wokeAt)).find((record) => record.quality)?.quality;
   const latestTraining = [...trainings].sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt))[0];
   const calorieLabel = calories ? nutrientMidpointLabel(calories, "calories") : null;
@@ -333,13 +333,13 @@ export function Today({
             <View style={[st.chip, { backgroundColor: color.sleep }]} />
             <Text style={st.cap}>03 / 睡眠</Text>
           </View>
-          <Text style={[st.halfValue, sleepValue === "—" && { color: color.inkFaint }]}>
+          <Text testID="today-sleep-value" style={[st.halfValue, sleepValue === "—" && { color: color.inkFaint }]}>
             {sleepValue}{sleepValue !== "—" && <Text style={st.halfUnit}> h</Text>}
           </Text>
-          <View style={st.qbar} accessible accessibilityLabel={quality ? "主观质量 " + quality + " / 5" : "主观质量未填写"}>
+          {quality !== undefined && <View style={st.qbar} accessible accessibilityLabel={"主观质量 " + quality + " / 5"}>
             {[1, 2, 3, 4, 5].map((step) => <View key={step} style={[st.qstep, quality !== undefined && step <= quality && { backgroundColor: color.sleep }]} />)}
-          </View>
-          <Text style={st.halfSub} numberOfLines={2}>{sleepNote}</Text>
+          </View>}
+          <Text testID="today-sleep-note" style={st.halfSub} numberOfLines={2}>{sleepNote}</Text>
         </View>
       </Reveal>
 

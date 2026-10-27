@@ -20,7 +20,7 @@ const estimate: NonNullable<ModelNutritionEstimate> = {
   assumptions: ['油量未知。'], confidence: 0.75,
 };
 const rawComponent = (changes: Record<string, unknown> = {}) => ({
-  foodId: null, label: '鸡肉烩菜', cookingMethod: '炖', confidence: 0.9, uncertainty: [], nutritionEstimate: estimate, ...changes,
+  foodId: null, label: '鸡肉烩菜', cookingMethod: '炖', confidence: 0.9, recommendedShare: 1, uncertainty: [], nutritionEstimate: estimate, ...changes,
 });
 const rawRecognition = (components = [rawComponent()]) => ({ foodName: '午餐', components, unresolved: [], assumptions: [], advice: '填写实际食用量。' });
 const analysis = (components = [rawComponent()]): MealAnalysis => calculateShared(rawRecognition(components), nutritionDataset, {
@@ -127,6 +127,23 @@ test('renaming clears nutrient drafts and invalid identity fields while a gram q
   assert.equal(manuallyUpdated.components![0].nutritionReferenceStale, true);
   assert.equal(manuallyUpdated.coverage!.referenceCount, 1);
   mealAnalysisSchema.parse(manuallyUpdated);
+});
+
+test('renaming invalidates AI dish share and estimate but preserves a manually entered or cleared quantity', () => {
+  const base = analysis();
+  const estimated = createMealReviewRows(base)[0];
+  assert.ok(estimated.component.recommendedShare);
+  const renamedEstimate = updateMealReviewRow(estimated, { label: '新菜品' });
+  assert.equal(renamedEstimate.quantity, '');
+  const rebuilt = buildMealReviewAnalysis(base, [renamedEstimate]);
+  assert.equal(rebuilt.components![0].recommendedShare, undefined);
+  assert.equal(estimateMealPortion({ calorieTarget: 2000 }, '午餐', rebuilt).status, 'unavailable');
+
+  const entered = updateMealReviewRow({ ...estimated, quantity: '123', quantityOrigin: 'user', quantityEdited: true }, { label: '新菜品' });
+  assert.equal(entered.quantity, '123');
+  const cleared = updateMealReviewRow({ ...estimated, quantity: '', quantityOrigin: undefined, quantityEdited: true }, { label: '新菜品' });
+  assert.equal(cleared.quantity, '');
+  assert.equal(cleared.quantityEdited, true);
 });
 
 test('a cooking-method edit invalidates the reference and never reinterprets household counts as grams', () => {
@@ -501,7 +518,7 @@ test('an explicitly corrected dish name and complete user reference resolve old 
   assert.strictEqual(reviewed.components![0].source, base.components![0].source);
   assert.equal(reviewed.components![0].nutritionReferenceStale, true);
   assert.deepEqual(reviewed.components![0].userNutritionPer100g, editedRanges);
-  assert.equal(estimateMealPortion({ calorieTarget: 2000 }, '午餐', reviewed).status, 'ready');
+  assert.equal(estimateMealPortion({ calorieTarget: 2000 }, '午餐', reviewed).status, 'unavailable');
   assert.equal(hasMealIdentityConflict(base.components![0]), true);
   assert.deepEqual(base.unresolved, ['待确认菜品 1：无法识别菜品种类。']);
   mealAnalysisSchema.parse(reviewed);
@@ -538,7 +555,7 @@ test('changing a known dish method does not reopen its resolved candidates or re
     const reviewed = buildMealReviewAnalysis(base, [updateMealReviewRow(changed, { nutrients: nutrientDraft(editedRanges) })]);
     const dish = reviewed.components![0];
     assert.equal(hasMealIdentityConflict(dish), false);
-    assert.equal(estimateMealPortion({ calorieTarget: 2000 }, '午餐', reviewed).status, 'ready');
+    assert.equal(estimateMealPortion({ calorieTarget: 2000 }, '午餐', reviewed).status, 'unavailable');
     assert.equal(dish.foodId, null);
     assert.equal(dish.candidates, undefined);
     assert.equal(dish.nutritionReferenceStale, true);

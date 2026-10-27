@@ -8,7 +8,7 @@ const nutrients = (min = 120, max = 160): NutrientRanges => ({
   calories: { min, max }, protein: { min: 3, max: 8 }, carbs: { min: 10, max: 25 }, fat: { min: 1, max: 7 },
 });
 const dish = (overrides: Partial<MealComponent> = {}): MealComponent => ({
-  foodId: null, label: '鸡肉烩饭', grams: null, uncertainty: [],
+  foodId: null, label: '鸡肉烩饭', grams: null, recommendedShare: 1, uncertainty: [],
   source: { provider: 'model', basisGrams: 100, method: 'typical_recipe', per100gRange: nutrients(),
     recipeBasis: '通常成品配方', assumptions: ['油量未知'], confidence: 0.8,
     model: 'configured/model', generatedAt: '2026-10-20T00:00:00.000Z' },
@@ -16,7 +16,7 @@ const dish = (overrides: Partial<MealComponent> = {}): MealComponent => ({
 });
 const meal = (components: MealComponent[] = [dish()], changes: Partial<MealAnalysis> = {}): MealAnalysis => ({
   status: 'unknown', foodName: '午餐', calories: null, protein: null, carbs: null, fat: null,
-  assumptions: [], advice: '', components, ...changes,
+  assumptions: [], advice: '按实际情况调整。', components, ...changes,
 });
 const ready = (profile: Profile = { calorieTarget: 2000 }, mealType: MealRecord['mealType'] = '午餐', analysis: MealAnalysis = meal()) => {
   const result = estimateMealPortion(profile, mealType, analysis);
@@ -34,8 +34,8 @@ const unavailable = (profile: Profile, analysis: MealAnalysis | null, pattern: R
   return result;
 };
 
-test('valid body weight scales the general adult product interval without requiring height', () => {
-  const result = ready({ heightCm: 170, weightKg: 70 });
+test('valid body weight scales the general adult product interval when height is unavailable', () => {
+  const result = ready({ weightKg: 70 });
   assert.deepEqual(result.dailyCalories, { min: 1750, max: 2450 });
   assert.deepEqual(result.mealCalories, { min: 612, max: 858 });
   assert.deepEqual(result.totalGrams, { min: 382, max: 715 });
@@ -43,12 +43,33 @@ test('valid body weight scales the general adult product interval without requir
   assert.equal(result.basis, 'body-weight');
   const assumptions = result.assumptions.join(' ');
   assert.match(assumptions, /25–35 kcal\/kg\/day/);
-  assert.match(assumptions, /体重 70 kg.*60 kg.*同比例/);
+  assert.match(assumptions, /尚无有效身高.*体重 70 kg/);
   assert.match(assumptions, /一般成人.*不代表照片重量或称重实测/);
-  assert.deepEqual(ready({ weightKg: 70 }).dailyCalories, result.dailyCalories);
-  assert.deepEqual(ready({ heightCm: 230, weightKg: 70 }).totalGrams, result.totalGrams);
+  const withHeight = ready({ heightCm: 170, weightKg: 70 });
+  assert.deepEqual(withHeight.dailyCalories, { min: 1629, max: 2282 });
+  assert.deepEqual(withHeight.mealCalories, { min: 570, max: 799 });
+  assert.deepEqual(withHeight.totalGrams, { min: 356, max: 666 });
+  assert.equal(withHeight.basis, 'body-size');
+  assert.equal(withHeight.weightKg, 70, "the returned weight remains the user's actual profile value");
+  assert.match(withHeight.assumptions.join(' '), /身高 170 cm 与体重 70 kg（BMI 24\.2）.*BMI 22.*25%/);
+  assert.deepEqual(ready({ heightCm: 230, weightKg: 70 }).dailyCalories, result.dailyCalories,
+    'height outside the supported range falls back to the explicit weight-only estimate');
   assert.deepEqual(ready({ weightKg: 60 }).dailyCalories, { min: 1500, max: 2100 });
   assert.deepEqual(ready({ weightKg: 90 }).dailyCalories, { min: 2250, max: 3150 });
+});
+
+test('height and weight together change the meal recommendation through the BMI reference weight', () => {
+  const shorter = ready({ heightCm: 170, weightKg: 70 });
+  const taller = ready({ heightCm: 190, weightKg: 70 });
+  assert.deepEqual(taller.dailyCalories, { min: 1750, max: 2450 });
+  assert.equal(taller.basis, 'body-size');
+  assert.notDeepEqual(shorter.totalGrams, taller.totalGrams);
+  assert.match(shorter.assumptions.join(' '), /BMI 高于 24.*BMI 22.*差值的 25%/);
+  assert.match(taller.assumptions.join(' '), /BMI 不高于 24，按实际体重估算/);
+
+  const heavier = ready({ heightCm: 170, weightKg: 100 });
+  assert.deepEqual(heavier.dailyCalories, { min: 1817, max: 2544 });
+  assert.match(heavier.assumptions.join(' '), /折算估算体重约 72\.7 kg/);
 });
 
 test('an absent valid weight uses a visible 60 kg general adult fallback even with height alone', () => {
@@ -71,7 +92,7 @@ test('unknown age retains the existing adult portion arithmetic and adult sex or
       assert.deepEqual(current.dailyCalories, previous.dailyCalories);
       assert.deepEqual(current.totalGrams, previous.totalGrams);
       assert.deepEqual(current.dishes, previous.dishes);
-      assert.match(current.assumptions.join(' '), /年龄仅用于判断适用范围.*公式未按年龄、性别/);
+      assert.match(current.assumptions.join(' '), /年龄仅用于判断适用范围/);
     }
   }
 });
@@ -133,27 +154,76 @@ test('each meal type uses its reference share of daily calories', () => {
   assert.equal(estimateMealPortion({ calorieTarget: 2000 }, '宵夜' as MealRecord['mealType'], meal()).status, 'unavailable');
 });
 
-test('different dish densities are averaged by equal grams and interval division reverses density bounds', () => {
+test('AI-proposed shares are normalized and used instead of local food-role rules', () => {
   const result = ready({ calorieTarget: 2000 }, '午餐', meal([
-    dish({ label: '主食', userNutritionPer100g: nutrients(100, 140) }),
-    dish({ label: '肉菜', userNutritionPer100g: nutrients(200, 260) }),
+    dish({ label: '意面', recommendedShare: 0.6667, userNutritionPer100g: nutrients(100, 140) }),
+    dish({ label: '沙拉', recommendedShare: 0.3333, userNutritionPer100g: nutrients(200, 260) }),
   ]));
-  // Mean density 150–200 kcal/100 g => total 350–466.66… g.
-  assert.deepEqual(result.totalGrams, { min: 350, max: 467 });
+  // Relative AI shares normalize to 2:1. Weighted density is 133.33–180
+  // kcal/100 g, so the meal is 388–525 g overall.
+  assert.deepEqual(result.totalGrams, { min: 388, max: 526 });
   assert.deepEqual(result.dishes, [
-    { index: 0, label: '主食', grams: { min: 175, max: 234 } },
-    { index: 1, label: '肉菜', grams: { min: 175, max: 234 } },
+    { index: 0, label: '意面', share: 0.6667 / 1, grams: { min: 258, max: 351 } },
+    { index: 1, label: '沙拉', share: 0.3333 / 1, grams: { min: 129, max: 176 } },
   ]);
-  assert.match(result.assumptions.join(' '), /各道菜等克数.*平均值/);
+  assert.match(result.assumptions.join(' '), /各菜相对食用量份额由 AI.*本次识别到的完整菜品组合/);
   const denser = ready({ calorieTarget: 2000 }, '午餐', meal([dish({ userNutritionPer100g: nutrients(300, 400) })]));
   assert.deepEqual(denser.totalGrams, { min: 175, max: 234 });
 });
 
-test('all rounded bounds contain the fractional energy and portion intervals', () => {
+test('duplicate identified dishes block automatic portions to avoid counting one dish twice', () => {
+  const result = estimateMealPortion({ calorieTarget: 2000 }, '午餐', meal([
+    dish({ label: '熟米饭', cookingMethod: '蒸煮', recommendedShare: 0.5 }),
+    dish({ label: ' 熟 米饭 ', cookingMethod: ' 蒸煮 ', recommendedShare: 0.5 }),
+  ]));
+  assert.equal(result.status, 'unavailable');
+  assert.equal(result.reviewMayHelp, true);
+  assert.match(result.reason ?? '', /重复/);
+  assert.deepEqual(result.dishes, []);
+  assert.equal(estimateMealPortion({ calorieTarget: 2000 }, '午餐', meal([
+    dish({ label: '鱼', cookingMethod: '蒸', recommendedShare: 0.5 }),
+    dish({ label: '鱼', cookingMethod: '煎', recommendedShare: 0.5 }),
+  ])).status, 'ready');
+});
+
+test('AI can recommend different Chinese meal shares from each dish identity', () => {
+  const point = nutrients(200, 200);
+  const result = ready({ calorieTarget: 2000 }, '午餐', meal([
+    dish({ label: '饭', recommendedShare: 0.4, userNutritionPer100g: point }),
+    dish({ label: '青椒炒五花肉', recommendedShare: 0.2, userNutritionPer100g: point }),
+    dish({ label: '腌萝卜配菜', recommendedShare: 0.3, userNutritionPer100g: point }),
+    dish({ label: '卤鸡蛋', recommendedShare: 0.1, userNutritionPer100g: point }),
+  ]));
+  assert.deepEqual(result.totalGrams, { min: 350, max: 351 });
+  assert.deepEqual(result.dishes.map((item) => item.grams), [
+    { min: 139, max: 141 }, { min: 69, max: 71 },
+    { min: 104, max: 106 }, { min: 34, max: 36 },
+  ]);
+});
+
+test('low-confidence AI shares still yield an editable estimate; missing shares never get a local fallback', () => {
+  const uncertain = dish({ recommendedShare: 0.6, confidence: 0.2, uncertainty: ['份量组合把握较低，按常见搭配尽力估计。'] });
+  const other = dish({ label: '另一道菜', recommendedShare: 0.4 });
+  const base = meal([uncertain, other]);
+  const filled = applyEstimatedMealQuantities({ calorieTarget: 2000 }, '午餐', base, createMealReviewRows(base));
+  assert.ok(filled.every((row) => Number(row.quantity) > 0));
+
+  const missing = meal([uncertain, { ...other, recommendedShare: undefined }]);
+  const unavailableResult = estimateMealPortion({ calorieTarget: 2000 }, '午餐', missing);
+  assert.equal(unavailableResult.status, 'unavailable');
+  assert.match(unavailableResult.reason ?? '', /AI未给出完整.*份额建议/);
+  const missingRows = createMealReviewRows(missing);
+  const preserved = applyEstimatedMealQuantities({ calorieTarget: 2000 }, '午餐', missing,
+    [updateMealReviewRow(missingRows[0], { quantity: '120' }), missingRows[1]]);
+  assert.equal(preserved[0].quantity, '120');
+  assert.equal(preserved[1].quantity, '');
+});
+
+test('AI shares keep rounded nutrient and portion intervals conservative', () => {
   const result = ready({ heightCm: 172.3, weightKg: 67.4 }, '早餐', meal([
-    dish({ userNutritionPer100g: nutrients(111.1, 155.5) }),
-    dish({ userNutritionPer100g: nutrients(222.2, 277.7) }),
-    dish({ userNutritionPer100g: nutrients(166.6, 199.9) }),
+    dish({ label: '鸡肉烩饭', userNutritionPer100g: nutrients(111.1, 155.5) }),
+    dish({ label: '蒸米饭', userNutritionPer100g: nutrients(222.2, 277.7) }),
+    dish({ label: '清炒青菜', userNutritionPer100g: nutrients(166.6, 199.9) }),
   ]));
   assert.ok(result.dailyCalories!.min <= 25 * 67.4);
   assert.ok(result.dailyCalories!.max >= 35 * 67.4);
@@ -317,7 +387,7 @@ test('invalid or extreme filled profile values are explicitly excluded from the 
 
 test('very low or zero energy density and recommendations over 2000 g are refused rather than clipped', () => {
   for (const range of [{ min: 0, max: 0 }, { min: 0, max: 150 }, { min: 20, max: 60 }, { min: 49.9, max: 70 }])
-    unavailable({ calorieTarget: 2000 }, meal([dish({ label: '青菜汤', userNutritionPer100g: nutrients(range.min, range.max) })]), /热量密度.*补充完整菜品或调整各菜比例/);
+    unavailable({ calorieTarget: 2000 }, meal([dish({ label: '青菜汤', userNutritionPer100g: nutrients(range.min, range.max) })]), /热量密度.*手动填写/);
   unavailable({ calorieTarget: 6000 }, meal([dish({ userNutritionPer100g: nutrients(50, 100) })]), /超过 2000 g/);
   const boundary = ready({ calorieTarget: 4000 }, '早餐', meal([dish({ userNutritionPer100g: nutrients(50, 50) })]));
   assert.deepEqual(boundary.totalGrams, { min: 2000, max: 2000 });
@@ -331,7 +401,7 @@ function freezeDeep<T>(value: T): T {
   return value;
 }
 
-test('photo grams, actual quantities, eaten fractions and old meal totals do not participate in preparation estimates', () => {
+test('photo grams, actual quantities, eaten fractions and old meal totals do not participate in AI-share recommendations', () => {
   const baseline = ready();
   const profile = freezeDeep({ calorieTarget: 2000, heightCm: 170, weightKg: 70 });
   const analysis = freezeDeep(meal([dish({
@@ -345,7 +415,7 @@ test('photo grams, actual quantities, eaten fractions and old meal totals do not
   assert.deepEqual(result.dishes, baseline.dishes);
   assert.equal(JSON.stringify({ profile, analysis }), before);
   // Returned per-dish objects do not alias one another or caller-owned data.
-  const two = ready(profile, '午餐', meal([dish(), dish()]));
+  const two = ready(profile, '午餐', meal([dish({ label: '鸡肉烩饭' }), dish({ label: '蒸米饭' })]));
   two.dishes[0].grams.min = -1;
   assert.notEqual(two.dishes[1].grams.min, -1);
   assert.notEqual(analysis.components![0].source?.per100gRange?.calories.min, -1);

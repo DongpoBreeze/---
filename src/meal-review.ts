@@ -80,6 +80,12 @@ export function updateMealReviewRow(row: MealReviewRow, patch: ReviewPatch): Mea
   if (changedIdentity) {
     next.nutrients = emptyNutrients();
     next.nutritionEdited = true;
+    // A new dish or cooking method needs a fresh whole-meal share from AI.
+    // Keep an estimate only when it was explicitly adopted by the user.
+    if (row.quantityOrigin === 'estimated' && !row.quantityEdited) {
+      next.quantity = '';
+      next.quantityOrigin = undefined;
+    }
     // A count of bowls or eggs is not a gram value for the renamed dish.
     if (next.quantityUnit === 'household') {
       next.quantity = '';
@@ -136,7 +142,7 @@ function identityIssue(issue: string): boolean {
 
 function withoutOldIdentity(component: MealComponent, confirmedName: boolean): MealComponent {
   const { category: _category, preparation: _preparation, cookingMethod: _cooking,
-    estimationBasis: _basis, estimateBasis: _legacyBasis, ...rest } = component;
+    estimationBasis: _basis, estimateBasis: _legacyBasis, recommendedShare: _share, ...rest } = component;
   if (!confirmedName) {
     const { candidates: _candidates, ...resolved } = rest;
     // Clearing a resolved food ID must not turn its old candidates into a new conflict.
@@ -210,7 +216,13 @@ export function buildMealReviewAnalysis(base: MealAnalysis, rows: MealReviewRow[
 }
 
 /** Recompute only default quantities; incomplete drafts and explicit user edits remain intact. */
-export function applyEstimatedMealQuantities(profile: Profile, mealType: MealRecord['mealType'], base: MealAnalysis, rows: MealReviewRow[]): MealReviewRow[] {
+export function applyEstimatedMealQuantities(
+  profile: Profile,
+  mealType: MealRecord['mealType'],
+  base: MealAnalysis,
+  rows: MealReviewRow[],
+  options: { preserveExistingEstimates?: boolean } = {},
+): MealReviewRow[] {
   let reference;
   try {
     reference = estimateMealPortion(profile, mealType, buildMealReviewAnalysis(base, rows));
@@ -222,6 +234,7 @@ export function applyEstimatedMealQuantities(profile: Profile, mealType: MealRec
   if (reference.status !== 'ready') return [...rows];
   return rows.map((row, index): MealReviewRow => {
     if (row.quantityEdited || row.quantityOrigin === 'user' || row.component.userQuantityCleared
+      || (options.preserveExistingEstimates && row.quantityOrigin === 'estimated' && row.quantity.trim())
       || (row.quantity.trim() && row.quantityOrigin !== 'estimated')) return row;
     const grams = reference.dishes[index]?.grams;
     if (!grams) return row;

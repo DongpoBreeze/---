@@ -54,7 +54,7 @@ export function Records({
   const entries: Entry[] = [
     ...data.meals.map((r) => ({
       kind: "meal" as Kind, id: r.id, title: r.foodName, at: r.occurredAt, date: recordDate(r), imageUri: r.imageUri,
-      detail: `${r.mealType} · ${timeLabel(r.occurredAt)} · ${mealCalories(r) ? `约 ${rangeLabel(mealCalories(r), " kcal")}` : "摄入未知"}`,
+      detail: `${r.mealType} · ${timeLabel(r.occurredAt)}${mealCalories(r) ? ` · 约 ${rangeLabel(mealCalories(r), " kcal")}` : ""}`,
     })),
     ...data.trainings.map((r) => ({
       kind: "training" as Kind, id: r.id, title: r.exercise, at: r.occurredAt, date: recordDate(r),
@@ -63,7 +63,9 @@ export function Records({
     ...data.sleeps.map((r) => ({
       kind: "sleep" as Kind, id: r.id, at: r.wokeAt, date: recordDate(r),
       title: sleepHours(r) === null ? "时长未知" : `${sleepHours(r)!.toFixed(1)} 小时估算睡眠`,
-      detail: `质量 ${r.quality === undefined ? "未填写" : `${r.quality}/5`} · ${r.awakeMinutes === null ? "清醒未知" : `清醒 ${r.awakeMinutes} 分钟`}`,
+      detail: [`${timeLabel(r.fellAsleepAt)}～${timeLabel(r.wokeAt)}`,
+        ...(r.quality === undefined ? [] : [`质量 ${r.quality}/5`]),
+        ...(r.awakeMinutes === null ? [] : [`清醒 ${r.awakeMinutes} 分钟`])].join(" · "),
     })),
   ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
   const counts = { all: entries.length, meal: data.meals.length, training: data.trainings.length, sleep: data.sleeps.length };

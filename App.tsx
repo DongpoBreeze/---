@@ -32,7 +32,7 @@ import { useAppData } from "./src/ui/useAppData";
 import { aiServiceHost, useAiSettings } from "./src/ui/useAiSettings";
 import { upsertMeal, upsertSleep, upsertTraining, upsertWorkoutTemplate } from "./src/record-updates";
 import { analyzeMeal, analyzeSummary, getAiSettingsVersion, isAiConfigured } from "./src/ai";
-import { AI_REQUEST_TIMEOUT_MS, type AiSettings } from "./src/ai-provider";
+import { type AiSettings } from "./src/ai-provider";
 import { appendNutritionCorrection } from "./src/nutrition-correction";
 import type { FormSession } from "./src/ui/useFormDraft";
 import type { Kind, MealDraft, ModalKind, PhotoAnalysisResult, SleepDraft, Tab, TrainingDraft } from "./src/ui/app-types";
@@ -180,6 +180,8 @@ function AppShell() {
     const session: FormSession = {
       id: ++sessionId.current,
       epoch: epoch.current,
+      mealDraftKey: kind === "meal" && !id ? `meal-new-${uid()}` : undefined,
+      trainingDraftKey: kind === "training" && !id ? `training-new-${uid()}` : undefined,
       isActive: () =>
         sessionRef.current === session && session.epoch === epoch.current,
     };
@@ -334,7 +336,6 @@ function AppShell() {
     setAiBusy(true);
     setMessage("正在请求分析；本地记录仍已保存。");
     setAiStartedAt(Date.now());
-    const timeout = setTimeout(() => controller.abort(), AI_REQUEST_TIMEOUT_MS + 5000);
     try {
       const result = await analyzeSummary(
         snapshot,
@@ -371,7 +372,6 @@ function AppShell() {
     } catch (e) {
       if (requestEpoch === epoch.current) setMessage(errorText(e));
     } finally {
-      clearTimeout(timeout);
       aiController.current = undefined;
       setAiBusy(false);
       setAiStartedAt(null);
@@ -520,6 +520,8 @@ function AppShell() {
         <Banner text={storageWarning} onClose={() => setStorageWarning("")} />
       )}
       <Animated.View
+        // This fade contains overlapping elevated cards and their own Reveal fades.
+        needsOffscreenAlphaCompositing={Platform.OS === "android"}
         style={[styles.page, {
           opacity: enter,
           transform: [{ translateX: enter.interpolate({ inputRange: [0, 1], outputRange: [tabDirection * 24, 0] }) }],
@@ -598,7 +600,8 @@ function AppShell() {
             initial={
               editId ? data.meals.find((item) => item.id === editId) : undefined
             }
-            draftKey={editId ? `meal-${editId}` : "meal-new"}
+            // New meal drafts use a unique key so they stay fresh across app restarts.
+            draftKey={editId ? `meal-${editId}` : formSession.mealDraftKey!}
             onClose={() => close(formSession)}
             onSave={(draft, photoAnalysis) =>
               saveMeal(draft, formSession, editId, photoAnalysis)
@@ -618,7 +621,7 @@ function AppShell() {
                 ? data.trainings.find((item) => item.id === editId)
                 : undefined
             }
-            draftKey={editId ? `training-${editId}` : "training-new"}
+            draftKey={editId ? `training-${editId}` : formSession.trainingDraftKey!}
             history={data.trainings}
             workoutTemplates={data.workoutTemplates ?? []}
             exerciseTemplates={data.exerciseTemplates ?? []}

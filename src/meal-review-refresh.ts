@@ -86,18 +86,33 @@ export function reviewRefreshOutcome(reviewed: ReviewAnalysis, refreshed: Review
 }
 
 /** Appends the portion-reference disclosure used for estimated quantities. */
-export function withPortionAssumption(analysis: ReviewAnalysis, profile: Profile, mealType: MealRecord['mealType']): ReviewAnalysis {
+export function withPortionAssumption(
+  analysis: ReviewAnalysis,
+  profile: Profile,
+  mealType: MealRecord['mealType'],
+  options: { append?: boolean; componentIndices?: number[] } = {},
+): ReviewAnalysis {
   if (!analysis.components?.some((component) => component.userQuantity?.origin === 'estimated')) return analysis;
   const reference = estimateMealPortion(profile, mealType, analysis);
   if (reference.status !== 'ready') return analysis;
-  const prefix = '食用量参考：';
+  const prefix = options.append ? '新增食用量参考：' : '食用量参考：';
   const range = (value: { min: number; max: number } | null) => value ? `${value.min}～${value.max}` : '未知';
+  const selectedIndices = options.componentIndices ? new Set(options.componentIndices) : undefined;
+  const dishes = reference.dishes.filter((dish) => !selectedIndices || selectedIndices.has(dish.index))
+    .map((dish) => `${dish.label} ${(dish.share * 100).toFixed(0)}% ${range(dish.grams)} g`).join('、');
+  if (!dishes) return analysis;
   const detail = `${prefix}每日 ${range(reference.dailyCalories)} kcal，${mealType} ${range(reference.mealCalories)} kcal；`
-    + `整餐参考 ${range(reference.totalGrams)} g，各菜参考 ${range(reference.dishes[0]?.grams ?? null)} g，默认采用各菜区间中点整数克。`
+    + `${options.append ? '本次新增估量按 AI 对当前完整菜品组合的建议份额换算' : `整餐参考 ${range(reference.totalGrams)} g；按 AI 对本次菜品组合的建议分配`}，各菜参考：${dishes}，默认采用各菜区间中点整数克。`
     + reference.assumptions.join('');
-  const assumptions = (analysis.assumptions ?? []).filter((item) => !item.startsWith(prefix));
+  const assumptions = options.append ? (analysis.assumptions ?? [])
+    : (analysis.assumptions ?? []).filter((item) => !item.startsWith('食用量参考：'));
   // Keep both the leading estimate disclosure and the trailing subtotal
   // disclosure when the model already used the full assumption budget.
-  const retained = assumptions.length > 79 ? [assumptions[0], ...assumptions.slice(-78)] : assumptions;
+  const retained = assumptions.length > 79
+    ? options.append
+      ? [...new Set([assumptions[0], assumptions.find((item) => item.startsWith('食用量参考：')),
+        ...assumptions.slice(-77)].filter((item): item is string => Boolean(item)))].slice(0, 79)
+      : [assumptions[0], ...assumptions.slice(-78)]
+    : assumptions;
   return { ...analysis, assumptions: [...retained, detail.slice(0, 1000)] };
 }

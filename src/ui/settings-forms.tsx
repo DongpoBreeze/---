@@ -3,8 +3,8 @@ import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } fr
 import { Ionicons } from "@expo/vector-icons";
 import type { Goal, Profile } from "../types";
 import { effectiveCalorieTarget, initialCalorieTargetMode, profileAgeReference, profileAgeValidationError, profileFromForm, profileInputNumber, type CalorieTargetMode } from "../profile-health";
-import { discoverModel, discoverModels } from "../ai";
-import { isValidReasoningEffort, normalizeConnection, type AiConnection, type AiModel, type AiSettings } from "../ai-provider";
+import { discoverModel, discoverModels, testAiConnection } from "../ai";
+import { AiProviderError, isValidReasoningEffort, normalizeConnection, type AiConnection, type AiModel, type AiSettings } from "../ai-provider";
 import { type FormSession, useFormSession } from "./useFormDraft";
 import { Banner, Choice, Field, Legend, Note, Sheet, SmallButton, useBaseStyles } from "./components";
 import { confirmAction, errorText } from "./format";
@@ -33,7 +33,7 @@ export function AiSettingsForm({ initial, loadError, session, onClose, onSave, o
   const [selected, setSelected] = useState<AiModel | null>(null);
   const [search, setSearch] = useState("");
   const [showKey, setShowKey] = useState(false);
-  const [query, setQuery] = useState<"models" | "detail" | null>(null);
+  const [query, setQuery] = useState<"models" | "detail" | "test" | null>(null);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
   const queryRef = useRef<{ version: number; controller?: AbortController }>({ version: 0 });
@@ -103,6 +103,32 @@ export function AiSettingsForm({ initial, loadError, session, onClose, onSave, o
       }
     }
   };
+  const testConnection = async () => {
+    if (!lifecycle.isIdle() || !model || !baseUrl.trim() || !apiKey.trim() || !isValidReasoningEffort(effort)) return;
+    cancelQuery();
+    const controller = new AbortController();
+    const version = queryRef.current.version;
+    queryRef.current.controller = controller;
+    const active = () => session.isActive() && version === queryRef.current.version && !controller.signal.aborted;
+    setQuery("test"); setError(""); setStatus("");
+    let timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; controller.abort(); }, 21000);
+    try {
+      const connection = normalizeConnection({ baseUrl: baseUrl.trim(), apiKey: apiKey.trim(), protocol });
+      const result = await testAiConnection({ ...connection, model, reasoningEffort: effort }, controller.signal);
+      if (active()) setStatus(`连接可用：${result.model} 已返回响应，用时 ${Math.max(1, Math.ceil(result.elapsedMs / 1000))} 秒。`);
+    } catch (e) {
+      if (session.isActive() && version === queryRef.current.version) {
+        const didTimeout = timedOut || e instanceof AiProviderError && e.code === "timeout";
+        setError(didTimeout ? "连接测试超时，请检查服务地址、模型权限和网络。" : `连接测试失败：${errorText(e)}`);
+      }
+    } finally {
+      clearTimeout(timer);
+      if (session.isActive() && version === queryRef.current.version) {
+        queryRef.current.controller = undefined; setQuery(null);
+      }
+    }
+  };
   const submit = async (remove = false) => {
     if (!remove && !isValidReasoningEffort(effort)) return;
     if (!lifecycle.beginSave()) return;
@@ -159,10 +185,12 @@ export function AiSettingsForm({ initial, loadError, session, onClose, onSave, o
         <Text style={st.stepNo}>2</Text>
         <Text style={st.stepTitle}>选择模型</Text>
       </View>
-      <SmallButton icon={query ? "close-outline" : "refresh-outline"} label={query ? "取消获取" : "获取模型列表"}
-        onPress={() => query ? cancelQuery() : void discover()} disabled={!lifecycle.isIdle()} />
+      <SmallButton icon={query === "models" || query === "detail" ? "close-outline" : "refresh-outline"}
+        label={query === "models" || query === "detail" ? "取消获取" : "获取模型列表"}
+        onPress={() => query === "models" || query === "detail" ? cancelQuery() : void discover()}
+        disabled={!lifecycle.isIdle() || query === "test"} />
       {Boolean(status) && <Text accessibilityRole="alert" style={st.status}>{status}</Text>}
-      {Boolean(query) && <Text style={st.status}>正在获取{query === "models" ? "模型列表" : "模型能力"}…</Text>}
+      {Boolean(query) && <Text style={st.status}>{query === "test" ? "正在测试所选模型…" : `正在获取${query === "models" ? "模型列表" : "模型能力"}…`}</Text>}
       {models.length > 0 && <>
         <Field label="筛选模型" value={search} onChangeText={setSearch} />
         <Text style={base.fieldLabel}>模型</Text>
@@ -180,6 +208,11 @@ export function AiSettingsForm({ initial, loadError, session, onClose, onSave, o
       </>}
       {Boolean(model) && <View style={{ marginTop: space.md }}>
         <Text style={base.fieldLabel}>已选模型</Text><Text style={[st.optionText, st.chosen]}>{model}</Text>
+        <SmallButton icon={query === "test" ? "close-outline" : "pulse-outline"}
+          label={query === "test" ? "取消测试" : "测试连接"}
+          disabled={!lifecycle.isIdle() || !baseUrl.trim() || !apiKey.trim() || !isValidReasoningEffort(effort)}
+          onPress={() => query === "test" ? cancelQuery() : void testConnection()} />
+        <Text style={[type.small, { color: color.inkSoft, marginTop: space.xs, marginBottom: space.sm }]}>发送一条简短请求验证当前地址、Key、模型和协议；服务商可能收取少量费用。</Text>
         <View style={st.step}>
           <Text style={st.stepNo}>3</Text>
           <Text style={st.stepTitle}>推理强度</Text>

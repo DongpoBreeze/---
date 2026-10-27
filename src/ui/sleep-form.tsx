@@ -122,7 +122,7 @@ export function SleepForm({
           <SleepTimeline model={timeline} disabled={disabled} onChange={update} />
           <Text style={st.nightNote}>{timeline.hasFell && timeline.hasWoke && timeline.durationMinutes === null
             ? "当前时间区间无效，请在下方修改入睡或起床日期与时间。"
-            : "拖动两端滑块选择入睡和起床时间，每次 5 分钟；也可点击下方“选择”。清醒时长留空时，估算睡眠保持未知。"}</Text>
+            : "拖动两端滑块选择入睡和起床时间，每次 5 分钟；也可点击下方“选择”。按记录时间估算睡眠，填写清醒时长后会扣除。"}</Text>
         </View>
         <DateTimeField
           label="入睡（YYYY-MM-DD HH:mm）"

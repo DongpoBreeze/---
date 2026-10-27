@@ -18,9 +18,9 @@ export function pointRanges(calories = 200, protein = 10, carbs = 20, fat = 5): 
   };
 }
 
-export function portionDish(label: string, per100g: NutrientRanges | null = pointRanges(), cookingMethod = '蒸煮') {
+export function portionDish(label: string, per100g: NutrientRanges | null = pointRanges(), cookingMethod = '蒸煮', recommendedShare = 1) {
   return {
-    label, cookingMethod, confidence: 0.97,
+    label, cookingMethod, confidence: 0.97, recommendedShare,
     nutritionEstimate: per100g ? {
       method: 'typical_recipe', per100g, recipeBasis: '按每 100 g 可食用成品的典型配方估算。',
       assumptions: ['食用量为可调整的成人估值。'], confidence: 0.95,
@@ -47,6 +47,7 @@ export async function setPortionProfile(page: Page, profile: Profile) {
   await page.getByText('修改目标与资料', { exact: true }).click();
   const dialog = page.getByRole('dialog');
   for (const [key, label] of [
+    ['ageYears', '年龄（岁，可选）'],
     ['heightCm', '身高（cm，可选）'], ['weightKg', '体重（kg，可选）'],
     ['calorieTarget', '每日热量目标（kcal，可选）'],
   ] as const) await dialog.getByLabel(label, { exact: true }).fill(profile[key] === undefined ? '' : String(profile[key]));

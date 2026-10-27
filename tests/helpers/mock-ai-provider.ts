@@ -89,6 +89,10 @@ export async function fulfillProviderResponse(route: Route, value: unknown) {
         label: component.label,
         cookingMethod: component.cookingMethod ?? component.preparation ?? null,
         confidence: component.confidence ?? 0.5,
+        // Older UI fixtures predate model-proposed shares. Keep those fixtures
+        // valid while allowing targeted tests to supply uneven AI estimates.
+        recommendedShare: typeof component.recommendedShare === 'number'
+          ? component.recommendedShare : 1 / data.components.length,
         nutritionEstimate,
         uncertainty: component.uncertainty ?? (nutritionEstimate ? [] : ['营养信息未知。']),
       };
@@ -123,7 +127,7 @@ export async function installMockAiProvider(page: Page, options: ProviderOptions
       authorization: request.headers().authorization, body,
     };
     const chatContent = body?.messages?.find((item: any) => item.role === 'user')?.content;
-    const inputText = body?.input?.flatMap((item: any) => item.content ?? [])
+    const inputText = (Array.isArray(body?.input) ? body.input.flatMap((item: any) => item.content ?? []) : [])
       .find((item: any) => item.type === 'input_text')?.text
       ?? (typeof chatContent === 'string' ? chatContent
         : Array.isArray(chatContent) ? chatContent.find((item: any) => item.type === 'text')?.text : undefined);

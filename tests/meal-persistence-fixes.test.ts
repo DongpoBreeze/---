@@ -8,6 +8,7 @@ import { nutritionFieldsFromAnalysis } from '../src/meal-nutrition-fields';
 import { buildMealReviewAnalysis, createMealReviewRows, mergeReviewedQuantities, updateMealReviewRow } from '../src/meal-review';
 import { nutritionDataset } from '../src/nutrition';
 import { mealAnalysisSchema } from '../src/nutrition-schema';
+import { withPortionAssumption } from '../src/meal-review-refresh';
 import { emptyData, type MealAnalysis, type MealRecord, type NutrientRanges } from '../src/types';
 import type { PhotoAnalysisResult } from '../src/ui/app-types';
 import { mealFormHarness } from './helpers/meal-form-harness';
@@ -19,7 +20,7 @@ const ranges = (calories = 200): NutrientRanges => ({
   carbs: { min: 20, max: 20 }, fat: { min: 5, max: 5 },
 });
 const dish = (label = '熟米饭', calories = 200, cookingMethod = '蒸煮', uncertainty: string[] = []) => ({
-  label, cookingMethod, confidence: 0.95,
+  label, cookingMethod, confidence: 0.95, recommendedShare: 1,
   nutritionEstimate: { method: 'typical_recipe' as const, per100g: ranges(calories), recipeBasis: '每 100 g 成品的典型配方。', assumptions: ['未加额外油。'], confidence: 0.9 },
   uncertainty,
 });
@@ -92,6 +93,19 @@ test('production form persists confirmed quantities, explicit clears, references
   assert.equal(restoredDraft.analysisDraft.history[0].analysis.calories, null);
   assert.equal(restoredDraft.analysisDraft.confirmed.analysis.components[0].source.model, 'mock/model');
   assert.equal(restoredDraft.analysisDraft.confirmed.analysis.components[1].userQuantityCleared, true);
+});
+
+test('new meal form uses the current meal-time default without restoring an old new-meal draft', async () => {
+  const drafts = new Map<string, unknown>([['meal-new-1', { foodName: '上一份未完成餐食' }]]);
+  const breakfast = mealFormHarness({ drafts, defaultMealType: '早餐' });
+  await breakfast.flush();
+  assert.equal(breakfast.get('Choice', (props) => props.label === '餐次').value, '早餐');
+  assert.equal(breakfast.field('食物名称').value, '');
+
+  const dinner = mealFormHarness({ drafts, defaultMealType: '晚餐' });
+  await dinner.flush();
+  assert.equal(dinner.get('Choice', (props) => props.label === '餐次').value, '晚餐');
+  assert.equal(dinner.field('食物名称').value, '');
 });
 
 test('unconfirmed review edits survive closing and reopening without changing the effective confirmed values', async () => {
@@ -174,18 +188,53 @@ test('fresh reordered dishes preserve only unique names and methods, including e
   }
 });
 
-test('production saved-meal reanalysis never estimates unmatched renamed, duplicate or ambiguous dishes from old quantities', async () => {
-  for (const response of [raw([dish('新菜名')]), raw([dish('熟米饭', 200, '炒')]), raw([dish(), dish()]),
-    raw([dish('熟米饭', 200, '蒸煮', ['菜品身份不明。'])])]) {
+test('production reanalysis estimates new uniquely identified dishes without inheriting old quantities, but blocks duplicate and ambiguous dishes', async () => {
+  for (const response of [raw([dish('新菜名')]), raw([dish('熟米饭', 200, '炒')])]) {
     const h = mealFormHarness({ initial: meal(), analyzeOnOpen: true, analyze: async () => response });
     await h.flush();
-    assert.ok(h.review().rows.every((row: any) => row.quantity === ''));
+    assert.ok(Number(h.review().rows[0].quantity) > 0);
+    assert.equal(h.review().rows[0].quantityOrigin, 'estimated');
+    assert.notEqual(h.review().rows[0].quantity, '250');
     assert.equal(h.saved.length, 0);
     await h.act(() => h.review().onBack());
     await editNutritionInputs(h);
     assert.equal(h.field('热量 kcal').value, '500');
     h.unmount();
   }
+  for (const response of [raw([dish(), dish()]), raw([dish('熟米饭', 200, '蒸煮', ['菜品身份不明。'])])]) {
+    const h = mealFormHarness({ initial: meal(), analyzeOnOpen: true, analyze: async () => response });
+    await h.flush();
+    assert.ok(h.review().rows.every((row: any) => row.quantity === ''));
+    assert.equal(h.review().portionReference.status, 'unavailable');
+    assert.equal(h.saved.length, 0);
+    await h.act(() => h.review().onBack());
+    await editNutritionInputs(h);
+    assert.equal(h.field('热量 kcal').value, '500');
+    h.unmount();
+  }
+});
+
+test('reopening a confirmed meal fills only eligible old blank rows and records the new portion basis without changing old quantities', async () => {
+  const source = raw([dish('熟米饭', 200, '蒸煮'), dish('卤鸡蛋', 150, '卤')]);
+  const originalRows = createMealReviewRows(source.analysis);
+  const existing = withPortionAssumption(buildMealReviewAnalysis(source.analysis, [
+    { ...originalRows[0], quantity: '120', quantityOrigin: 'estimated' }, originalRows[1],
+  ]), {}, '午餐');
+  const h = mealFormHarness({ initial: meal(existing) });
+  await h.flush();
+  await openReview(h);
+  assert.equal(h.review().rows[0].quantity, '120');
+  assert.equal(h.review().rows[1].quantityOrigin, 'estimated');
+  assert.ok(Number(h.review().rows[1].quantity) > 0);
+  await h.act(() => h.review().onConfirm());
+  await h.act(() => h.sheet().onSave());
+  const confirmed = h.saved[0].analysis!.analysis;
+  const assumptions = confirmed.assumptions;
+  assert.ok(assumptions.some((item: string) => item.startsWith('新增食用量参考：')));
+  assert.ok(assumptions.some((item: string) => item.startsWith('食用量参考：')));
+  const rice = confirmed.components![0];
+  assert.deepEqual(rice.userQuantity, { amount: 120, unit: 'g', origin: 'estimated' });
+  h.unmount();
 });
 
 test('estimated quantities remain frozen after confirmed drafts reopen under a different profile', async () => {

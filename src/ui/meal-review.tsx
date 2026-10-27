@@ -8,6 +8,7 @@ import { nutritionDataset } from "../nutrition";
 import { resolveAiHouseholdMeasure } from "../../shared/nutrition.mjs";
 import { Banner, Field, SmallButton, useBaseStyles } from "./components";
 import { AnalysisWaitTime } from "./analysis-wait-time";
+import { MEAL_ANALYSIS_STAGE_TIMEOUT_MS } from "../ai-provider";
 import { nutritionRangeLabel } from "./format";
 import { radius, space, type ThemeTokens } from "./theme";
 import { useTheme, useThemedStyles } from "./theme-provider";
@@ -44,9 +45,18 @@ export function MealReviewPage(props: Props) {
   const st = useThemedStyles(createStyles);
   const reference = props.portionReference;
   const hasEstimatedQuantity = props.rows.some((row) => row.quantity.trim() && row.quantityOrigin === 'estimated');
+  const hasEligibleBlankQuantity = props.rows.some((row) => !row.quantity.trim() && !row.quantityEdited && !row.component.userQuantityCleared);
+  const hasNewEstimatedQuantity = props.rows.some((row) => row.quantity.trim() && row.quantityOrigin === 'estimated'
+    && (!row.component.userQuantity || row.component.userQuantity.amount !== Number(row.quantity)
+      || row.label.trim() !== row.component.label.trim()
+      || row.cookingMethod.trim() !== (row.component.cookingMethod ?? row.component.preparation ?? '').trim()));
   const estimateBasis = reference.basis === 'daily-target' ? "按每日热量目标"
-    : reference.basis === 'body-weight' ? `按你的体重 ${reference.weightKg} kg`
+    : reference.basis === 'body-size' ? `按你的身高与体重 ${reference.weightKg} kg`
+      : reference.basis === 'body-weight' ? `按你的体重 ${reference.weightKg} kg`
       : "按 60 kg 一般成人参考";
+  const unavailableGuidance = `${reference.reason || '当前条件无法自动估量。'}${reference.reviewMayHelp
+    ? ' 可点击“AI 复核”尝试补全菜品份额或营养信息；也可手动填写。'
+    : ' 请手动填写食用量。'}`;
   return <KeyboardAvoidingView testID="ai-meal-review" style={st.page} behavior={Platform.OS === "ios" ? "padding" : undefined}>
     <View style={st.header}>
       <Pressable accessibilityRole="button" accessibilityLabel="返回饮食" onPress={props.onBack} style={st.back}>
@@ -58,11 +68,16 @@ export function MealReviewPage(props: Props) {
       <Text accessibilityRole="alert" style={type.heading}>{props.status || "照片识别完成，请核对。"}</Text>
       <Text style={st.help}>确认后同步菜品名称和本餐营养。修改菜名或做法后，可自行填写营养，或在确认时由 AI 更新。</Text>
       <Text testID="meal-portion-estimate" style={st.help}>{props.preservePortions
-        ? '已保留本餐保存的食用量，可按实际情况修改；空白菜品不计入。'
+        ? hasNewEstimatedQuantity
+          ? `已保留本餐已有数量，并为新补估菜品填入建议量；${reference.status === 'unavailable' ? unavailableGuidance : '估计量可修改或清空。'}`
+          : hasEligibleBlankQuantity
+            ? `已保留本餐已有数量；空白菜品尚未估量。${reference.status === 'unavailable'
+              ? unavailableGuidance : '可填写食用量。'}`
+            : '已保留本餐已有数量和主动清空项，可按实际情况修改。'
         : reference.status === 'ready'
-        ? `${estimateBasis}估计食用量，可按实际情况修改；未修改时按估计量计算。`
-        : `食用量可自行填写。${reference.reason || '部分菜品缺少营养参考，暂不能自动估量。'}`}</Text>
-      {props.busy && props.startedAt !== null ? <Text style={st.help}><AnalysisWaitTime startedAt={props.startedAt} /></Text> : null}
+        ? `${estimateBasis}；AI按本餐菜品组合建议食用量，可按实际情况修改；未修改时按建议量计算。`
+        : `食用量可自行填写。${unavailableGuidance}`}</Text>
+      {props.busy && props.startedAt !== null ? <Text style={st.help}><AnalysisWaitTime startedAt={props.startedAt} timeoutMs={MEAL_ANALYSIS_STAGE_TIMEOUT_MS} limitLabel="单次请求上限" /></Text> : null}
       {props.busy ? <SmallButton icon="close-circle-outline" label="取消复核" onPress={props.onCancel} /> : null}
       {props.error ? <Banner text={props.error} danger onClose={props.onClearError} /> : null}
       <Text style={st.sectionTitle}>菜品与营养</Text>
