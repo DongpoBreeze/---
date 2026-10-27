@@ -6,17 +6,6 @@
 
 技术栈为 Expo、React Native 和 TypeScript，Android / iOS 共用客户端，Web 用于开发预览。
 
-## 本地启动
-
-需要 Node.js 24 和 npm：
-
-```powershell
-npm install
-npm run dev
-```
-
-固定打开 **http://localhost:8081/**。该地址也是本机健康记录和 AI 配置的存储来源；继续使用同一浏览器和地址，避免切换主机名或端口后进入另一份本地数据。启动命令已处理 Windows 的 IPv4 监听问题。
-
 ## 使用
 
 - 在“设置 → AI 服务设置”填写自己的 HTTPS URL 和 Key，选择 Responses 或 Chat Completions 协议，获取模型并选择模型及推理强度；支持服务默认、上游选项和自定义强度。App 直接连接所选服务，开发网关只用于诊断。默认预填 `https://api.bblabu.ai/v1`，没有内置 Key、模型或选定强度。
@@ -41,23 +30,13 @@ npm run test:scripts
 
 `test:scripts` 补充诊断、实验与评估工具的专项检查，每项上限 30 秒。2026-10-23 打包前检查为 150/150 通过；历史试验仍冻结各自的 90 秒请求参数，与当前餐食每阶段 180 秒、每日总结整体 180 秒上限相互独立。修复与验证记录见 [脚本说明](scripts/README.md) 和 [维护审查](docs/maintenance-review.md)。
 
-Web 流程先启动固定预览，在另一终端运行 `npm run test:ui`。模拟 AI 流程使用：
-
-```powershell
-$env:TEST_BASE_URL = 'http://localhost:8081'
-$env:TEST_AI_MOCK = '1'
-npm run test:ui
-```
-
-未设置 `TEST_AI_MOCK=1` 时运行本地记录与布局用例；设置为 `1` 时运行模拟供应商用例。既有验证结果、分轮失败与补跑证据见 [文档与验证索引](docs/README.md)，不代表本次重新执行全量 Web 或真实 AI 检查。
+Web 交互及移动端、桌面端视口验证范围见[文档与验证索引](docs/README.md)；各轮结果只对对应代码快照和测试范围负责。
 
 ## Android 测试包
 
-最新本地 Android 测试 APK：[有节 0.1.7](artifacts/health-compass-arm64-v8a-x86_64-release-20261027-022746.apk)，版本 **0.1.7 / code 8**，支持 API 24+、arm64-v8a / x86_64。SHA-256：`8dbfb31e903990dd37911256ef997ca2b8d6589de2482c7650cbe43b4c988728`。签名、包内容检查和验收边界见 [Android 测试说明](docs/android-testing.md)。沿用既有测试签名，可覆盖安装保留手机已有数据；本次没有上传 GitHub。
+最新 Android 测试包为 **0.1.8 / code 9**，支持 API 24+、arm64-v8a / x86_64。包含按身高体重调整的餐食建议量、每次新建训练使用空白草稿，以及饮食营养、训练目标和睡眠选填项修复。测试包沿用既有签名，可作为兼容更新安装；APK、SHA-256、签名与设备验收范围见 [Android 测试说明](docs/android-testing.md)。
 
-该包包含每日总结整体 180 秒总时限、餐食每阶段 180 秒等待、最多两张照片并行预处理、AI 设置连接测试，以及当前新餐草稿与默认餐次修正。首次安装且未恢复设备备份时需在手机端设置 AI 连接。包内未发现电脑上的个人健康记录、数据库、备份或 AI 配置。Android 实体设备尚未安装验收。
-
-每日总结变更的类型检查、Provider/设置单测 94/94、手机与桌面 Web 4/4 已通过。本次打包的签名、包身份/版本/ABI、56 项项目源码映射及静态数据隔离检查通过；未重复运行全量测试，未用本版进行原生 AI 或相机验收。
+本版本通过类型检查、客户端 **368/368**、服务端 **80/80**、脚本 **150/150**；选填记录、睡眠时间、新训练及份量建议的手机/桌面 Web 专项测试通过。APK 源码对应、签名和包内配置检查通过。实体手机安装、原生相机和真实 AI 请求尚未验收。
 
 ## iOS 测试版
 
