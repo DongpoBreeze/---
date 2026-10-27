@@ -2,6 +2,10 @@
 
 “有节”是一款本地优先的日常健康记录 App：拍照或手填饮食、记录整次力量训练与睡眠，在本机算出营养、BMI 与趋势，需要时再交给自己配置的 AI 做识别和总结。记录默认只保存在设备上，可完整导出恢复。
 
+[![有节宣传动画预览：饮食、训练、睡眠、今天、趋势、本地备份与 AI 设置](docs/media/youjie-promo.webp)](docs/media/youjie-promo.mp4)
+
+上图为 82 秒宣传动画的无声预览；点击图片可打开带配乐的 1080p 完整版（MP4，约 24 MB）。
+
 底部四个 Tab：**今天**（当日状态与记录入口）、**趋势**（7 / 30 日）、**我的**（目标、身体资料和“全部记录”子页面）、**设置**（外观、AI 服务与数据管理）。
 
 技术栈为 Expo、React Native 和 TypeScript，Android / iOS 共用客户端，Web 用于开发预览。
@@ -36,7 +40,7 @@ Web 交互及移动端、桌面端视口验证范围见[文档与验证索引](d
 
 最新 Android 测试包为 **0.1.8 / code 9**，支持 Android 7.0（API 24）及以上、arm64-v8a / x86_64。包含按身高体重调整的餐食建议量、每次新建训练使用空白草稿，以及饮食营养、训练目标和睡眠选填项修复。
 
-**下载：[GitHub Release v0.1.8](https://github.com/DongpoBreeze/health-compass/releases/tag/v0.1.8)**，在页面 Assets 中下载 `health-compass-0.1.8-code9-arm64-v8a-x86_64.apk`，同页附 SHA-256 校验文件和构建清单。测试包沿用既有签名，可作为兼容更新安装；签名与设备验收范围见 [Android 测试说明](docs/android-testing.md)。
+**下载：[GitHub Release v0.1.8](https://github.com/DongpoBreeze/youjie-health/releases/tag/v0.1.8)**，在页面 Assets 中下载 `health-compass-0.1.8-code9-arm64-v8a-x86_64.apk`，同页附 SHA-256 校验文件和构建清单。测试包沿用既有签名，可作为兼容更新安装；签名与设备验收范围见 [Android 测试说明](docs/android-testing.md)。
 
 本版本通过类型检查、客户端 **368/368**、服务端 **80/80**、脚本 **150/150**；选填记录、睡眠时间、新训练及份量建议的手机/桌面 Web 专项测试通过。APK 源码对应、签名和包内配置检查通过。实体手机安装、原生相机和真实 AI 请求尚未验收。
 

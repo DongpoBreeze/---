@@ -6,7 +6,7 @@ Updated: 2026-10-27. This file identifies built APKs and their observed device s
 
 This standalone APK includes the height/weight-based meal portion reference, a fresh draft session for every new training record, and the optional-field fixes for sleep, manual meal nutrients and training targets. Valid sleep endpoints now produce a duration without requiring waking minutes; supplied waking minutes are subtracted. Missing optional inputs remain absent in storage. Homepage, records, trends and summaries share the corrected behavior. Partial manual nutrients aggregate independently; partial optional training targets no longer prevent saving actual work sets.
 
-- Download: [GitHub Android test release v0.1.8](https://github.com/DongpoBreeze/health-compass/releases/tag/v0.1.8) (pre-release), asset `health-compass-0.1.8-code9-arm64-v8a-x86_64.apk`, 54,077,311 bytes, with a SHA-256 sidecar and build manifest. Local build: [health-compass-arm64-v8a-x86_64-release-20261027-035020.apk](../artifacts/health-compass-arm64-v8a-x86_64-release-20261027-035020.apk).
+- Download: [GitHub Android test release v0.1.8](https://github.com/DongpoBreeze/youjie-health/releases/tag/v0.1.8) (marked Latest), asset `health-compass-0.1.8-code9-arm64-v8a-x86_64.apk`, 54,077,311 bytes, with a SHA-256 sidecar and build manifest. Local build: [health-compass-arm64-v8a-x86_64-release-20261027-035020.apk](../artifacts/health-compass-arm64-v8a-x86_64-release-20261027-035020.apk).
 - SHA-256: `4d579106f1b311d72d495cb5215c066ff1cb468646bbe706cd4ceefb7daf70e0`.
 - Package: `com.healthcompass.app`, versionName `0.1.8`, versionCode `9`, minSdk `24`, targetSdk `36`, ABIs `arm64-v8a` and `x86_64`, label “有节”. Nondebuggable, cleartext traffic disabled.
 - Gradle release build succeeded in 45 seconds. APK v2 signature verified; certificate matches the previous 0.1.7 test APK (`fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c`). This establishes signing compatibility for an update; device upgrade/data retention still needs a phone check.
@@ -14,7 +14,7 @@ This standalone APK includes the height/weight-based meal portion reference, a f
 - All 1,540 package entries passed generic credential, developer-endpoint, compiled AI configuration and saved-data checks. All 392 raster resources have app-branding or dependency provenance. Packaged initial health records/profile are empty and AI settings are null. Actual local health data and credentials were not opened for this audit.
 - Verification: typecheck, client **368/368**, server **80/80**, scripts **150/150**; mobile/desktop Web optional records **8/8**, sleep controls **4/4**, fresh training/body-size portions **6/6**. Optional-record screenshot checks were rerun **8/8** after fixing the test clock and visually inspected. No real AI calls were needed for these changes.
 - Evidence: [report](../artifacts/optional-records-20261027/report.md), [source and package audit](../artifacts/optional-records-20261027/verification.json), [signature and metadata](../artifacts/optional-records-20261027/native-verification.json), [data/resource audit](../artifacts/optional-records-20261027/apk-data-audit.json), [build log](../artifacts/android-release-20261027-035020.log) and [SHA-256 file](../artifacts/health-compass-arm64-v8a-x86_64-release-20261027-035020.apk.sha256).
-- Release check (2026-10-27): tag `v0.1.8` points at `2bc58ea`. All 57 non-dependency sources in the packager map equal that commit and the version commit `8edc0c5`, and the APK's embedded Hermes bundle matches the recorded hash. GitHub's digests for the three uploaded assets match the local files. Records: [build manifest](../artifacts/android-release-upload-20261027/build-manifest.json) and [upload verification](../artifacts/android-release-upload-20261027/upload-verification.json).
+- Release check (2026-10-27): tag `v0.1.8` points at `055da45` (commit IDs updated after the same-day commit-message rewrite; trees are unchanged). All 57 non-dependency sources in the packager map equal that commit and the version commit `2e2cce5`, and the APK's embedded Hermes bundle matches the recorded hash. GitHub's digests for the three uploaded assets match the local files. Records: [build manifest](../artifacts/android-release-upload-20261027/build-manifest.json) and [upload verification](../artifacts/android-release-upload-20261027/upload-verification.json).
 
 No native installation, physical-phone test, real AI request or iOS build was performed for this package. Camera permissions, native backup/restore and upgrade retention remain device acceptance tasks.
 
@@ -62,9 +62,9 @@ The APK is ready for Android installation. A physical phone install and on-devic
 
 ## Latest integrated build (2026-10-23, 0.1.4)
 
-This standalone Android test APK packages the optimized runtime at commit `ff19de3c25c1d7c2e650d1471656be2678650629`, with the `app.json` version increment to 0.1.4 / code 5. It includes the separated app data/AI settings hooks, record update and meal review modules, shared review decisions and storage optimizations, together with the current BMI layout, optional sex/age, four-tab navigation and multi-exercise training templates. No iOS build was performed for this release.
+This standalone Android test APK packages the optimized runtime at commit `6435652e156a606a2b2f7d6e995e2ea86bdd0e8d`, with the `app.json` version increment to 0.1.4 / code 5. It includes the separated app data/AI settings hooks, record update and meal review modules, shared review decisions and storage optimizations, together with the current BMI layout, optional sex/age, four-tab navigation and multi-exercise training templates. No iOS build was performed for this release.
 
-- Download: [GitHub Android test release v0.1.4](https://github.com/DongpoBreeze/health-compass/releases/tag/v0.1.4). Local APK: [health-compass-0.1.4-code5-arm64-v8a-x86_64.apk](../artifacts/android-package-20261023-101145/health-compass-0.1.4-code5-arm64-v8a-x86_64.apk), 54,063,439 bytes.
+- Download: [GitHub Android test release v0.1.4](https://github.com/DongpoBreeze/youjie-health/releases/tag/v0.1.4). Local APK: [health-compass-0.1.4-code5-arm64-v8a-x86_64.apk](../artifacts/android-package-20261023-101145/health-compass-0.1.4-code5-arm64-v8a-x86_64.apk), 54,063,439 bytes.
 - SHA-256: `66a6d2252378d608c99a1bf66246f3c6b5174d47fa004693b16070086f4d5cc5`.
 - Package: `com.healthcompass.app`, versionName `0.1.4`, versionCode `5`, minSdk `24`, targetSdk `36`, ABIs `arm64-v8a` and `x86_64`. Release is nondebuggable, contains its own Hermes bundle and disallows cleartext traffic.
 - APK Signature Scheme v2 verified. Signing-certificate SHA-256 is `fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c`, matching the 0.1.3 test APK. The existing keystore was retained; this is a test signing identity, not a store-release key.
@@ -78,7 +78,7 @@ The native test used only task-owned emulator disks, synthetic inputs and disabl
 
 ## Previous integrated build (2026-10-22)
 
-This standalone test APK includes BMI classification and its current/target scale, stage weight advice and adjustable daily-calorie starting recommendations. It preserves the user's latest app name “有节” and icon assets, together with the current local UI changes. It is based on commit `2bffb6f` plus the uncommitted working tree; it has not been pushed to GitHub.
+This standalone test APK includes BMI classification and its current/target scale, stage weight advice and adjustable daily-calorie starting recommendations. It preserves the user's latest app name “有节” and icon assets, together with the current local UI changes. It is based on commit `dcf7e8e` plus the uncommitted working tree; it has not been pushed to GitHub.
 
 - APK: [health-compass-0.1.3-code4-arm64-v8a-x86_64.apk](../artifacts/android-package-20261022-140633/health-compass-0.1.3-code4-arm64-v8a-x86_64.apk), 54,021,275 bytes.
 - SHA-256: `1395ce7bbd09a588cb5de09bbbfe078c45a2a530159db24260cfafd4266e6cd9`.
@@ -109,7 +109,7 @@ This data audit does not add the later Web-only BMI layout or optional sex/age f
 
 ## Earlier UI build (2026-10-22, 0.1.2)
 
-This standalone test APK includes the current local UI changes on top of commit `2bffb6f`, together with the independent meal review screen, nutrition and quantity confirmation, multiple before-meal photos, appearance settings, persistent AI configuration, sleep time selection and exercise templates. The APK includes the local UI changes even though those changes are not yet committed to GitHub.
+This standalone test APK includes the current local UI changes on top of commit `dcf7e8e`, together with the independent meal review screen, nutrition and quantity confirmation, multiple before-meal photos, appearance settings, persistent AI configuration, sleep time selection and exercise templates. The APK includes the local UI changes even though those changes are not yet committed to GitHub.
 
 - APK: [health-compass-arm64-v8a-x86_64-release-20261022-130458.apk](../artifacts/health-compass-arm64-v8a-x86_64-release-20261022-130458.apk), 54,029,845 bytes.
 - SHA-256: `500814b1c021dda2c17425fe4bc389b677682b376deb349446171258c1b9e61a`.

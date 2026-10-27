@@ -2,7 +2,9 @@
 
 更新日期：2026-10-27。本文件保留开发时间线、失败与修正经过，以及限定范围的验证结果；按主题查阅见 [文档与验证索引](README.md)。现行行为以 [产品规格](product-spec-v0.1.md)、[营养实现规格](nutrition-implementation.md) 和 [AI 设置约定](user-ai-settings.md) 为准，视觉方向以 [方案 A](ui-design-a.md) 为准。预览固定为 `http://localhost:8081/`。
 
-2026-10-27 将已构建的 Android **0.1.8 / code 9** 上传为 [GitHub 预发布版 v0.1.8](https://github.com/DongpoBreeze/health-compass/releases/tag/v0.1.8)，附 APK、SHA-256 校验文件和构建清单，tag 指向 `2bc58ea`。上传前复核打包映射中全部 57 个非依赖源码与该提交及版本提交 `8edc0c5` 一致，APK 内 Hermes 哈希与构建记录相同；上传后 GitHub 记录的三个文件摘要与本地一致。本次未重新构建，也未进行设备安装或 iOS 构建。
+2026-10-27 将已构建的 Android **0.1.8 / code 9** 发布为 [GitHub Release v0.1.8](https://github.com/DongpoBreeze/youjie-health/releases/tag/v0.1.8)，并标为 Latest，使其显示在仓库首页的 Releases 栏；附 APK、SHA-256 校验文件和构建清单，tag 指向 `055da45`。上传前复核打包映射中全部 57 个非依赖源码与该提交及版本提交 `2e2cce5` 一致，APK 内 Hermes 哈希与构建记录相同；上传后 GitHub 记录的三个文件摘要与本地一致。本次未重新构建，也未进行设备安装或 iOS 构建。
+
+2026-10-27 改写默认分支的提交信息，删去其中的共同作者署名行，代码、作者和时间均未改变。全部 18 个提交的 SHA 因此改变，v0.1.4、v0.1.8 标签已移到对应的新提交，两个 Release 的构建清单同步更新了提交号；本文和 [Android 测试说明](android-testing.md) 中的提交号已换成新值。改写前的全部引用备份在 `artifacts/history-rewrite-20261027/`。仓库现名 `DongpoBreeze/youjie-health`，文档链接已改为新地址。
 
 2026-10-27 排查并修复各类记录的选填项阻塞：睡眠只有有效入睡、起床时间也会按时间区间显示估算时长，填写清醒分钟后再扣除；未填写的清醒、质量和备注保持原值且不显示“未知”。首页、记录、趋势和本地摘要共用同一时长逻辑，编辑和旧备份恢复后同步更新。手动整餐热量、蛋白质、碳水、脂肪可分别选填，缺值保持 null，汇总只计已填写项目；菜品每 100 g 的四项参考协议保持完整。训练的选填目标可部分填写并保存实际组次，仍校验已填写的非法值，信息不全时不生成渐进加重建议。摘要省略缺失的可选反馈。
 
@@ -45,10 +47,10 @@
 
 ## 优化后 Android 0.1.4 打包（2026-10-23）
 
-- 冻结当前优化后运行代码 `ff19de3`，仅递增 Android 版本为 0.1.4 / code 5；以既有测试签名构建 arm64-v8a / x86_64 双架构独立 APK。包含当前 BMI 布局、选填性别年龄、四 Tab 和整次训练模板，以及本次拆分的数据/AI Hook、记录更新、复核规则与媒体保存优化。本轮没有构建 iOS。
+- 冻结当前优化后运行代码 `6435652`，仅递增 Android 版本为 0.1.4 / code 5；以既有测试签名构建 arm64-v8a / x86_64 双架构独立 APK。包含当前 BMI 布局、选填性别年龄、四 Tab 和整次训练模板，以及本次拆分的数据/AI Hook、记录更新、复核规则与媒体保存优化。本轮没有构建 iOS。
 - `npm run test:all` 通过：类型检查、客户端 **342/342**、服务端 **80/80**、工具 **150/150**，无失败或跳过。实际 APK 的签名、源码对应、名称图标和个人数据隔离检查通过；没有读取本机真实健康数据或 AI Key，没有新增真实模型请求。
 - 隔离、离线 x86_64 模拟器验证首次安装为空、四 Tab 导航，以及选填性别年龄/身体资料和双动作训练的保存与冷启动恢复；0.1.3 覆盖升级至 0.1.4 后合成餐食及其四项营养值保留。首轮截图保护检查、训练动作选择器脚本中断保留原始失败记录，随后仅调整验证工具并续做；生产源码与 APK 不变。包身份、下载、升级验证与未验范围统一见 [Android 测试说明](android-testing.md#latest-integrated-build-2026-10-23-014)。
-- 上传后首次 Ubuntu CI 的脚本测试为 144/150：六项批量验证测试在 Linux 上回退到不存在的 `C:/Temp`。统一改用 `node:os.tmpdir()`，Windows 定向回归 7/7 通过；CI 同时补充图片裁剪单测所需的 Chromium 安装。原失败日志保留于 `artifacts/android-release-upload-20261023/ci-first-failure.log`，后续云端结果见 [CI 工作流](https://github.com/DongpoBreeze/health-compass/actions/workflows/ci.yml)。这些变更仅涉及测试与工作流，已发布 APK 不变。
+- 上传后首次 Ubuntu CI 的脚本测试为 144/150：六项批量验证测试在 Linux 上回退到不存在的 `C:/Temp`。统一改用 `node:os.tmpdir()`，Windows 定向回归 7/7 通过；CI 同时补充图片裁剪单测所需的 Chromium 安装。原失败日志保留于 `artifacts/android-release-upload-20261023/ci-first-failure.log`，后续云端结果见 [CI 工作流](https://github.com/DongpoBreeze/youjie-health/actions/workflows/ci.yml)。这些变更仅涉及测试与工作流，已发布 APK 不变。
 
 ## 四 Tab 导航与整次训练模板（2026-10-22）
 
@@ -61,7 +63,7 @@
 - 用户只有 Windows 和免费 Apple 账号，授权将隔离客户端上传现有私有仓库的独立分支并执行 macOS 构建。已从 67 文件白名单快照创建 `codex/ios-unsigned-20261022t101837z`；未合并默认分支、上传本机健康数据或使用 Apple 凭据。
 - 本机准备完成类型检查、12 项专项、iOS JS/资源真实导出与配置检查；Windows 原生 prebuild 的限制作为失败证据保留。随后真实云构建修正了私有部分克隆补取 blob 的认证失效、默认 Xcode 16.4 / Swift 6.1 不满足 Expo 清单要求，以及 ExpoModulesJSI 在 Swift 6.2 下的官方兼容问题。三个失败运行及原始日志分别保留，详情见 [构建报告](../artifacts/ios-cloud-20261022T101837Z/report.md)。
 - 构建使用 Xcode 26.3 / Swift 6.2.4 / iPhoneOS SDK 26.2，在独立依赖副本中精确回补 Expo 官方 SDK 57 提交 `bd2ade709029be3fbb44b6ba49bff32b02e66c81` 的三个生产文件。保留锁定版本、引用所有权和线程包装；全部前像、后像与版本校验，漂移零写入，完成状态幂等。独立只读复核未发现需要修正的问题。
-- [成功运行 39767746525](https://github.com/DongpoBreeze/health-compass/actions/runs/39767746525)，提交 `2a9caf01c8b9de8a2e7ce4efbf64c744391b8837`，18/18 专项、类型检查、CocoaPods、arm64 Release 编译/链接、无签名打包与包审计通过。产物为有节 `0.1.3` / build `1`，最低 iOS 16.4，包含当前 BMI 布局和选填性别年龄。
+- [成功运行 39767746525](https://github.com/DongpoBreeze/youjie-health/actions/runs/39767746525)，提交 `2a9caf01c8b9de8a2e7ce4efbf64c744391b8837`，18/18 专项、类型检查、CocoaPods、arm64 Release 编译/链接、无签名打包与包审计通过。产物为有节 `0.1.3` / build `1`，最低 iOS 16.4，包含当前 BMI 布局和选填性别年龄。
 - 下载到本机后独立核对 IPA SHA-256、76 个包文件和 13 个 Mach-O 二进制、iOS/arm64 平台、权限、原生 JS 和完整源码对应，通过；未发现签名、描述文件、个人媒体或内置 Key。实际 [IPA、校验值与安装说明](ios-testing.md) 已保存。该包需在 Windows 使用用户自己的 Apple 账号重签，免费签名通常 7 天；签名、iPhone 安装、首次启动、相机、原生真实 AI 与备份恢复尚未设备验收。本轮没有新增真实 AI 调用或重打 Android APK。
 
 <a id="profile-health"></a>
