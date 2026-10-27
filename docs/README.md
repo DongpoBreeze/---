@@ -17,7 +17,7 @@
 | 开发和诊断工具 | [脚本说明](../scripts/README.md) | 脚本分类、专项检查、历史冻结及实验约束。 |
 | 本次维护发现 | [维护审查](maintenance-review.md) | 文件整理、代码检查、专项测试结果及后续建议。 |
 
-当前源码行为以这些规格和实现为准；带日期的测试记录只描述当时的快照、模型和设备。旧记录中的 55 / 90 秒等待、页面内存配置、手动采用参考量等属于历史阶段：当前餐食分析每阶段最多等待 180 秒，每日总结整体最多等待 180 秒；Web 配置使用独立 IndexedDB。识别页根据 AI 给出的本餐菜品份额及营养参考，在本地换算可编辑食用量。最新 Android **0.1.8 / code 9** 已于 2026-10-27 构建，并已上传为 [GitHub 预发布版 v0.1.8](https://github.com/DongpoBreeze/health-compass/releases/tag/v0.1.8)；包校验、选填记录回归及设备验收边界见 [Android 说明](android-testing.md)。此前的 [iOS 0.1.3 / build 1 未签名包](ios-testing.md) 保留原有范围；本轮未构建 iOS。
+当前源码行为以这些规格和实现为准；带日期的测试记录只描述当时的快照、模型和设备。旧记录中的 55 / 90 秒等待、页面内存配置、手动采用参考量等属于历史阶段：当前餐食分析每阶段最多等待 180 秒，每日总结整体最多等待 180 秒；Web 配置使用独立 IndexedDB。识别页根据 AI 给出的本餐菜品份额及营养参考，在本地换算可编辑食用量。最新 Android **0.1.8 / code 9** 已于 2026-10-27 构建，并已发布为 [GitHub Release v0.1.8](https://github.com/DongpoBreeze/youjie-health/releases/tag/v0.1.8)（Latest）；包校验、选填记录回归及设备验收边界见 [Android 说明](android-testing.md)。此前的 [iOS 0.1.3 / build 1 未签名包](ios-testing.md) 保留原有范围；本轮未构建 iOS。
 
 ## 验证记录与原始证据
 

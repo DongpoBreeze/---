@@ -10,7 +10,7 @@
 79ea65f9e4d22bce1af4f247d0b47c1739b3ea2ec6ab2ee77b3cecd6666b4765
 ```
 
-[macOS 云构建 39767746525](https://github.com/DongpoBreeze/health-compass/actions/runs/39767746525) 已成功；专用分支为 `codex/ios-unsigned-20261022t101837z`，提交 `2a9caf01c8b9de8a2e7ce4efbf64c744391b8837`。构建实际使用 Xcode 26.3、Swift 6.2.4、iPhoneOS SDK 26.2，完成 18/18 专项测试、类型检查、原生编译、链接和 IPA 审计。默认分支保持 `codex/health-recording-updates`。
+[macOS 云构建 39767746525](https://github.com/DongpoBreeze/youjie-health/actions/runs/39767746525) 已成功；专用分支为 `codex/ios-unsigned-20261022t101837z`，提交 `2a9caf01c8b9de8a2e7ce4efbf64c744391b8837`。构建实际使用 Xcode 26.3、Swift 6.2.4、iPhoneOS SDK 26.2，完成 18/18 专项测试、类型检查、原生编译、链接和 IPA 审计。默认分支保持 `codex/health-recording-updates`。
 
 下载后的 [独立验包结果](../artifacts/ios-cloud-20261022T101837Z/download-verification.json) 核对 SHA-256、76 个文件、13 个 Mach-O 二进制、arm64/iOS 平台、权限和原生 JS 哈希通过。未发现代码签名、描述文件、个人媒体或内置 Key。完整轮次、失败与修正见 [构建报告](../artifacts/ios-cloud-20261022T101837Z/report.md)；[IPA 清单](../artifacts/ios-cloud-20261022T101837Z/ipa/unsigned-ipa-manifest.json) 与安装包一同保存。尚未签名安装或进行 iPhone 真机功能测试。
 
