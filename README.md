@@ -4,11 +4,8 @@
 
 https://github.com/user-attachments/assets/47463215-2006-49ff-99ef-32e74380905e
 
-82 秒宣传动画（720p，有配乐，可在页面内播放）；也可[下载 1080p 原片](docs/media/youjie-promo.mp4?raw=true)（MP4，约 24 MB）。
+82 秒宣传动画（720p，有配乐，可在页面内播放）
 
-底部四个 Tab：**今天**（当日状态与记录入口）、**趋势**（7 / 30 日）、**我的**（目标、身体资料和“全部记录”子页面）、**设置**（外观、AI 服务与数据管理）。
-
-技术栈为 Expo、React Native 和 TypeScript，Android / iOS 共用客户端，Web 用于开发预览。
 
 ## 使用
 
