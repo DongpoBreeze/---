@@ -34,6 +34,8 @@ https://github.com/user-attachments/assets/47463215-2006-49ff-99ef-32e74380905e
 ## 参与项目
 欢迎通过 Issues 反馈问题，或提交 Pull Request。
 
-感谢 LINUX DO 社区提供交流与分享的空间。
+## Friends
+LINUX DO — a technical community for sincere sharing and friendly discussion, where PairRoom's own discussion and feedback are also published
+License
 
 本项目采用 Apache License 2.0。
