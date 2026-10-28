@@ -30,3 +30,10 @@ https://github.com/user-attachments/assets/47463215-2006-49ff-99ef-32e74380905e
 ## 文档入口
 
 [文档与验证索引](docs/README.md) 汇总现行规格、技术说明、设计参考和历史证据。主要约定见 [产品规格](docs/product-spec-v0.1.md)、[营养实现规格](docs/nutrition-implementation.md)、[AI 服务设置](docs/user-ai-settings.md)；实现结构见 [技术路线图](docs/technical-roadmap.md) 与 [P2 技术报告](docs/p2-meal-analysis-technical-report.md)。
+
+## 参与项目
+欢迎通过 Issues 反馈问题，或提交 Pull Request。
+
+感谢 LINUX DO 社区提供交流与分享的空间。
+
+本项目采用 Apache License 2.0。
